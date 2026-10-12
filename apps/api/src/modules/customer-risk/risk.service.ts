@@ -108,6 +108,9 @@ export class RiskService {
         const draft = await this.ownDraft(manager, actor, id);
         const now = this.options.clock.now();
         riskDraftUnexpired(draft, now);
+        const [questionnaire] = await manager.query(
+          "SELECT 1 FROM risk_questionnaire_versions WHERE version=$1 AND status='ACTIVE' FOR SHARE", [draft.questionnaire_version]);
+        if (!questionnaire) throw new ApiError(409, 'QUESTIONNAIRE_VERSION_MISMATCH', 'Questionnaire version is not current');
         if (body.expectedCurrentProfileVersion !== draft.expected_current_profile_version) {
           throw new ApiError(409, 'RISK_PROFILE_STALE', 'Risk profile changed; create a new preview');
         }
