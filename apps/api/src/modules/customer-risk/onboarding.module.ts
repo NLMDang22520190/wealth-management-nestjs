@@ -10,6 +10,9 @@ import { OtpChallengeBody } from '../../platform/validation.js';
 import { AccountsLedgerModule } from '../accounts-ledger/account-bootstrap.js';
 import { ConsentBody, CustomerLookupBody, OnboardingRequestBody } from './onboarding.domain.js';
 import { OnboardingService } from './onboarding.service.js';
+import { CustomerAccess } from './customer-access.service.js';
+import { RiskService } from './risk.service.js';
+import { RiskHoldingsRead } from '../portfolio-valuation/risk-holdings-read.js';
 
 class RegistrationResult {
   @ApiProperty({ format: 'uuid' }) requestId!: string;
@@ -89,12 +92,14 @@ class OnboardingController {
 @ApiTags('OTP')
 @Controller()
 class OtpController {
-  constructor(private readonly onboarding: OnboardingService, private readonly otp: OtpService, private readonly auth: AuthService) {}
+  constructor(private readonly onboarding: OnboardingService, private readonly risk: RiskService,
+    private readonly otp: OtpService, private readonly auth: AuthService) {}
 
   @Roles('CUSTOMER') @Post('otp/challenges')
-  @ApiOperation({ summary: 'Deliver an OTP bound to own consent operation, without returning its code' })
+  @ApiOperation({ summary: 'Deliver an OTP bound to an own immutable consent or risk operation' })
   @ApiResponse({ status: 201, type: OtpChallengeResult }) @errors()
-  challenge(@Req() request: ApiRequest, @Body() body: OtpChallengeBody) {
+  async challenge(@Req() request: ApiRequest, @Body() body: OtpChallengeBody) {
+    if (await this.risk.isDraft(body.operationId)) return this.risk.challenge(request.actor!, body.purpose, body.operationId, auditContext(request));
     return this.onboarding.challenge(request.actor!, body.purpose, body.operationId, auditContext(request));
   }
 
@@ -110,5 +115,6 @@ class OtpController {
   }
 }
 
-@Module({ imports: [AuthModule, AccountsLedgerModule], controllers: [OnboardingController, OtpController], providers: [OnboardingService, OtpService] })
+@Module({ imports: [AuthModule, AccountsLedgerModule], controllers: [OnboardingController, OtpController],
+  providers: [OnboardingService, OtpService, RiskService, CustomerAccess, RiskHoldingsRead], exports: [RiskService, CustomerAccess] })
 export class CustomerRiskModule {}

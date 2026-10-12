@@ -31,3 +31,14 @@ Khóa tư vấn PostgreSQL có phạm vi transaction: khóa RM theo thứ tự r
 
 Seed và ảnh demo phải là dữ liệu tổng hợp. Không đưa CIF thật, giấy tờ, tài khoản ngân hàng, CV, access token, OTP, `.env` hay log riêng vào repo public. Các adapter Core/IAM/OTP là mô phỏng phục vụ đồ án; tích hợp ngân hàng thật cần adapter và kiểm định riêng.
 
+
+## Hồ sơ rủi ro và bridge Phần 3
+
+| Bảng | Dữ liệu chính | Ràng buộc |
+|---|---|---|
+| `risk_questionnaire_versions` | version, questions JSONB, status, effective_from | 10 câu, đáp án có điểm do server giữ; nội dung phiên bản đã dùng không được sửa |
+| `risk_assessment_drafts` | id, customer_id, questionnaire_version, answers, score, category, max_product_risk, allocation, expected_current_profile_version, payload_hash, created_at, expires_at | Preview bất biến, TTL demo 24 giờ; bản nháp không thuộc lịch sử đã xác nhận |
+| `risk_profiles` | id, customer_id, draft_id UNIQUE, questionnaire_version, answers, score, category, max_product_risk, allocation, version, confirmed_at, expires_at, otp_receipt_ref, payload_hash | Append-only, UNIQUE(customer_id,version); FK kép bảo đảm draft và current pointer thuộc cùng khách |
+| `holdings_read_snapshots` | id, customer_id, product_id, product_risk, asset_class, quantity, market_value, as_of, provenance | Bridge Phần 3 đọc snapshot thực đã lưu; chọn bản mới nhất từng sản phẩm. Chưa phải engine định giá |
+
+Nhóm risk là CONSERVATIVE/BALANCED/GROWTH. Allocation lưu phần trăm theo cash/deposit/bond/fund. Profile hết hạn tại mốc 12 tháng lịch UTC, không xóa lịch sử và không tự đổi service ACTIVE. Khi hạ risk, sự kiện `RiskHoldingsCheckRequested` được ghi vào outbox; trạng thái PENDING cho biết tác vụ holdings/drift chưa được xử lý, dù bridge có thể chỉ ra holdings vượt mức ngay khi đọc.
