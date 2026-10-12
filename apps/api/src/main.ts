@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { createApplication } from './application.js';
 import type { ApplicationOptions } from './application.js';
 import { ConfigurationError } from './platform/configuration.js';
+import { demoCoreBanking } from './platform/demo-core.js';
 
 const logger = new Logger('Bootstrap');
 async function bootstrap(): Promise<void> {
@@ -17,6 +18,7 @@ async function bootstrap(): Promise<void> {
     mockEnabled: mockSetting === 'true',
     jwtSecret: process.env.JWT_SECRET ?? '',
     clock: { now: () => new Date() }, logger,
+    ...(environment !== 'production' && mockSetting === 'true' ? { coreBanking: demoCoreBanking } : {}),
   });
   app.enableShutdownHooks();
   try { await app.listen(port, '127.0.0.1'); }
