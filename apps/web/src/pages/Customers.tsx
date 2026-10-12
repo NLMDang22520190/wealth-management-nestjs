@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, describe } from '../api';
 import { formatDate, formatVnd, riskLabel } from '../format';
-import { Empty, ErrorAlert, Loading, PageTitle, Panel, useLoad } from '../ui';
+import { Empty, ErrorAlert, Loading, PageTitle, Panel, RiskChip, useLoad } from '../ui';
 
 interface Aum { value: string | null; asOf: string | null; provenance: string | null; dataStatus: string }
 interface CustomerRow {
@@ -89,11 +89,11 @@ export function CustomerList() {
                   {list.data.items.map(row => (
                     <tr key={row.customerId} role="row">
                       <th scope="row" role="rowheader" className="c-name"><a href={`#/rm/customers/${row.customerId}`}>{row.name}</a></th>
-                      <td role="cell" className="c-risk" data-label="Rủi ro">{row.currentRisk ? riskLabel(row.currentRisk.category) : <span className="muted">Chưa có</span>}</td>
+                      <td role="cell" className="c-risk" data-label="Rủi ro">{row.currentRisk ? <RiskChip category={row.currentRisk.category} label={riskLabel(row.currentRisk.category)} /> : <span className="muted">Chưa có</span>}</td>
                       <td role="cell" data-label="Hết hạn hồ sơ">{row.currentRisk ? <>{formatDate(row.currentRisk.expiresAt)}{row.currentRisk.valid ? '' : ' (quá hạn)'}</> : <span className="muted">Chưa có</span>}</td>
                       <td role="cell" className="num" data-label="AUM"><AumCell aum={row.aum} /></td>
                       <td role="cell" className="num" data-label="Đề xuất">{row.pendingProposals.count}</td>
-                      <td role="cell" className="num c-drift">Cảnh báo drift: {row.driftAlerts.count}</td>
+                      <td role="cell" className={`num c-drift${row.driftAlerts.count > 0 ? ' has-alert' : ''}`}>Cảnh báo drift: {row.driftAlerts.count}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -134,7 +134,7 @@ export function CustomerDetail({ customerId }: { customerId: string }) {
               </>
             ) : <Empty>Khách hàng chưa có hồ sơ rủi ro.</Empty>}
           </Panel>
-          <Panel title="Tài sản quản lý (AUM)">
+          <Panel title="Tài sản quản lý (AUM)" className="aum-panel">
             {customer.aum.value === null ? <p className="muted">Chưa có dữ liệu</p> : (
               <>
                 <p className="aum-value">{formatVnd(customer.aum.value)}</p>

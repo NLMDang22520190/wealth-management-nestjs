@@ -92,7 +92,7 @@ export function Assignments() {
                     <tr key={rm.rmId}>
                       <th scope="row"><code>{rm.rmId}</code></th>
                       <td>
-                        <span className="meter" aria-hidden="true"><span style={{ width: `${Math.min(100, (used / rm.capacityLimit) * 100)}%` }} /></span>
+                        <span className={`meter${used / rm.capacityLimit >= 0.9 ? ' high' : used / rm.capacityLimit >= 0.7 ? ' mid' : ''}`} aria-hidden="true"><span style={{ width: `${Math.min(100, (used / rm.capacityLimit) * 100)}%` }} /></span>
                         <span className="load">{used}/{rm.capacityLimit}</span>
                       </td>
                       <td>{rm.active ? 'Đang hoạt động' : 'Ngừng hoạt động'}</td>

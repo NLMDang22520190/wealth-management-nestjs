@@ -87,10 +87,18 @@ const allocationRows: Array<[keyof Allocation, string]> = [['cash', 'Tiền mặ
 export function AllocationSummary({ maxProductRisk, allocation }: { maxProductRisk: number; allocation: Allocation }) {
   return (
     <>
-      <p>Rủi ro sản phẩm tối đa: {maxProductRisk}</p>
+      <p className="max-risk">Rủi ro sản phẩm tối đa: {maxProductRisk}</p>
+      <div className="allocation-bar" aria-hidden="true">
+        {allocationRows.map(([key]) => <span key={key} className={`seg-${key}`} style={{ width: `${allocation[key]}%` }} />)}
+      </div>
       <ul className="allocation" aria-label="Phân bổ tài sản">
-        {allocationRows.map(([key, label]) => <li key={key}><span>{label}</span><strong>{allocation[key]}%</strong></li>)}
+        {allocationRows.map(([key, label]) => <li key={key}><span><i className={`dot seg-${key}`} aria-hidden="true" />{label}</span><strong>{allocation[key]}%</strong></li>)}
       </ul>
     </>
   );
+}
+
+/** Risk category as a colour-coded chip; the visible text stays the plain Vietnamese label. */
+export function RiskChip({ category, label }: { category: string; label: string }) {
+  return <span className={`chip risk-${category.toLowerCase()}`}>{label}</span>;
 }
