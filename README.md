@@ -27,11 +27,11 @@ Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một �
 
 ## Luồng Phần 1
 
-1. **RM tra cứu khách (UC01):** Core mô phỏng trả CIF, điều kiện đăng ký và tài khoản VND chính chủ. RM chọn tài khoản và tạo lời mời có hạn 72 giờ. Tra cứu có kiểm tra quyền theo phân công hiện tại và giới hạn 30 lần/phút.
-2. **Khách đồng ý điều khoản (UC01):** khách đọc điều khoản, nhận OTP và tự nhập để xác nhận. Consent, dịch vụ, tài khoản số dư 0 và phân công RM được ghi trong cùng một transaction.
-3. **Khách khảo sát rủi ro (UC02):** 10 câu hỏi, server tính điểm và trả kết quả dự kiến kèm **mức rủi ro sản phẩm tối đa** và **phân bổ tài sản**. Chỉ khi xác nhận OTP mới tạo hồ sơ có hiệu lực 12 tháng và kích hoạt dịch vụ.
-4. **Trưởng nhóm phân công (UC03):** chọn khách trong nhóm, xem tải từng RM (giới hạn 80 khách), chuyển RM kèm lý do. Đề xuất đang chờ của RM cũ bị hủy trong cùng transaction và số lượng hủy do server trả về.
-5. **RM theo dõi khách (UC04):** chỉ thấy khách đang phụ trách; lọc, sắp xếp, phân trang phía server. AUM, cảnh báo drift và đề xuất chờ duyệt đều có `asOf`/nguồn; AUM chưa có dữ liệu hiển thị "Chưa có dữ liệu", không bao giờ là 0.
+1. **RM tra cứu khách (UC01):** Core mô phỏng trả CIF, điều kiện đăng ký và tài khoản VND chính chủ. Giao diện đi theo 3 bước (Tra cứu → Chọn tài khoản → Gửi lời mời); lời mời có hạn 72 giờ. Tra cứu có kiểm tra quyền theo phân công hiện tại; mỗi RM tra cứu tối đa 30 lần/phút và tạo tối đa 10 lời mời/phút.
+2. **Khách đồng ý điều khoản (UC01):** khách đọc điều khoản, nhận OTP và tự nhập vào 6 ô (dán được cả mã, có đếm ngược gửi lại mã). Consent, dịch vụ, tài khoản số dư 0 và phân công RM được ghi trong cùng một transaction.
+3. **Khách khảo sát rủi ro (UC02):** 10 câu hỏi tiếng Việt, hiện từng câu với nút Câu trước/Câu tiếp; server tính điểm và trả kết quả dự kiến kèm **mức rủi ro sản phẩm tối đa** và **phân bổ tài sản**. Chỉ khi xác nhận OTP mới tạo hồ sơ có hiệu lực 12 tháng và kích hoạt dịch vụ.
+4. **Trưởng nhóm phân công (UC03):** chọn khách trong nhóm, xem tải từng RM (giới hạn 80 khách), chuyển RM kèm lý do sau hộp xác nhận nêu rõ tác động. Đề xuất đang chờ của RM cũ bị hủy trong cùng transaction và số lượng hủy do server trả về.
+5. **RM theo dõi khách (UC04):** chỉ thấy khách đang phụ trách; lọc, sắp xếp, phân trang phía server. AUM, số lượt kiểm tra danh mục chờ và đề xuất chờ duyệt đều có `asOf`/nguồn; AUM chưa có dữ liệu hiển thị "Chưa có dữ liệu", không bao giờ là 0.
 
 ## Giao diện
 
@@ -41,7 +41,7 @@ Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một �
 |---|---|
 | <img src="docs/assets/ui/uc01-onboarding-desktop.png" alt="RM tra cứu CIF và chọn tài khoản VND" /> | <img src="docs/assets/ui/uc02-risk-desktop.png" alt="Kết quả khảo sát rủi ro dự kiến với phân bổ tài sản" /> |
 | **Trưởng nhóm chuyển RM (UC03)** | **Danh sách khách của RM (UC04)** |
-| <img src="docs/assets/ui/uc03-assignment-desktop.png" alt="Trưởng nhóm xem tải RM và chọn khách để chuyển" /> | <img src="docs/assets/ui/uc04-list-desktop.png" alt="Danh sách khách phụ trách với AUM và cảnh báo drift" /> |
+| <img src="docs/assets/ui/uc03-assignment-desktop.png" alt="Trưởng nhóm xem tải RM và chọn khách để chuyển" /> | <img src="docs/assets/ui/uc04-list-desktop.png" alt="Danh sách khách phụ trách với AUM, mức rủi ro và kiểm tra danh mục chờ" /> |
 
 <details>
 <summary>Chi tiết khách hàng và giao diện mobile (375px)</summary>
@@ -154,8 +154,8 @@ Kết quả dự kiến không thay hồ sơ hiện hành. Lịch sử đã xác
 
 | Lệnh | Nội dung | Kết quả gần nhất |
 |---|---|---|
-| `npm run test:api` | 60 integration test (9 file) trên PostgreSQL thật: rollback, ràng buộc unique, OTP, cạnh tranh đồng thời, phân quyền | 60/60 pass |
-| `npm run test:e2e` | 10 hành trình × desktop + mobile trên Edge, với seed CLI, API và Vite thật | 19 pass, 1 skip (test bố cục chỉ chạy ở mobile) |
+| `npm run test:api` | 77 integration test (11 file) trên PostgreSQL thật: rollback, ràng buộc unique, OTP, cạnh tranh đồng thời, phân quyền, giới hạn tần suất, log | 77/77 pass |
+| `npm run test:e2e` | 14 hành trình × desktop + mobile trên Edge, với seed CLI, API và Vite thật | 26 pass, 2 skip (test bố cục chỉ chạy ở một kích thước màn hình) |
 | `npm run lint` · `npm run typecheck` · `npm run build` | oxlint, TypeScript, build API + web | sạch |
 
 Test cần biến môi trường `WMS_TEST_POSTGRES_ADMIN_URL` trỏ tới một PostgreSQL có quyền tạo database; mỗi lần chạy tạo database riêng rồi xóa. Ví dụ với PostgreSQL cục bộ:
@@ -170,10 +170,10 @@ GitHub Actions (`.github/workflows/ci.yml`) chạy build, lint, typecheck và te
 
 ## Giới hạn đã biết
 
-- Nội dung 10 câu hỏi khảo sát trong dữ liệu seed đang bằng tiếng Anh (nhãn giao diện là tiếng Việt). Bộ câu hỏi được lưu theo phiên bản; thay nội dung cần một phiên bản khảo sát mới.
-- Cảnh báo drift hiện là số yêu cầu kiểm tra holdings đang mở do hạ mức rủi ro; engine định giá và drift đầy đủ thuộc Phần 3.
+- Bộ câu hỏi khảo sát được lưu theo phiên bản: phiên bản tiếng Việt `demo-risk-v2-vi` đang dùng, phiên bản đầu `demo-risk-v1` (tiếng Anh) được giữ nguyên ở trạng thái ngừng dùng cho lịch sử. Bản nháp làm trên phiên bản đã ngừng không xác nhận được.
+- "Kiểm tra danh mục chờ" là số yêu cầu kiểm tra holdings đang mở do hạ mức rủi ro; engine định giá và drift đầy đủ thuộc Phần 3.
 - Danh sách RM hiển thị mã RM vì registry demo không có tên hiển thị.
-- Giới hạn tần suất tra cứu được giữ trong bộ nhớ của một tiến trình API.
+- Giới hạn tần suất (cấu hình bằng `LOOKUP_RATE_LIMIT_PER_MINUTE`, `INVITE_RATE_LIMIT_PER_MINUTE`, mặc định 30 và 10) được giữ trong bộ nhớ của một tiến trình API.
 - Mock IAM/OTP chỉ phục vụ demo, chưa phải cơ chế đủ điều kiện triển khai ngân hàng thật.
 
 ## Tài liệu
