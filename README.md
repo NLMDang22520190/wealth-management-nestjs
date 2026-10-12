@@ -6,7 +6,7 @@
 
 **Đồ án Wealth Management • Source chung + Phần 1 (Customer & Risk)**
 
-NestJS · React 19 · TypeScript · PostgreSQL · Playwright
+NestJS · React 19 · shadcn/ui · Tailwind CSS v4 · TypeScript · PostgreSQL · Playwright
 
 [Phạm vi](#phạm-vi) · [Giao diện](#giao-diện) · [Chạy demo](#chạy-demo) · [Kiến trúc](#kiến-trúc) · [Kiểm tra](#kiểm-tra) · [Tài liệu](#tài-liệu)
 
@@ -121,7 +121,7 @@ flowchart LR
 
 ```text
 apps/api      NestJS: platform (auth, http, validation, transactions), modules/customer-risk, bridges P2–P4, migrations
-apps/web      React 19 + Vite: hash routing, CSS thuần, không thư viện UI
+apps/web      React 19 + Vite + shadcn/ui (Radix, Tailwind CSS v4, lucide icons); hash routing
 scripts/      seed-demo.mjs — tạo actor demo, chạy migration
 tests/api     Integration test trên PostgreSQL thật (Vitest)
 tests/e2e     Playwright: hành trình UC01–04 trên desktop 1280px và mobile 375px
