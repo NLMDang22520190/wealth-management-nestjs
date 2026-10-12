@@ -17,6 +17,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "oxlint apps/api/src apps/web/src",
     "test:api": "npm run build --workspace @wms/api && vitest run",
+    "test:e2e": "playwright test",
     "dev:web": "npm run dev --workspace @wms/web",
     "build:web": "npm run build --workspace @wms/web"
   },
