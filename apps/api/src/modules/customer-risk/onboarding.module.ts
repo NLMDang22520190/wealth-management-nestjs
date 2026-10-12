@@ -13,6 +13,8 @@ import { OnboardingService } from './onboarding.service.js';
 import { CustomerAccess } from './customer-access.service.js';
 import { RiskService } from './risk.service.js';
 import { RiskHoldingsRead } from '../portfolio-valuation/risk-holdings-read.js';
+import { ProposalCancellationModule } from '../advisory-trading/proposal-cancellation.js';
+import { RmAssignmentService } from './rm-assignment.service.js';
 
 class RegistrationResult {
   @ApiProperty({ format: 'uuid' }) requestId!: string;
@@ -115,6 +117,7 @@ class OtpController {
   }
 }
 
-@Module({ imports: [AuthModule, AccountsLedgerModule], controllers: [OnboardingController, OtpController],
-  providers: [OnboardingService, OtpService, RiskService, CustomerAccess, RiskHoldingsRead], exports: [RiskService, CustomerAccess] })
+@Module({ imports: [AuthModule, AccountsLedgerModule, ProposalCancellationModule], controllers: [OnboardingController, OtpController],
+  providers: [OnboardingService, OtpService, RiskService, CustomerAccess, RiskHoldingsRead, RmAssignmentService],
+  exports: [RiskService, CustomerAccess, RmAssignmentService] })
 export class CustomerRiskModule {}

@@ -156,4 +156,15 @@ export class RiskService {
     const now = this.options.clock.now();
     return { items: rows.map(row => profileProjection(row, now)), total: Number(count.total), ...paging };
   }
+
+  /** Reads the immutable current profile within a transaction owned and locked by the caller. */
+  async eligibility(actor: Actor, customerId: string, manager: EntityManager, validAt: Date) {
+    await this.access.authorize(actor, customerId, manager);
+    const profile = await this.current(manager, customerId);
+    if (!profile) throw new ApiError(422, 'RISK_PROFILE_REQUIRED', 'Confirmed risk profile is required');
+    return { profileId: profile.id, version: profile.version, category: profile.category,
+      maxProductRisk: profile.max_product_risk, allocation: profile.allocation,
+      expiresAt: new Date(profile.expires_at).toISOString(), validAt: validAt.toISOString(),
+      valid: validAt.getTime() < new Date(profile.expires_at).getTime() };
+  }
 }

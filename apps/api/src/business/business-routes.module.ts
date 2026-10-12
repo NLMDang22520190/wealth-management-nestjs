@@ -6,6 +6,8 @@ import type { ApiRequest } from '../platform/http.js';
 import { CustomerRiskModule } from '../modules/customer-risk/onboarding.module.js';
 import { RiskConfirmBody, RiskDraftBody, riskPaging } from '../modules/customer-risk/risk.domain.js';
 import { RiskService } from '../modules/customer-risk/risk.service.js';
+import { RmAssignmentBody } from '../modules/customer-risk/rm-assignment.domain.js';
+import { RmAssignmentService } from '../modules/customer-risk/rm-assignment.service.js';
 
 function pendingSlice(): never { throw new ApiError(501, 'NOT_IMPLEMENTED', 'This operation is not implemented yet'); }
 
@@ -57,10 +59,15 @@ class RiskController {
 @ApiTags('Relationship managers')
 @Controller()
 class RmController {
+  constructor(private readonly assignments: RmAssignmentService) {}
   @Roles('LEADER') @Get('team/rms')
-  team() { return pendingSlice(); }
-  @Roles('LEADER') @Post('customers/:id/rm-assignment')
-  assign(@Param('id') _id: string) { return pendingSlice(); }
+  team(@Req() request: ApiRequest) { return this.assignments.team(request.actor!); }
+  @Roles('LEADER') @Post('customers/:id/rm-assignment') @HttpCode(200)
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  assign(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string, @Body() body: RmAssignmentBody) {
+    const key = request.headers['idempotency-key'];
+    return this.assignments.assign(request.actor!, id, body, typeof key === 'string' ? key : undefined, auditContext(request));
+  }
   @Roles('RM') @Get('rm/customers')
   list() { return pendingSlice(); }
   @Roles('RM', 'LEADER', 'CUSTOMER') @Get('customers/:id')
