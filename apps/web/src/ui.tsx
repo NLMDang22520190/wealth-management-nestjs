@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClipboardEvent, KeyboardEvent, ReactNode } from 'react';
+import { CircleAlert, Loader2 } from 'lucide-react';
 import { api, describe, isAbort } from './api';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 export interface Loaded<T> { data: T | undefined; error: unknown; loading: boolean; reload: () => void }
 
@@ -22,35 +31,77 @@ export function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, deps: read
 }
 
 export function ErrorAlert({ children }: { children: ReactNode }) {
-  return <div role="alert" className="alert">{children}</div>;
+  return (
+    <Alert variant="destructive" role="alert" className="my-2.5 border-destructive/30 bg-destructive/10">
+      <CircleAlert aria-hidden="true" />
+      <AlertDescription className="font-medium text-destructive">{children}</AlertDescription>
+    </Alert>
+  );
 }
 
-export function Loading({ label = 'Đang tải…' }: { label?: string }) {
-  return <p role="status" className="loading"><span className="spinner" aria-hidden="true" />{label}</p>;
+/** Inline action inside an ErrorAlert (retry, reload): a link-styled button. */
+export function AlertAction({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return <Button type="button" variant="link" className="p-0 font-semibold text-destructive" onClick={onClick}>{children}</Button>;
+}
+
+export function Loading({ label = 'Đang tải…', skeleton = false }: { label?: string; skeleton?: boolean }) {
+  return (
+    <div role="status" className="my-2 text-muted-foreground">
+      <p className="m-0 flex items-center gap-2.5"><Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />{label}</p>
+      {skeleton ? <Skeleton aria-hidden="true" className="mt-3 h-24 w-full rounded-xl" /> : null}
+    </div>
+  );
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="empty">{children}</p>;
+  return <p className="rounded-xl border border-dashed border-input bg-muted px-4 py-7 text-center text-muted-foreground">{children}</p>;
 }
 
-export function Panel({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
+const tones = {
+  plain: { card: '', title: 'text-muted-foreground' },
+  success: { card: 'bg-[#f5fbf7] ring-[#a9d6bd]', title: 'text-muted-foreground' },
+  preview: { card: 'ring-2 ring-primary shadow-lg shadow-primary/10', title: 'text-muted-foreground' },
+  aum: { card: 'bg-linear-to-br from-sidebar to-sidebar-accent text-white ring-sidebar [&_p]:text-sidebar-foreground', title: 'text-sidebar-foreground' },
+} as const;
+
+export function Panel({ title, children, tone = 'plain' }: { title: string; children: ReactNode; tone?: keyof typeof tones }) {
   const id = `panel-${title.replace(/[^\p{L}\p{N}]+/gu, '-')}`;
   return (
-    <section className={`panel ${className ?? ''}`} aria-labelledby={id}>
-      <h3 id={id}>{title}</h3>
-      {children}
-    </section>
+    <Card role="region" aria-labelledby={id} className={cn('my-4 [--card-spacing:--spacing(5)] shadow-sm', tones[tone].card)}>
+      <CardHeader><CardTitle id={id} className={tones[tone].title}>{title}</CardTitle></CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 }
 
 export function PageTitle({ title, hint }: { title: string; hint?: string }) {
   return (
-    <header className="page-title">
-      <h2>{title}</h2>
-      {hint ? <p className="hint">{hint}</p> : null}
+    <header className="mb-5">
+      <h2 className="m-0 mb-1.5 text-[1.65rem] leading-tight font-bold">{title}</h2>
+      {hint ? <p className="m-0 max-w-[64ch] text-muted-foreground">{hint}</p> : null}
     </header>
   );
 }
+
+/** Label + control stack used by every form. */
+export function Field({ label, htmlFor, children, className }: { label: string; htmlFor: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('mb-3.5 flex min-w-0 flex-col gap-1.5', className)}>
+      <Label htmlFor={htmlFor}>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+/** A whole-row choice around a native radio/checkbox, so keyboard and screen readers behave natively. */
+export function Choice({ children }: { children: ReactNode }) {
+  return (
+    <label className="mb-2 flex cursor-pointer items-start gap-3 rounded-lg border bg-card px-3.5 py-3 transition-colors hover:border-input has-checked:border-primary has-checked:bg-accent has-checked:ring-1 has-checked:ring-primary has-focus-visible:ring-3 has-focus-visible:ring-ring/50">
+      {children}
+    </label>
+  );
+}
+export const choiceInput = 'mt-1 size-[18px] flex-none accent-primary';
 
 interface DemoCode { code: string; expiresAt: string }
 
@@ -66,13 +117,13 @@ export function OtpInbox({ challengeId }: { challengeId: string }) {
     finally { setBusy(false); }
   };
   return (
-    <div className="inbox-wrap">
-      <button type="button" className="secondary" onClick={() => void open()} disabled={busy}>Xem hộp thư OTP demo</button>
+    <div>
+      <Button type="button" variant="outline" onClick={() => void open()} disabled={busy}>Xem hộp thư OTP demo</Button>
       {failure ? <ErrorAlert>{describe(failure)}</ErrorAlert> : null}
       {opened ? (
-        <section className="inbox" aria-labelledby={`inbox-${challengeId}`}>
-          <h3 id={`inbox-${challengeId}`}>Hộp thư OTP demo</h3>
-          <p>Mã xác thực của bạn là <strong className="otp-code">{opened.code}</strong>. Nhập mã này vào ô Mã OTP.</p>
+        <section className="my-2.5 mb-3.5 rounded-lg border border-[#efd9a3] bg-wait-soft px-4 py-3" aria-labelledby={`inbox-${challengeId}`}>
+          <h3 id={`inbox-${challengeId}`} className="m-0 mb-1 text-[0.9rem] font-semibold text-wait">Hộp thư OTP demo</h3>
+          <p className="m-0">Mã xác thực của bạn là <strong className="font-mono text-[1.35rem] leading-tight font-bold tracking-[0.18em] tabular-nums">{opened.code}</strong>. Nhập mã này vào ô Mã OTP.</p>
         </section>
       ) : null}
     </div>
@@ -114,9 +165,10 @@ export function OtpCodeInput({ onChange, disabled }: { onChange: (code: string) 
   };
 
   return (
-    <div role="group" aria-label="Mã OTP" className="otp-boxes">
+    <div role="group" aria-label="Mã OTP" className="mt-1 mb-3 flex gap-1.5 sm:gap-2">
       {digits.map((digit, position) => (
-        <input key={position} ref={element => { boxes.current[position] = element; }} className="otp-box" aria-label={`Chữ số ${position + 1}`}
+        <Input key={position} ref={element => { boxes.current[position] = element; }} aria-label={`Chữ số ${position + 1}`}
+          className="h-[52px] min-w-0 flex-1 p-0 text-center text-[1.45rem] leading-none font-bold tabular-nums sm:h-14 sm:w-12 sm:flex-[0_1_48px] md:text-[1.45rem]"
           value={digit} maxLength={1} inputMode="numeric" autoComplete={position === 0 ? 'one-time-code' : 'off'} disabled={disabled}
           onChange={event => type(position, event.target.value)} onKeyDown={event => press(position, event)}
           onPaste={event => paste(position, event)} onFocus={event => event.target.select()} />
@@ -134,30 +186,45 @@ export function ResendCode({ onResend, busy }: { onResend: () => void; busy: boo
     return () => clearTimeout(timer);
   }, [left]);
   return left > 0
-    ? <p className="hint resend">Gửi lại mã sau {left}s</p>
-    : <button type="button" className="secondary resend" onClick={onResend} disabled={busy}>Gửi lại mã</button>;
+    ? <p className="mb-3.5 text-muted-foreground">Gửi lại mã sau {left}s</p>
+    : <Button type="button" variant="outline" size="sm" className="mb-3.5" onClick={onResend} disabled={busy}>Gửi lại mã</Button>;
 }
 
 export interface Allocation { cash: number; deposit: number; bond: number; fund: number }
 
 const allocationRows: Array<[keyof Allocation, string]> = [['cash', 'Tiền mặt'], ['deposit', 'Tiền gửi'], ['bond', 'Trái phiếu'], ['fund', 'Chứng chỉ quỹ']];
+const segment: Record<keyof Allocation, string> = { cash: 'bg-slate-400', deposit: 'bg-risk-conservative', bond: 'bg-risk-balanced', fund: 'bg-gold' };
 
 /** Server-owned risk result details: maximum product risk and the target asset allocation. */
 export function AllocationSummary({ maxProductRisk, allocation }: { maxProductRisk: number; allocation: Allocation }) {
   return (
     <>
-      <p className="max-risk">Rủi ro sản phẩm tối đa: {maxProductRisk}</p>
-      <div className="allocation-bar" aria-hidden="true">
-        {allocationRows.map(([key]) => <span key={key} className={`seg-${key}`} style={{ width: `${allocation[key]}%` }} />)}
+      <p className="font-medium">Rủi ro sản phẩm tối đa: {maxProductRisk}</p>
+      <div className="my-1.5 mb-3 flex h-3 overflow-hidden rounded-full bg-border" aria-hidden="true">
+        {allocationRows.map(([key]) => <span key={key} className={cn('block h-full', segment[key])} style={{ width: `${allocation[key]}%` }} />)}
       </div>
-      <ul className="allocation" aria-label="Phân bổ tài sản">
-        {allocationRows.map(([key, label]) => <li key={key}><span><i className={`dot seg-${key}`} aria-hidden="true" />{label}</span><strong>{allocation[key]}%</strong></li>)}
+      <ul className="m-0 mb-2.5 grid list-none grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-x-3 gap-y-2 p-0" aria-label="Phân bổ tài sản">
+        {allocationRows.map(([key, label]) => (
+          <li key={key} className="flex items-center justify-between gap-2 rounded-lg border bg-muted px-3 py-2">
+            <span><i className={cn('mr-2 inline-block size-[9px] rounded-full align-middle', segment[key])} aria-hidden="true" />{label}</span>
+            <strong>{allocation[key]}%</strong>
+          </li>
+        ))}
       </ul>
     </>
   );
 }
 
-/** Risk category as a colour-coded chip; the visible text stays the plain Vietnamese label. */
+/** Risk category as a colour-coded badge; the visible text stays the plain Vietnamese label. */
 export function RiskChip({ category, label }: { category: string; label: string }) {
-  return <span className={`chip risk-${category.toLowerCase()}`}>{label}</span>;
+  const variant = category.toLowerCase();
+  return <Badge variant={variant === 'conservative' || variant === 'balanced' || variant === 'growth' ? variant : 'secondary'}>{label}</Badge>;
+}
+
+/** Term/value grid used for key facts on panels. */
+export function Facts({ children }: { children: ReactNode }) {
+  return <dl className="m-0 mb-4 grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3.5">{children}</dl>;
+}
+export function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="min-w-0"><dt className="mb-0.5 text-[0.8rem] text-muted-foreground">{label}</dt><dd className="m-0 font-semibold">{children}</dd></div>;
 }

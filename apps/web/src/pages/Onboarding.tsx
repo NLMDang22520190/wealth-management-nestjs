@@ -2,7 +2,12 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { api, describe, intentDone, intentKey } from '../api';
 import { formatDateTime } from '../format';
-import { ErrorAlert, Loading, PageTitle, Panel } from '../ui';
+import { Check } from 'lucide-react';
+import { Choice, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, choiceInput } from '../ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 interface Lookup {
   cifRef: string; name: string; dateOfBirth: string; active: boolean; eligible: boolean;
@@ -54,55 +59,64 @@ export function Onboarding() {
   return (
     <>
       <PageTitle title="Đăng ký khách hàng" hint="Tra cứu khách hàng từ hệ thống lõi, chọn tài khoản VND của chính khách hàng và gửi lời mời dịch vụ." />
-      <ol className="stepper" aria-label="Tiến trình đăng ký">
-        {steps.map((label, index) => (
-          <li key={label} aria-current={index === currentStep ? 'step' : undefined} className={index < currentStep ? 'done' : index === currentStep ? 'current' : ''}>
-            <span className="stepper-dot" aria-hidden="true">{index < currentStep ? '✓' : index + 1}</span>
-            <span className="stepper-label">{label}</span>
-          </li>
-        ))}
+      <ol className="m-0 mb-5 flex list-none p-0" aria-label="Tiến trình đăng ký">
+        {steps.map((label, index) => {
+          const done = index < currentStep;
+          const current = index === currentStep;
+          return (
+            <li key={label} aria-current={current ? 'step' : undefined}
+              className={cn('relative flex min-w-0 flex-1 items-center gap-2.5 font-medium text-muted-foreground max-[480px]:flex-col max-[480px]:items-start max-[480px]:gap-1.5 max-[480px]:text-[0.85rem]',
+                'not-first:before:mr-0.5 not-first:before:block not-first:before:h-0.5 not-first:before:min-w-2.5 not-first:before:flex-[0_1_28px] max-[480px]:before:hidden',
+                index <= currentStep ? 'not-first:before:bg-primary' : 'not-first:before:bg-input', current && 'font-semibold text-foreground', done && 'text-accent-foreground')}>
+              <span aria-hidden="true" className={cn('grid size-7 flex-none place-items-center rounded-full border-[1.5px] border-input bg-card text-[0.82rem] font-bold text-muted-foreground',
+                current && 'border-primary bg-primary text-primary-foreground ring-4 ring-accent', done && 'border-primary bg-accent text-accent-foreground')}>
+                {done ? <Check className="size-4" strokeWidth={2.5} /> : index + 1}
+              </span>
+              <span className="min-w-0">{label}</span>
+            </li>
+          );
+        })}
       </ol>
-      <form className="inline-form" onSubmit={event => void search(event)}>
-        <div className="field">
-          <label htmlFor="cif">Mã CIF hoặc định danh</label>
-          <input id="cif" value={cif} onChange={event => setCif(event.target.value)} autoComplete="off" inputMode="text" />
-        </div>
-        <button type="submit" disabled={busy !== null}>Tra cứu</button>
+      <form className="mt-2 mb-3 flex flex-wrap items-end gap-x-3" onSubmit={event => void search(event)}>
+        <Field label="Mã CIF hoặc định danh" htmlFor="cif" className="flex-[1_1_240px]">
+          <Input id="cif" value={cif} onChange={event => setCif(event.target.value)} autoComplete="off" inputMode="text" />
+        </Field>
+        <Button type="submit" disabled={busy !== null} className="mb-3.5">Tra cứu</Button>
       </form>
       {busy === 'lookup' ? <Loading label="Đang tra cứu…" /> : null}
       {message ? <ErrorAlert>{message}</ErrorAlert> : null}
 
       {lookup && !invitation ? (
         <Panel title="Thông tin khách hàng">
-          <dl className="facts">
-            <div><dt>Họ tên</dt><dd>{lookup.name}</dd></div>
-            <div><dt>Mã CIF</dt><dd>{lookup.cifRef}</dd></div>
-            <div><dt>Ngày sinh</dt><dd>{lookup.dateOfBirth.split('-').reverse().join('/')}</dd></div>
-            <div><dt>Điều kiện đăng ký</dt><dd>{lookup.eligible ? <span className="badge ok">Đủ điều kiện</span> : <span className="badge bad">Chưa đủ điều kiện</span>}</dd></div>
-          </dl>
+          <Facts>
+            <Fact label="Họ tên">{lookup.name}</Fact>
+            <Fact label="Mã CIF">{lookup.cifRef}</Fact>
+            <Fact label="Ngày sinh">{lookup.dateOfBirth.split('-').reverse().join('/')}</Fact>
+            <Fact label="Điều kiện đăng ký">{lookup.eligible ? <Badge variant="ok">Đủ điều kiện</Badge> : <Badge variant="bad">Chưa đủ điều kiện</Badge>}</Fact>
+          </Facts>
           {lookup.eligible && lookup.accounts.length > 0 ? (
-            <fieldset className="choices">
-              <legend>Tài khoản VND của khách hàng</legend>
+            <fieldset className="m-0 mb-4 min-w-0 border-0 p-0">
+              <legend className="mb-2 p-0 font-semibold">Tài khoản VND của khách hàng</legend>
               {lookup.accounts.map(item => (
-                <label key={item.id} className="choice">
-                  <input type="radio" name="account" value={item.id} checked={account === item.id} onChange={() => setAccount(item.id)} />
+                <Choice key={item.id}>
+                  <input type="radio" className={choiceInput} name="account" value={item.id} checked={account === item.id} onChange={() => setAccount(item.id)} />
                   <span>Tài khoản {item.currency} <code>{item.id}</code></span>
-                </label>
+                </Choice>
               ))}
             </fieldset>
-          ) : <p className="hint">Khách hàng chưa có tài khoản VND hợp lệ hoặc chưa đủ điều kiện nên chưa thể tạo lời mời.</p>}
-          <button type="button" onClick={() => void create()} disabled={!lookup.eligible || !account || busy !== null}>Tạo lời mời</button>
+          ) : <p className="text-muted-foreground">Khách hàng chưa có tài khoản VND hợp lệ hoặc chưa đủ điều kiện nên chưa thể tạo lời mời.</p>}
+          <Button type="button" onClick={() => void create()} disabled={!lookup.eligible || !account || busy !== null}>Tạo lời mời</Button>
         </Panel>
       ) : null}
 
       {invitation ? (
-        <Panel title="Lời mời đã gửi" className="success">
-          <p className="success-line">Đã tạo lời mời</p>
-          <dl className="facts">
-            <div><dt>Trạng thái</dt><dd><span className="badge wait">Chờ khách hàng đồng ý</span></dd></div>
-            <div><dt>Hiệu lực đến</dt><dd>{formatDateTime(invitation.expiresAt)}</dd></div>
-            <div><dt>Phiên bản điều khoản</dt><dd>{invitation.termsVersion}</dd></div>
-          </dl>
+        <Panel title="Lời mời đã gửi" tone="success">
+          <p className="font-semibold text-ok">Đã tạo lời mời</p>
+          <Facts>
+            <Fact label="Trạng thái"><Badge variant="wait">Chờ khách hàng đồng ý</Badge></Fact>
+            <Fact label="Hiệu lực đến">{formatDateTime(invitation.expiresAt)}</Fact>
+            <Fact label="Phiên bản điều khoản">{invitation.termsVersion}</Fact>
+          </Facts>
         </Panel>
       ) : null}
     </>

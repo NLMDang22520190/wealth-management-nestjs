@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { api, describe } from '../api';
 import { formatDate, formatVnd, riskLabel } from '../format';
-import { Empty, ErrorAlert, Loading, PageTitle, Panel, RiskChip, useLoad } from '../ui';
+import { AlertAction, Empty, ErrorAlert, Field, Loading, PageTitle, Panel, RiskChip, useLoad } from '../ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 
 interface Aum { value: string | null; asOf: string | null; provenance: string | null; dataStatus: string }
 interface CustomerRow {
@@ -17,8 +23,17 @@ const PAGE_SIZE = 10;
 const sorts: Array<[string, string]> = [['name', 'Tên khách hàng'], ['aum', 'Tài sản quản lý (AUM)'],
   ['riskExpiresAt', 'Ngày hết hạn hồ sơ rủi ro'], ['pendingProposals', 'Số đề xuất chờ duyệt']];
 
+// Below the md breakpoint the table turns into one card per customer, so nothing scrolls sideways on a phone.
+const headCell = 'h-auto px-4 py-3 text-[0.78rem] text-muted-foreground';
+const cell = 'px-4 py-3 max-md:block max-md:w-full max-md:px-0 max-md:py-[3px] max-md:whitespace-normal';
+const labelled = 'max-md:before:text-[0.82rem] max-md:before:text-muted-foreground max-md:before:content-[attr(data-label)_":_"]';
+
+function Muted({ children }: { children: string }) {
+  return <span className="text-muted-foreground">{children}</span>;
+}
+
 function AumCell({ aum }: { aum: Aum }) {
-  return aum.value === null ? <span className="muted">Chưa có dữ liệu</span> : <>{formatVnd(aum.value)}</>;
+  return aum.value === null ? <Muted>Chưa có dữ liệu</Muted> : <>{formatVnd(aum.value)}</>;
 }
 
 /** UC04 list: server-side paging, filtering and sorting over the RM's own customers only. */
@@ -42,68 +57,70 @@ export function CustomerList() {
   return (
     <>
       <PageTitle title="Khách phụ trách" hint="Chỉ gồm khách hàng đang được phân công cho bạn." />
-      <div className="filters">
-        <div className="field">
-          <label htmlFor="filter-name">Tìm theo tên</label>
-          <input id="filter-name" type="search" value={name} onChange={event => change(() => setName(event.target.value))} autoComplete="off" />
-        </div>
-        <div className="field">
-          <label htmlFor="filter-risk">Mức rủi ro</label>
-          <select id="filter-risk" value={risk} onChange={event => change(() => setRisk(event.target.value))}>
-            <option value="">Tất cả</option>
-            <option value="CONSERVATIVE">Thận trọng</option>
-            <option value="BALANCED">Cân bằng</option>
-            <option value="GROWTH">Tăng trưởng</option>
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="sort-by">Sắp xếp theo</label>
-          <select id="sort-by" value={sort} onChange={event => change(() => setSort(event.target.value))}>
-            {sorts.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="sort-direction">Thứ tự</label>
-          <select id="sort-direction" value={direction} onChange={event => change(() => setDirection(event.target.value))}>
-            <option value="asc">Tăng dần</option>
-            <option value="desc">Giảm dần</option>
-          </select>
-        </div>
+      <div className="mb-1 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-x-3 rounded-xl border bg-card px-4 pt-4 pb-0.5">
+        <Field label="Tìm theo tên" htmlFor="filter-name">
+          <Input id="filter-name" type="search" value={name} onChange={event => change(() => setName(event.target.value))} autoComplete="off" />
+        </Field>
+        <Field label="Mức rủi ro" htmlFor="filter-risk">
+          <NativeSelect id="filter-risk" value={risk} onChange={event => change(() => setRisk(event.target.value))}>
+            <NativeSelectOption value="">Tất cả</NativeSelectOption>
+            <NativeSelectOption value="CONSERVATIVE">Thận trọng</NativeSelectOption>
+            <NativeSelectOption value="BALANCED">Cân bằng</NativeSelectOption>
+            <NativeSelectOption value="GROWTH">Tăng trưởng</NativeSelectOption>
+          </NativeSelect>
+        </Field>
+        <Field label="Sắp xếp theo" htmlFor="sort-by">
+          <NativeSelect id="sort-by" value={sort} onChange={event => change(() => setSort(event.target.value))}>
+            {sorts.map(([value, label]) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}
+          </NativeSelect>
+        </Field>
+        <Field label="Thứ tự" htmlFor="sort-direction">
+          <NativeSelect id="sort-direction" value={direction} onChange={event => change(() => setDirection(event.target.value))}>
+            <NativeSelectOption value="asc">Tăng dần</NativeSelectOption>
+            <NativeSelectOption value="desc">Giảm dần</NativeSelectOption>
+          </NativeSelect>
+        </Field>
       </div>
 
-      {list.loading ? <Loading /> : null}
-      {list.error ? <ErrorAlert>{describe(list.error)} <button type="button" className="link" onClick={list.reload}>Thử lại</button></ErrorAlert> : null}
+      {list.loading ? <Loading skeleton={!list.data} /> : null}
+      {list.error ? <ErrorAlert>{describe(list.error)} <AlertAction onClick={list.reload}>Thử lại</AlertAction></ErrorAlert> : null}
       {list.data ? (
         <>
-          <p className="total">Tổng: {list.data.total} khách hàng</p>
+          <p className="mt-[18px] mb-2.5 text-[0.9rem] font-semibold text-muted-foreground tabular-nums">Tổng: {list.data.total} khách hàng</p>
           {list.data.items.length === 0 ? <Empty>Không có khách hàng phù hợp</Empty> : (
-            <div className="table-wrap">
-              <table className="customers" role="table">
-                <thead role="rowgroup">
-                  <tr role="row">
-                    <th scope="col" role="columnheader">Khách hàng</th><th scope="col" role="columnheader">Rủi ro</th><th scope="col" role="columnheader">Hết hạn hồ sơ</th>
-                    <th scope="col" role="columnheader" className="num">AUM</th><th scope="col" role="columnheader" className="num">Đề xuất</th><th scope="col" role="columnheader" className="num">Kiểm tra chờ</th>
-                  </tr>
-                </thead>
-                <tbody role="rowgroup">
+            <div className="max-w-full overflow-hidden rounded-xl border bg-card shadow-sm">
+              <Table role="table" className="customers text-[0.93rem] max-md:block">
+                <TableHeader role="rowgroup" className="bg-muted max-md:sr-only">
+                  <TableRow role="row">
+                    <TableHead scope="col" role="columnheader" className={headCell}>Khách hàng</TableHead>
+                    <TableHead scope="col" role="columnheader" className={headCell}>Rủi ro</TableHead>
+                    <TableHead scope="col" role="columnheader" className={headCell}>Hết hạn hồ sơ</TableHead>
+                    <TableHead scope="col" role="columnheader" className={cn(headCell, 'text-right')}>AUM</TableHead>
+                    <TableHead scope="col" role="columnheader" className={cn(headCell, 'text-right')}>Đề xuất</TableHead>
+                    <TableHead scope="col" role="columnheader" className={cn(headCell, 'text-right whitespace-normal w-36')}>Kiểm tra chờ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody role="rowgroup" className="max-md:block">
                   {list.data.items.map(row => (
-                    <tr key={row.customerId} role="row">
-                      <th scope="row" role="rowheader" className="c-name"><a href={`#/rm/customers/${row.customerId}`}>{row.name}</a></th>
-                      <td role="cell" className="c-risk" data-label="Rủi ro">{row.currentRisk ? <RiskChip category={row.currentRisk.category} label={riskLabel(row.currentRisk.category)} /> : <span className="muted">Chưa có</span>}</td>
-                      <td role="cell" data-label="Hết hạn hồ sơ">{row.currentRisk ? <>{formatDate(row.currentRisk.expiresAt)}{row.currentRisk.valid ? '' : ' (quá hạn)'}</> : <span className="muted">Chưa có</span>}</td>
-                      <td role="cell" className="num" data-label="AUM"><AumCell aum={row.aum} /></td>
-                      <td role="cell" className="num" data-label="Đề xuất">{row.pendingProposals.count}</td>
-                      <td role="cell" className={`num c-drift${row.driftAlerts.count > 0 ? ' has-alert' : ''}`}>Kiểm tra danh mục chờ: {row.driftAlerts.count}</td>
-                    </tr>
+                    <TableRow key={row.customerId} role="row" className="max-md:block max-md:px-4 max-md:py-3.5">
+                      <TableHead scope="row" role="rowheader" className={cn(cell, 'h-auto text-foreground max-md:mb-1 max-md:text-[1.02rem]')}>
+                        <a href={`#/rm/customers/${row.customerId}`} className="font-semibold text-foreground no-underline hover:text-primary hover:underline">{row.name}</a>
+                      </TableHead>
+                      <TableCell role="cell" className={cn(cell, labelled)} data-label="Rủi ro">{row.currentRisk ? <RiskChip category={row.currentRisk.category} label={riskLabel(row.currentRisk.category)} /> : <Muted>Chưa có</Muted>}</TableCell>
+                      <TableCell role="cell" className={cn(cell, labelled)} data-label="Hết hạn hồ sơ">{row.currentRisk ? <>{formatDate(row.currentRisk.expiresAt)}{row.currentRisk.valid ? '' : ' (quá hạn)'}</> : <Muted>Chưa có</Muted>}</TableCell>
+                      <TableCell role="cell" className={cn(cell, labelled, 'text-right tabular-nums max-md:text-left')} data-label="AUM"><AumCell aum={row.aum} /></TableCell>
+                      <TableCell role="cell" className={cn(cell, labelled, 'text-right tabular-nums max-md:text-left')} data-label="Đề xuất">{row.pendingProposals.count}</TableCell>
+                      <TableCell role="cell" className={cn(cell, 'text-right tabular-nums whitespace-normal w-36 max-md:w-auto max-md:text-left', row.driftAlerts.count > 0 ? 'font-semibold text-wait' : 'text-muted-foreground')}>Kiểm tra danh mục chờ: {row.driftAlerts.count}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           )}
-          <nav className="pager" aria-label="Phân trang">
-            <button type="button" className="secondary" onClick={() => setPage(page - 1)} disabled={page <= 1}>Trang trước</button>
+          <nav className="mt-4 flex flex-wrap items-center justify-between gap-2.5 text-[0.9rem] text-muted-foreground" aria-label="Phân trang">
+            <Button type="button" variant="outline" onClick={() => setPage(page - 1)} disabled={page <= 1}>Trang trước</Button>
             <span>Trang {list.data.page}/{pages}</span>
-            <button type="button" className="secondary" onClick={() => setPage(page + 1)} disabled={page >= pages}>Trang sau</button>
+            <Button type="button" variant="outline" onClick={() => setPage(page + 1)} disabled={page >= pages}>Trang sau</Button>
           </nav>
         </>
       ) : null}
@@ -117,8 +134,8 @@ export function CustomerDetail({ customerId }: { customerId: string }) {
   const customer = detail.data;
   return (
     <>
-      <p className="back"><a href="#/rm/customers">Quay lại danh sách</a></p>
-      {detail.loading && !customer ? <Loading /> : null}
+      <p className="mb-3 text-[0.9rem]"><a href="#/rm/customers">Quay lại danh sách</a></p>
+      {detail.loading && !customer ? <Loading skeleton /> : null}
       {detail.error ? (
         <ErrorAlert>{describe(detail.error, { '403': 'Bạn không có quyền truy cập khách hàng này', '404': 'Không tìm thấy khách hàng này' })}</ErrorAlert>
       ) : null}
@@ -130,14 +147,14 @@ export function CustomerDetail({ customerId }: { customerId: string }) {
               <>
                 <p>Hồ sơ rủi ro: {riskLabel(customer.currentRisk.category)}</p>
                 <p>Hết hạn: {formatDate(customer.currentRisk.expiresAt)}</p>
-                {customer.currentRisk.valid ? null : <p className="badge bad">Hồ sơ đã quá hạn</p>}
+                {customer.currentRisk.valid ? null : <p><Badge variant="bad">Hồ sơ đã quá hạn</Badge></p>}
               </>
             ) : <Empty>Khách hàng chưa có hồ sơ rủi ro.</Empty>}
           </Panel>
-          <Panel title="Tài sản quản lý (AUM)" className="aum-panel">
-            {customer.aum.value === null ? <p className="muted">Chưa có dữ liệu</p> : (
+          <Panel title="Tài sản quản lý (AUM)" tone="aum">
+            {customer.aum.value === null ? <p>Chưa có dữ liệu</p> : (
               <>
-                <p className="aum-value">{formatVnd(customer.aum.value)}</p>
+                <p className="mb-2 text-[2.1rem] leading-tight font-bold tracking-tight text-white! tabular-nums">{formatVnd(customer.aum.value)}</p>
                 {customer.aum.asOf ? <p>Tại thời điểm: {formatDate(customer.aum.asOf)}</p> : null}
                 <p>Nguồn: {customer.aum.provenance ?? 'Nhiều nguồn'}</p>
               </>
@@ -149,7 +166,7 @@ export function CustomerDetail({ customerId }: { customerId: string }) {
           </Panel>
         </>
       ) : null}
-      <p><button type="button" className="secondary" onClick={detail.reload} disabled={detail.loading}>Làm mới</button></p>
+      <p><Button type="button" variant="outline" onClick={detail.reload} disabled={detail.loading}>Làm mới</Button></p>
     </>
   );
 }

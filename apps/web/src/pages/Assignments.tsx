@@ -1,8 +1,16 @@
+import { ArrowRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api, describe, intentDone, intentKey } from '../api';
 import { riskLabel } from '../format';
-import { Empty, ErrorAlert, Loading, PageTitle, Panel, useLoad } from '../ui';
+import { AlertAction, Empty, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, useLoad } from '../ui';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 
 interface Rm { rmId: string; active: boolean; assigned: number; reserved: number; available: number; capacityLimit: number }
 interface Customer {
@@ -58,11 +66,9 @@ export function Assignments() {
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => { if (confirming && dialog.current && !dialog.current.open) dialog.current.showModal(); }, [confirming]);
   const wasConfirming = useRef(false);
   useEffect(() => {
-    // The modal makes the page inert until it is removed, so focus goes back to the opener only after it is gone.
+    // The modal makes the page inert while it is open, so focus goes back to the opener once it is gone.
     if (wasConfirming.current && !confirming) opener.current?.focus();
     wasConfirming.current = confirming;
   }, [confirming]);
@@ -119,110 +125,120 @@ export function Assignments() {
 
   const message = typeof failure === 'string' ? failure : failure ? describe(failure) : null;
   const rms = team.data?.items ?? [];
+  const headClass = 'h-auto px-4 py-3 text-[0.78rem] text-muted-foreground';
 
   return (
     <>
       <PageTitle title="Phân công RM" hint="Xem tải của từng RM trong nhóm, rồi chuyển một khách hàng sang RM khác kèm lý do." />
       <Panel title="Danh sách RM">
-        {team.loading && !team.data ? <Loading /> : null}
-        {team.error ? <ErrorAlert>{describe(team.error)} <button type="button" className="link" onClick={team.reload}>Thử lại</button></ErrorAlert> : null}
+        {team.loading && !team.data ? <Loading skeleton /> : null}
+        {team.error ? <ErrorAlert>{describe(team.error)} <AlertAction onClick={team.reload}>Thử lại</AlertAction></ErrorAlert> : null}
         {team.data && rms.length === 0 ? <Empty>Nhóm chưa có RM nào.</Empty> : null}
         {rms.length > 0 ? (
-          <div className="table-wrap">
-            <table className="rm-table">
-              <thead><tr><th scope="col">Mã RM</th><th scope="col">Tải</th><th scope="col">Trạng thái</th></tr></thead>
-              <tbody>
+          <div className="overflow-x-auto rounded-xl border bg-card">
+            <Table className="rm-table text-[0.93rem]">
+              <TableHeader className="bg-muted">
+                <TableRow>
+                  <TableHead scope="col" className={headClass}>Mã RM</TableHead>
+                  <TableHead scope="col" className={headClass}>Tải</TableHead>
+                  <TableHead scope="col" className={headClass}>Trạng thái</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {rms.map(rm => {
                   const used = rm.assigned + rm.reserved;
+                  const ratio = used / rm.capacityLimit;
                   return (
-                    <tr key={rm.rmId}>
-                      <th scope="row"><code>{rm.rmId}</code></th>
-                      <td>
-                        <span className={`meter${used / rm.capacityLimit >= 0.9 ? ' high' : used / rm.capacityLimit >= 0.7 ? ' mid' : ''}`} aria-hidden="true"><span style={{ width: `${Math.min(100, (used / rm.capacityLimit) * 100)}%` }} /></span>
-                        <span className="load">{used}/{rm.capacityLimit}</span>
-                      </td>
-                      <td>{rm.active ? 'Đang hoạt động' : 'Ngừng hoạt động'}</td>
-                    </tr>
+                    <TableRow key={rm.rmId}>
+                      <TableHead scope="row" className="h-auto px-4 py-3 font-semibold"><code>{rm.rmId}</code></TableHead>
+                      <TableCell className="px-4 py-3">
+                        <span className="mr-2.5 inline-block h-2 w-24 overflow-hidden rounded-full bg-border align-middle" aria-hidden="true">
+                          <span className={cn('block h-full rounded-full', ratio >= 0.9 ? 'bg-destructive' : ratio >= 0.7 ? 'bg-gold' : 'bg-primary')} style={{ width: `${Math.min(100, ratio * 100)}%` }} />
+                        </span>
+                        <span className="font-semibold tabular-nums">{used}/{rm.capacityLimit}</span>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">{rm.active ? 'Đang hoạt động' : 'Ngừng hoạt động'}</TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         ) : null}
       </Panel>
 
-      <form className="inline-form" onSubmit={event => void load(event)}>
-        <div className="field">
-          <label htmlFor="customer-search">Tìm khách hàng</label>
-          <input id="customer-search" type="search" value={search} onChange={event => setSearch(event.target.value)} autoComplete="off" />
-        </div>
-        <div className="field">
-          <label htmlFor="customer-id">Chọn khách hàng</label>
-          <select id="customer-id" value={customerId} onChange={event => setCustomerId(event.target.value)}>
-            <option value="">Chọn khách hàng</option>
-            {options.map(item => <option key={item.customerId} value={item.customerId}>{item.name}</option>)}
-          </select>
-          <p className="hint">Hiển thị {options.length}/{rosterTotal} khách hàng</p>
+      <form className="mt-2 mb-3 flex flex-wrap items-end gap-x-3" onSubmit={event => void load(event)}>
+        <Field label="Tìm khách hàng" htmlFor="customer-search" className="flex-[1_1_240px]">
+          <Input id="customer-search" type="search" value={search} onChange={event => setSearch(event.target.value)} autoComplete="off" />
+        </Field>
+        <Field label="Chọn khách hàng" htmlFor="customer-id" className="flex-[1_1_240px]">
+          <NativeSelect id="customer-id" value={customerId} onChange={event => setCustomerId(event.target.value)}>
+            <NativeSelectOption value="">Chọn khách hàng</NativeSelectOption>
+            {options.map(item => <NativeSelectOption key={item.customerId} value={item.customerId}>{item.name}</NativeSelectOption>)}
+          </NativeSelect>
+          <p className="m-0 text-muted-foreground">Hiển thị {options.length}/{rosterTotal} khách hàng</p>
           {options.length < rosterTotal ? (
-            <button type="button" className="secondary" onClick={() => setRosterPage(rosterPage + 1)} disabled={rosterBusy}>Tải thêm khách hàng</button>
+            <Button type="button" variant="outline" className="self-start" onClick={() => setRosterPage(rosterPage + 1)} disabled={rosterBusy}>Tải thêm khách hàng</Button>
           ) : null}
-        </div>
-        <button type="submit" disabled={busy}>Tải thông tin khách hàng</button>
+        </Field>
+        <Button type="submit" disabled={busy} className="mb-3.5">Tải thông tin khách hàng</Button>
       </form>
-      {rosterError ? <ErrorAlert>{describe(rosterError)} <button type="button" className="link" onClick={() => setRosterTick(value => value + 1)}>Thử lại</button></ErrorAlert> : null}
+      {rosterError ? <ErrorAlert>{describe(rosterError)} <AlertAction onClick={() => setRosterTick(value => value + 1)}>Thử lại</AlertAction></ErrorAlert> : null}
       {busy ? <Loading label="Đang xử lý…" /> : null}
       {message ? (
         <ErrorAlert>
           {message}
-          {stale ? <> <button type="button" className="link" onClick={() => void reloadCurrent()}>Tải lại</button></> : null}
+          {stale ? <> <AlertAction onClick={() => void reloadCurrent()}>Tải lại</AlertAction></> : null}
         </ErrorAlert>
       ) : null}
-      {notice ? <p role="status" className="success-line">{notice}</p> : null}
+      {notice ? <p role="status" className="mb-2 font-semibold text-ok">{notice}</p> : null}
 
       {customer ? (
         <Panel title="Khách hàng cần chuyển">
-          <dl className="facts">
-            <div><dt>Họ tên</dt><dd>{customer.name}</dd></div>
-            <div><dt>RM hiện tại</dt><dd><code>{customer.currentAssignment.rmId}</code></dd></div>
-            <div><dt>Phân công</dt><dd>Phiên bản phân công: {customer.currentAssignment.version}</dd></div>
-            <div><dt>Hồ sơ rủi ro</dt><dd>{customer.currentRisk ? riskLabel(customer.currentRisk.category) : 'Chưa có'}</dd></div>
-            <div><dt>Đề xuất chờ duyệt</dt><dd>{customer.pendingProposals.count}</dd></div>
-          </dl>
-          <div className="field">
-            <label htmlFor="target-rm">RM nhận</label>
-            <select id="target-rm" value={target} onChange={event => setTarget(event.target.value)}>
-              <option value="">Chọn RM nhận</option>
-              {rms.filter(rm => rm.active).map(rm => <option key={rm.rmId} value={rm.rmId}>{rm.rmId} ({rm.assigned + rm.reserved}/{rm.capacityLimit})</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="reason">Lý do chuyển</label>
-            <textarea id="reason" value={reason} onChange={event => setReason(event.target.value)} rows={3} />
-          </div>
-          <p className="hint">Khi chuyển, các đề xuất đang chờ duyệt của khách do RM cũ lập sẽ bị hủy.</p>
-          <button type="button" ref={opener} onClick={requestTransfer} disabled={busy}>Xác nhận chuyển</button>
+          <Facts>
+            <Fact label="Họ tên">{customer.name}</Fact>
+            <Fact label="RM hiện tại"><code>{customer.currentAssignment.rmId}</code></Fact>
+            <Fact label="Phân công">Phiên bản phân công: {customer.currentAssignment.version}</Fact>
+            <Fact label="Hồ sơ rủi ro">{customer.currentRisk ? riskLabel(customer.currentRisk.category) : 'Chưa có'}</Fact>
+            <Fact label="Đề xuất chờ duyệt">{customer.pendingProposals.count}</Fact>
+          </Facts>
+          <Field label="RM nhận" htmlFor="target-rm">
+            <NativeSelect id="target-rm" value={target} onChange={event => setTarget(event.target.value)}>
+              <NativeSelectOption value="">Chọn RM nhận</NativeSelectOption>
+              {rms.filter(rm => rm.active).map(rm => <NativeSelectOption key={rm.rmId} value={rm.rmId}>{rm.rmId} ({rm.assigned + rm.reserved}/{rm.capacityLimit})</NativeSelectOption>)}
+            </NativeSelect>
+          </Field>
+          <Field label="Lý do chuyển" htmlFor="reason">
+            <Textarea id="reason" value={reason} onChange={event => setReason(event.target.value)} rows={3} />
+          </Field>
+          <p className="mb-3 text-muted-foreground">Khi chuyển, các đề xuất đang chờ duyệt của khách do RM cũ lập sẽ bị hủy.</p>
+          <Button type="button" ref={opener} onClick={requestTransfer} disabled={busy}>Xác nhận chuyển</Button>
         </Panel>
       ) : null}
 
-      {confirming && customer ? (
-        <dialog ref={dialog} className="confirm-dialog" aria-modal="true" aria-labelledby="transfer-title" onClose={closeDialog} onCancel={closeDialog}>
-          <h3 id="transfer-title">Xác nhận chuyển RM</h3>
-          <p>Chuyển <strong>{customer.name}</strong> sang RM mới.</p>
-          <p className="transfer-route">
-            <code>{customer.currentAssignment.rmId}</code><span aria-hidden="true" className="arrow">→</span><code>{target}</code>
-          </p>
-          <p className="transfer-reason">Lý do: {reason.trim()}</p>
-          <p className={customer.pendingProposals.count > 0 ? 'transfer-warning' : 'hint'}>
-            {customer.pendingProposals.count > 0
-              ? `${customer.pendingProposals.count} đề xuất đang chờ duyệt sẽ bị hủy`
-              : 'Khách hàng không có đề xuất đang chờ duyệt.'}
-          </p>
-          <div className="dialog-actions">
-            <button type="button" className="secondary" onClick={closeDialog}>Hủy</button>
-            <button type="button" onClick={() => { closeDialog(); void transfer(); }}>Chuyển khách hàng</button>
-          </div>
-        </dialog>
-      ) : null}
+      <Dialog open={confirming && customer !== null} onOpenChange={open => { if (!open) closeDialog(); }}>
+        {customer ? (
+          <DialogContent showCloseButton={false} className="gap-3 p-6 sm:max-w-[460px]">
+            <DialogHeader>
+              <DialogTitle className="text-[1.15rem] leading-snug font-semibold">Xác nhận chuyển RM</DialogTitle>
+              <DialogDescription className="text-[15px] text-foreground">Chuyển <strong>{customer.name}</strong> sang RM mới.</DialogDescription>
+            </DialogHeader>
+            <p className="m-0 flex flex-wrap items-center gap-2.5">
+              <code>{customer.currentAssignment.rmId}</code><ArrowRight aria-hidden="true" className="size-4 text-primary" /><code>{target}</code>
+            </p>
+            <p className="m-0 text-muted-foreground">Lý do: {reason.trim()}</p>
+            <p className={cn('m-0', customer.pendingProposals.count > 0 ? 'rounded-lg bg-wait-soft px-3.5 py-2.5 font-semibold text-wait' : 'text-muted-foreground')}>
+              {customer.pendingProposals.count > 0
+                ? `${customer.pendingProposals.count} đề xuất đang chờ duyệt sẽ bị hủy`
+                : 'Khách hàng không có đề xuất đang chờ duyệt.'}
+            </p>
+            <DialogFooter className="-mx-6 -mb-6 mt-2 p-4">
+              <Button type="button" variant="outline" onClick={closeDialog}>Hủy</Button>
+              <Button type="button" onClick={() => { closeDialog(); void transfer(); }}>Chuyển khách hàng</Button>
+            </DialogFooter>
+          </DialogContent>
+        ) : null}
+      </Dialog>
     </>
   );
 }
