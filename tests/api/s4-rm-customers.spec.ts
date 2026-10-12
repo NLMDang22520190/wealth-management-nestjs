@@ -124,8 +124,19 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
       body: { targetRmId: '22222222-2222-4222-8222-222222222222', reason: 'S4 ownership test', expectedAssignmentVersion: 1 },
     });
     expect(moved.status).toBe(200);
-    expectApiError(await api.request('/rm/customers', { token: await api.tokenFor(actors.rm.actorId) }), 403, 'FORBIDDEN');
+    // D-S4-list: list is derived from current assignments only; an RM with none gets 200 + empty list. Detail stays 403.
+    const oldRmList = await api.request('/rm/customers', { token: await api.tokenFor(actors.rm.actorId) });
+    expect(oldRmList.status, 'old RM list must be 200 (customer absent), not 403').toBe(200);
+    expect(oldRmList.body.items.map((item: any) => item.customerId)).not.toContain(registered.customerId);
+    expect(oldRmList.body.items).toHaveLength(0);
+    expect(oldRmList.body.total).toBe(0);
     expectApiError(await api.request(`/customers/${registered.customerId}`, { token: await api.tokenFor(actors.rm.actorId) }), 403, 'FORBIDDEN');
+    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,true)',
+      ['rm-s4-empty', 'mock-rm-s4-empty', 'RM', '55555555-5555-4555-8555-555555555555', actors.rm.teamId]);
+    const emptyRmList = await api.request('/rm/customers', { token: await api.tokenFor('rm-s4-empty') });
+    expect(emptyRmList.status, 'active RM with no assignments must get 200 empty list').toBe(200);
+    expect(emptyRmList.body.items).toHaveLength(0);
+    expect(emptyRmList.body.total).toBe(0);
     const replacementList = await api.request('/rm/customers', { token: await api.tokenFor('rm-s4-replacement') });
     expect(replacementList.status).toBe(200);
     expect(replacementList.body.items).toEqual(expect.arrayContaining([expect.objectContaining({ customerId: registered.customerId })]));
