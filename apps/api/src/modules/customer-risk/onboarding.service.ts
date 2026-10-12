@@ -35,8 +35,19 @@ export class OnboardingService {
     const window = Math.floor(this.options.clock.now().getTime() / 60_000);
     const used = this.lookups.get(actor.actorId);
     const count = used?.window === window ? used.count + 1 : 1;
-    if (count > 30) throw new ApiError(429, 'RATE_LIMITED', 'Too many lookups; retry later');
+    if (count > (this.options.lookupRateLimitPerMinute ?? 30)) throw new ApiError(429, 'RATE_LIMITED', 'Too many lookups; retry later');
     this.lookups.set(actor.actorId, { window, count });
+  }
+
+  private readonly invites = new Map<string, { window: number; count: number }>();
+
+  /** Fixed one-minute window per RM on the injected clock; default 10 invitations, process-local. */
+  private limitInvite(actor: Actor): void {
+    const window = Math.floor(this.options.clock.now().getTime() / 60_000);
+    const used = this.invites.get(actor.actorId);
+    const count = used?.window === window ? used.count + 1 : 1;
+    if (count > (this.options.inviteRateLimitPerMinute ?? 10)) throw new ApiError(429, 'RATE_LIMITED', 'Too many invitations; retry later');
+    this.invites.set(actor.actorId, { window, count });
   }
 
   async lookup(actor: Actor, reference: string) {
@@ -59,6 +70,7 @@ export class OnboardingService {
     const payload = { cifRef: body.cifRef, selectedAccountId: body.selectedAccountId };
     const replay = await idempotencyReplay(this.database.manager, actor.actorId, 'ONBOARDING_REQUEST', body.cifRef, key, payload);
     if (replay) return replay.response;
+    this.limitInvite(actor);
     // Core is an external boundary: no transaction or application lock is open while awaiting it.
     const customer = await this.core(body.cifRef);
     const now = this.options.clock.now();

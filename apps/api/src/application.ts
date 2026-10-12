@@ -29,6 +29,10 @@ export interface ApplicationOptions {
   jwtSecret: string;
   clock: { now(): Date };
   logger: LoggerService;
+  /** Per-actor lookups allowed per minute (default 30). */
+  lookupRateLimitPerMinute?: number;
+  /** Per-RM onboarding invitations allowed per minute (default 10). */
+  inviteRateLimitPerMinute?: number;
   coreBanking?: CoreBanking;
   otpDelivery?: (delivery: OtpDelivery) => void | Promise<void>;
 }
