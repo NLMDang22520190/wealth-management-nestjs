@@ -8,6 +8,10 @@ import { AuthModule } from './auth/auth.module.js';
 import { BusinessRoutesModule } from './business/business-routes.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { MockActors1791763200000 } from './database/migrations/1791763200000-mock-actors.js';
+import { Onboarding1791763200001 } from './database/migrations/1791763200001-onboarding.js';
+import { CustomerRiskModule } from './modules/customer-risk/onboarding.module.js';
+import type { CoreBanking } from './modules/customer-risk/onboarding.domain.js';
+import type { OtpDelivery } from './platform/otp.service.js';
 import { validateConfiguration } from './platform/configuration.js';
 import { ApiErrorFilter, requestContext } from './platform/http.js';
 import { PlatformModule } from './platform/platform.module.js';
@@ -21,6 +25,8 @@ export interface ApplicationOptions {
   jwtSecret: string;
   clock: { now(): Date };
   logger: LoggerService;
+  coreBanking?: CoreBanking;
+  otpDelivery?: (delivery: OtpDelivery) => void | Promise<void>;
 }
 
 export interface Application {
@@ -35,7 +41,7 @@ export async function createApplication(options: ApplicationOptions): Promise<Ap
   validateConfiguration(options);
   const dataSource = new DataSource({
     type: 'postgres', url: options.databaseUrl, synchronize: false,
-    migrations: [MockActors1791763200000], migrationsTableName: 'migrations',
+    migrations: [MockActors1791763200000, Onboarding1791763200001], migrationsTableName: 'migrations',
     logging: false,
   });
   let app: INestApplication | undefined;
@@ -44,7 +50,7 @@ export async function createApplication(options: ApplicationOptions): Promise<Ap
     await dataSource.runMigrations({ transaction: 'all' });
     app = await NestFactory.create({
       module: ApplicationModule,
-      imports: [RuntimeModule.register(options), DatabaseModule.register(dataSource), AuthModule, PlatformModule, BusinessRoutesModule],
+      imports: [RuntimeModule.register(options), DatabaseModule.register(dataSource), AuthModule, PlatformModule, CustomerRiskModule, BusinessRoutesModule],
     }, { logger: options.logger });
     app.setGlobalPrefix('api/v1');
     app.use(requestContext);
