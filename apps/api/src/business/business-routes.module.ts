@@ -1,15 +1,15 @@
 import { Body, Controller, Get, HttpCode, Module, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../auth/guards.js';
-import { ApiError, auditContext } from '../platform/http.js';
+import { auditContext } from '../platform/http.js';
 import type { ApiRequest } from '../platform/http.js';
 import { CustomerRiskModule } from '../modules/customer-risk/onboarding.module.js';
 import { RiskConfirmBody, RiskDraftBody, riskPaging } from '../modules/customer-risk/risk.domain.js';
 import { RiskService } from '../modules/customer-risk/risk.service.js';
 import { RmAssignmentBody } from '../modules/customer-risk/rm-assignment.domain.js';
 import { RmAssignmentService } from '../modules/customer-risk/rm-assignment.service.js';
-
-function pendingSlice(): never { throw new ApiError(501, 'NOT_IMPLEMENTED', 'This operation is not implemented yet'); }
+import { parseCustomerListQuery } from '../modules/customer-risk/rm-customers.domain.js';
+import { RmCustomersService } from '../modules/customer-risk/rm-customers.service.js';
 
 /** Public route signatures; remaining business implementations arrive in later slices. */
 @ApiBearerAuth('bearer')
@@ -59,7 +59,7 @@ class RiskController {
 @ApiTags('Relationship managers')
 @Controller()
 class RmController {
-  constructor(private readonly assignments: RmAssignmentService) {}
+  constructor(private readonly assignments: RmAssignmentService, private readonly customers: RmCustomersService) {}
   @Roles('LEADER') @Get('team/rms')
   team(@Req() request: ApiRequest) { return this.assignments.team(request.actor!); }
   @Roles('LEADER') @Post('customers/:id/rm-assignment') @HttpCode(200)
@@ -69,9 +69,15 @@ class RmController {
     return this.assignments.assign(request.actor!, id, body, typeof key === 'string' ? key : undefined, auditContext(request));
   }
   @Roles('RM') @Get('rm/customers')
-  list() { return pendingSlice(); }
+  @ApiOperation({ summary: 'List customers currently assigned to the authenticated RM; scope is never taken from the query' })
+  list(@Req() request: ApiRequest, @Query() query: Record<string, unknown>) {
+    return this.customers.list(request.actor!, parseCustomerListQuery(query));
+  }
   @Roles('RM', 'LEADER', 'CUSTOMER') @Get('customers/:id')
-  detail(@Param('id') _id: string) { return pendingSlice(); }
+  @ApiOperation({ summary: 'Customer summary for the current RM, the current RM team leader, or the customer themself' })
+  detail(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string) {
+    return this.customers.detail(request.actor!, id);
+  }
 }
 
 @Module({ imports: [CustomerRiskModule], controllers: [RiskController, RmController] })

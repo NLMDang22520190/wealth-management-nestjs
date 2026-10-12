@@ -36,6 +36,8 @@ export function eligibleAccounts(customer: CoreCustomer) {
 export function isEligible(customer: CoreCustomer, now: Date): boolean {
   const birth = /^(\d{4})-(\d{2})-(\d{2})$/.exec(customer.dateOfBirth);
   if (!birth) return false;
+  const calendar = new Date(Date.UTC(Number(birth[1]), Number(birth[2]) - 1, Number(birth[3])));
+  if (calendar.getUTCFullYear() !== Number(birth[1]) || calendar.getUTCMonth() !== Number(birth[2]) - 1 || calendar.getUTCDate() !== Number(birth[3])) return false;
   const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
   const year = parts.find(part => part.type === 'year')!.value;
   const month = parts.find(part => part.type === 'month')!.value;

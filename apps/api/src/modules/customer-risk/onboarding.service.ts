@@ -9,6 +9,7 @@ import type { AuditContext } from '../../platform/http.js';
 import { OtpService } from '../../platform/otp.service.js';
 import { RUNTIME_OPTIONS } from '../../platform/runtime.module.js';
 import { appendAudit, appendSuccess, idempotencyReplay, idempotent, lockCustomer } from '../../platform/transactions.js';
+import { CustomerAccess } from './customer-access.service.js';
 import { AccountBootstrap } from '../accounts-ledger/account-bootstrap.js';
 import { consentPayloadHash, eligibleAccounts, isEligible, ownRequest, requireUnexpired, requestProjection } from './onboarding.domain.js';
 import type { CoreCustomer, ConsentBody, OnboardingRequest, OnboardingRequestBody } from './onboarding.domain.js';
@@ -16,7 +17,7 @@ import type { CoreCustomer, ConsentBody, OnboardingRequest, OnboardingRequestBod
 @Injectable()
 export class OnboardingService {
   constructor(private readonly database: DataSource, private readonly otp: OtpService,
-    private readonly accounts: AccountBootstrap, @Inject(RUNTIME_OPTIONS) private readonly options: ApplicationOptions) {}
+    private readonly accounts: AccountBootstrap, private readonly access: CustomerAccess, @Inject(RUNTIME_OPTIONS) private readonly options: ApplicationOptions) {}
 
   private async core(reference: string): Promise<CoreCustomer> {
     if (!this.options.coreBanking) throw new ApiError(503, 'CORE_UNAVAILABLE', 'Core banking unavailable');
@@ -27,8 +28,23 @@ export class OnboardingService {
     return customer;
   }
 
-  async lookup(reference: string) {
+  private readonly lookups = new Map<string, { window: number; count: number }>();
+
+  /** Fixed one-minute window per trusted actor on the injected clock; demo default of 30 lookups, process-local. */
+  private limitLookup(actor: Actor): void {
+    const window = Math.floor(this.options.clock.now().getTime() / 60_000);
+    const used = this.lookups.get(actor.actorId);
+    const count = used?.window === window ? used.count + 1 : 1;
+    if (count > 30) throw new ApiError(429, 'RATE_LIMITED', 'Too many lookups; retry later');
+    this.lookups.set(actor.actorId, { window, count });
+  }
+
+  async lookup(actor: Actor, reference: string) {
+    this.limitLookup(actor);
     const customer = await this.core(reference);
+    // A registered customer's PII is only visible to the current assignee; unregistered prospects stay open to any RM.
+    const [registered] = await this.database.query('SELECT id FROM customers WHERE cif_id=$1', [customer.cifId]);
+    if (registered) await this.access.authorize(actor, registered.id, this.database.manager);
     return { cifRef: customer.cifId, name: customer.name, dateOfBirth: customer.dateOfBirth, active: customer.active,
       eligible: isEligible(customer, this.options.clock.now()), accounts: eligibleAccounts(customer) };
   }

@@ -15,6 +15,7 @@ import { RiskService } from './risk.service.js';
 import { RiskHoldingsRead } from '../portfolio-valuation/risk-holdings-read.js';
 import { ProposalCancellationModule } from '../advisory-trading/proposal-cancellation.js';
 import { RmAssignmentService } from './rm-assignment.service.js';
+import { RmCustomersService } from './rm-customers.service.js';
 
 class RegistrationResult {
   @ApiProperty({ format: 'uuid' }) requestId!: string;
@@ -58,8 +59,9 @@ class OnboardingController {
 
   @Roles('RM') @Post('onboarding/customer-lookup') @HttpCode(200)
   @ApiOperation({ summary: 'Resolve eligibility and active own VND accounts from Core banking' })
+  @ApiResponse({ status: 429, description: 'RATE_LIMITED: 30 lookups per actor per minute (demo default)' })
   @ApiResponse({ status: 200, description: 'Canonical cifRef, name, dateOfBirth, active, eligible and eligible accounts (external string account IDs)' }) @errors()
-  lookup(@Body() body: CustomerLookupBody) { return this.onboarding.lookup(body.cifRef); }
+  lookup(@Req() request: ApiRequest, @Body() body: CustomerLookupBody) { return this.onboarding.lookup(request.actor!, body.cifRef); }
 
   @Roles('RM') @Post('onboarding/requests')
   @ApiOperation({ summary: 'Reserve RM capacity for 72 hours and snapshot server-owned terms' })
@@ -118,6 +120,6 @@ class OtpController {
 }
 
 @Module({ imports: [AuthModule, AccountsLedgerModule, ProposalCancellationModule], controllers: [OnboardingController, OtpController],
-  providers: [OnboardingService, OtpService, RiskService, CustomerAccess, RiskHoldingsRead, RmAssignmentService],
-  exports: [RiskService, CustomerAccess, RmAssignmentService] })
+  providers: [OnboardingService, OtpService, RiskService, CustomerAccess, RiskHoldingsRead, RmAssignmentService, RmCustomersService],
+  exports: [RiskService, CustomerAccess, RmAssignmentService, RmCustomersService] })
 export class CustomerRiskModule {}
