@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiHeader, ApiOperation, ApiProperty, ApiResponse, ApiTa
 import { AuthModule } from '../../auth/auth.module.js';
 import { AuthService } from '../../auth/auth.service.js';
 import { Public, Roles } from '../../auth/guards.js';
-import { ApiError } from '../../platform/http.js';
+import { ApiError, auditContext } from '../../platform/http.js';
 import type { ApiRequest } from '../../platform/http.js';
 import { OtpService } from '../../platform/otp.service.js';
 import { OtpChallengeBody } from '../../platform/validation.js';
@@ -53,7 +53,7 @@ class OnboardingController {
 
   @Roles('RM') @Post('onboarding/customer-lookup') @HttpCode(200)
   @ApiOperation({ summary: 'Resolve eligibility and active own VND accounts from Core banking' })
-  @ApiResponse({ status: 200, description: 'cifRef, name, eligible and eligible accounts (external string account IDs)' }) @errors()
+  @ApiResponse({ status: 200, description: 'Canonical cifRef, name, dateOfBirth, active, eligible and eligible accounts (external string account IDs)' }) @errors()
   lookup(@Body() body: CustomerLookupBody) { return this.onboarding.lookup(body.cifRef); }
 
   @Roles('RM') @Post('onboarding/requests')
@@ -61,8 +61,13 @@ class OnboardingController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiResponse({ status: 201, type: PendingRequestResult }) @errors()
   create(@Req() request: ApiRequest, @Body() body: OnboardingRequestBody) {
-    return this.onboarding.create(request.actor!, body, key(request));
+    return this.onboarding.create(request.actor!, body, key(request), auditContext(request));
   }
+
+  @Roles('CUSTOMER') @Get('me/onboarding-requests')
+  @ApiOperation({ summary: 'List own invitations, projecting expired requests at their deadline' })
+  @ApiResponse({ status: 200, description: 'items of own requests with effective status, expiresAt and termsVersion' }) @errors()
+  invitations(@Req() request: ApiRequest) { return this.onboarding.invitations(request.actor!); }
 
   @Roles('CUSTOMER') @Get('me/onboarding-requests/:id')
   @ApiOperation({ summary: 'Read own request and its immutable terms' })
@@ -76,7 +81,7 @@ class OnboardingController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiResponse({ status: 200, type: RegistrationResult }) @errors()
   confirm(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string, @Body() body: ConsentBody) {
-    return this.onboarding.confirm(request.actor!, id, body, key(request));
+    return this.onboarding.confirm(request.actor!, id, body, key(request), auditContext(request));
   }
 }
 
@@ -90,7 +95,7 @@ class OtpController {
   @ApiOperation({ summary: 'Deliver an OTP bound to own consent operation, without returning its code' })
   @ApiResponse({ status: 201, type: OtpChallengeResult }) @errors()
   challenge(@Req() request: ApiRequest, @Body() body: OtpChallengeBody) {
-    return this.onboarding.challenge(request.actor!, body.purpose, body.operationId);
+    return this.onboarding.challenge(request.actor!, body.purpose, body.operationId, auditContext(request));
   }
 
   // Public metadata permits the feature check to run before authentication; this method still authenticates enabled inbox access.

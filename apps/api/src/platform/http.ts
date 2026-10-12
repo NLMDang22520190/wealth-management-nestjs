@@ -6,7 +6,17 @@ import type { Actor } from '../auth/actor.js';
 export interface ApiRequest {
   headers: Record<string, string | string[] | undefined>;
   requestId: string;
+  ip?: string;
+  socket?: { remoteAddress?: string };
   actor?: Actor;
+}
+export interface AuditContext { requestId: string; ip: string; device: string; }
+
+export function auditContext(request: ApiRequest): AuditContext {
+  const device = request.headers['user-agent'];
+  return { requestId: request.requestId,
+    ip: (request.ip ?? request.socket?.remoteAddress ?? '').replace(/^::ffff:/, ''),
+    device: typeof device === 'string' ? device.slice(0, 512) : '' };
 }
 interface ApiResponse {
   setHeader(name: string, value: string): void;
@@ -15,7 +25,8 @@ interface ApiResponse {
 }
 
 export function requestContext(request: ApiRequest, response: ApiResponse, next: () => void): void {
-  request.requestId = randomUUID();
+  const supplied = request.headers['x-request-id'];
+  request.requestId = typeof supplied === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(supplied) ? supplied : randomUUID();
   response.setHeader('x-request-id', request.requestId);
   next();
 }

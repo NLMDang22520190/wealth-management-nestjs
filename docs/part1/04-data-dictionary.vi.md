@@ -22,7 +22,7 @@ Cơ sở dữ liệu: PostgreSQL. Schema được quản lý bằng migration; �
 |---|---|---|
 | `otp_challenges` | actor_id, purpose, operation_id, payload_hash, code_hash, salt, expires_at, consumed_at, receipt_ref | OTP một lần gắn chủ thể, mục đích và payload; chỉ lưu salted hash. Receipt khác mã xác nhận |
 | `idempotency_records` | scope + key (PK), payload_hash, response, created_at | Scope gồm actor, mục đích, resource. Cùng key/payload trả lại kết quả; payload khác bị conflict |
-| `audit_events` | id, action, outcome, actor_id, resource_id, payload, created_at | Nhật ký append-only cùng transaction thành công. Metadata truy vết và before/after được hoàn thiện trong lát UC01 tiếp theo |
+| `audit_events` | id, action, outcome, actor_id, resource_id, payload, metadata, created_at | Nhật ký append-only cùng transaction thành công. Metadata gồm requestId, IP, User-Agent và before/after đã lọc; có audit cho tạo lời mời, tạo OTP và hoàn tất consent |
 | `outbox_events` | id, event_type, aggregate_id, payload, created_at, published_at | Sự kiện được ghi cùng transaction; publish sau commit. Chưa tuyên bố có hệ thống delivery phân tán |
 
 Khóa tư vấn PostgreSQL có phạm vi transaction: khóa RM theo thứ tự rồi khóa CIF. Các module phải dùng chung quy tắc để tránh vượt capacity và để phân công/duyệt đề xuất có thứ tự nhất quán. Không giữ transaction chờ gọi mạng Core hoặc gửi OTP.
@@ -30,3 +30,4 @@ Khóa tư vấn PostgreSQL có phạm vi transaction: khóa RM theo thứ tự r
 ## Dữ liệu công khai
 
 Seed và ảnh demo phải là dữ liệu tổng hợp. Không đưa CIF thật, giấy tờ, tài khoản ngân hàng, CV, access token, OTP, `.env` hay log riêng vào repo public. Các adapter Core/IAM/OTP là mô phỏng phục vụ đồ án; tích hợp ngân hàng thật cần adapter và kiểm định riêng.
+

@@ -5,9 +5,10 @@ import type { EntityManager } from 'typeorm';
 import type { ApplicationOptions } from '../../application.js';
 import type { Actor } from '../../auth/actor.js';
 import { ApiError } from '../../platform/http.js';
+import type { AuditContext } from '../../platform/http.js';
 import { OtpService } from '../../platform/otp.service.js';
 import { RUNTIME_OPTIONS } from '../../platform/runtime.module.js';
-import { appendSuccess, idempotent, lockCustomer } from '../../platform/transactions.js';
+import { appendAudit, appendSuccess, idempotencyReplay, idempotent, lockCustomer } from '../../platform/transactions.js';
 import { AccountBootstrap } from '../accounts-ledger/account-bootstrap.js';
 import { consentPayloadHash, eligibleAccounts, isEligible, ownRequest, requireUnexpired, requestProjection } from './onboarding.domain.js';
 import type { CoreCustomer, ConsentBody, OnboardingRequest, OnboardingRequestBody } from './onboarding.domain.js';
@@ -22,49 +23,57 @@ export class OnboardingService {
     let customer: CoreCustomer | null;
     try { customer = await this.options.coreBanking.lookup(reference); }
     catch { throw new ApiError(503, 'CORE_UNAVAILABLE', 'Core banking unavailable'); }
-    if (!customer || customer.cifId !== reference) throw new ApiError(404, 'CUSTOMER_NOT_FOUND', 'Customer not found');
+    if (!customer) throw new ApiError(404, 'CUSTOMER_NOT_FOUND', 'Customer not found');
     return customer;
   }
 
   async lookup(reference: string) {
     const customer = await this.core(reference);
-    return { cifRef: customer.cifId, name: customer.name, eligible: isEligible(customer, this.options.clock.now()), accounts: eligibleAccounts(customer) };
+    return { cifRef: customer.cifId, name: customer.name, dateOfBirth: customer.dateOfBirth, active: customer.active,
+      eligible: isEligible(customer, this.options.clock.now()), accounts: eligibleAccounts(customer) };
   }
 
-  private async eligible(reference: string, selectedAccount: string) {
-    const customer = await this.core(reference);
-    if (!isEligible(customer, this.options.clock.now())) throw new ApiError(422, 'CUSTOMER_INELIGIBLE', 'Customer is ineligible');
+  private requireEligible(customer: CoreCustomer, selectedAccount: string, now: Date): void {
+    if (!isEligible(customer, now)) throw new ApiError(422, 'CUSTOMER_INELIGIBLE', 'Customer is ineligible');
     if (!eligibleAccounts(customer).some(account => account.id === selectedAccount)) throw new ApiError(422, 'ACCOUNT_INELIGIBLE', 'Selected account is ineligible');
-    return customer;
   }
 
-  async create(actor: Actor, body: OnboardingRequestBody, key: string | undefined) {
+  async create(actor: Actor, body: OnboardingRequestBody, key: string | undefined, context: AuditContext) {
+    if (!actor.rmId || !actor.teamId) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
+    const payload = { cifRef: body.cifRef, selectedAccountId: body.selectedAccountId };
+    const replay = await idempotencyReplay(this.database.manager, actor.actorId, 'ONBOARDING_REQUEST', body.cifRef, key, payload);
+    if (replay) return replay.response;
+    // Core is an external boundary: no transaction or application lock is open while awaiting it.
+    const customer = await this.core(body.cifRef);
     const now = this.options.clock.now();
     return this.database.transaction(manager => idempotent(manager, actor.actorId, 'ONBOARDING_REQUEST', body.cifRef,
-      key, { cifRef: body.cifRef, selectedAccountId: body.selectedAccountId }, now, async () => {
-        if (!actor.rmId || !actor.teamId) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
-        await lockCustomer(manager, body.cifRef, [actor.rmId]);
-        const [registered] = await manager.query('SELECT id FROM customers WHERE cif_id=$1', [body.cifRef]);
+      key, payload, now, async () => {
+        await lockCustomer(manager, customer.cifId, [actor.rmId!]);
+        const now = this.options.clock.now();
+        this.requireEligible(customer, body.selectedAccountId, now);
+        const [registered] = await manager.query('SELECT id FROM customers WHERE cif_id=$1', [customer.cifId]);
         if (registered) throw new ApiError(409, 'SERVICE_EXISTS', 'Service already registered');
         // Normalize historical expired requests before the partial unique constraint is consulted.
         await manager.query(`UPDATE rm_capacity_reservations SET status='EXPIRED'
           WHERE status='ACTIVE' AND onboarding_request_id IN
-          (SELECT id FROM onboarding_requests WHERE cif_id=$1 AND status='PENDING_CONSENT' AND expires_at <= $2)`, [body.cifRef, now]);
-        await manager.query(`UPDATE onboarding_requests SET status='EXPIRED' WHERE cif_id=$1 AND status='PENDING_CONSENT' AND expires_at <= $2`, [body.cifRef, now]);
-        const [pending] = await manager.query("SELECT id FROM onboarding_requests WHERE cif_id=$1 AND status='PENDING_CONSENT'", [body.cifRef]);
+          (SELECT id FROM onboarding_requests WHERE cif_id=$1 AND status='PENDING_CONSENT' AND expires_at <= $2)`, [customer.cifId, now]);
+        await manager.query(`UPDATE onboarding_requests SET status='EXPIRED' WHERE cif_id=$1 AND status='PENDING_CONSENT' AND expires_at <= $2`, [customer.cifId, now]);
+        const [pending] = await manager.query("SELECT id FROM onboarding_requests WHERE cif_id=$1 AND status='PENDING_CONSENT'", [customer.cifId]);
         if (pending) throw new ApiError(409, 'ONBOARDING_EXISTS', 'A registration request is pending');
-        const customer = await this.eligible(body.cifRef, body.selectedAccountId);
-        await this.requireCapacity(manager, actor.rmId, now);
+        await this.requireCapacity(manager, actor.rmId!, now);
         const [terms] = await manager.query('SELECT version,content_hash FROM service_terms ORDER BY version DESC LIMIT 1');
         const id = randomUUID();
         const expiresAt = new Date(now.getTime() + 72 * 3_600_000);
         const [request] = await manager.query(`INSERT INTO onboarding_requests
           (id,cif_id,customer_name,selected_account_id,rm_id,team_id,status,terms_version,terms_hash,created_at,expires_at)
           VALUES($1,$2,$3,$4,$5,$6,'PENDING_CONSENT',$7,$8,$9,$10) RETURNING *`,
-          [id, body.cifRef, customer.name, body.selectedAccountId, actor.rmId, actor.teamId, terms.version, terms.content_hash, now, expiresAt]);
+          [id, customer.cifId, customer.name, body.selectedAccountId, actor.rmId, actor.teamId, terms.version, terms.content_hash, now, expiresAt]);
         await manager.query(`INSERT INTO rm_capacity_reservations(id,onboarding_request_id,rm_id,status,expires_at)
           VALUES($1,$2,$3,'ACTIVE',$4)`, [randomUUID(), id, actor.rmId, expiresAt]);
-        return requestProjection(request);
+        const result = requestProjection(request);
+        await appendAudit(manager, actor.actorId, id, 'ONBOARDING_REQUESTED', result, now,
+          { ...context, before: null, after: result });
+        return result;
       }));
   }
 
@@ -90,7 +99,15 @@ export class OnboardingService {
     return { ...requestProjection(request), terms: terms.content };
   }
 
-  async challenge(actor: Actor, purpose: string, operationId: string) {
+  async invitations(actor: Actor) {
+    if (actor.role !== 'CUSTOMER' || !actor.cifId) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
+    const requests: OnboardingRequest[] = await this.database.query('SELECT * FROM onboarding_requests WHERE cif_id=$1 ORDER BY created_at DESC,id', [actor.cifId]);
+    const now = this.options.clock.now();
+    return { items: requests.map(request => requestProjection({ ...request,
+      status: request.status === 'PENDING_CONSENT' && new Date(request.expires_at).getTime() <= now.getTime() ? 'EXPIRED' : request.status })) };
+  }
+
+  async challenge(actor: Actor, purpose: string, operationId: string, context: AuditContext) {
     const request = await this.request(this.database.manager, operationId);
     ownRequest(request, actor);
     if (purpose !== 'SERVICE_CONSENT') throw new ApiError(400, 'OTP_PURPOSE_MISMATCH', 'OTP purpose does not match this operation');
@@ -100,24 +117,34 @@ export class OnboardingService {
       ownRequest(current, actor);
       requireUnexpired(current, this.options.clock.now());
       if (current.status !== 'PENDING_CONSENT') throw new ApiError(409, 'SERVICE_EXISTS', 'Service already registered');
-      return this.otp.issue(manager, actor.actorId, purpose, operationId, consentPayloadHash(current));
+      const delivery = await this.otp.issue(manager, actor.actorId, purpose, operationId, consentPayloadHash(current));
+      const result = { challengeId: delivery.challengeId, purpose, operationId };
+      await appendAudit(manager, actor.actorId, delivery.challengeId, 'OTP_ISSUED', result, this.options.clock.now(),
+        { ...context, before: null, after: result });
+      return delivery;
     });
     await this.otp.deliver(delivery);
     return { challengeId: delivery.challengeId, expiresAt: delivery.expiresAt };
   }
 
-  async confirm(actor: Actor, id: string, body: ConsentBody, key: string | undefined) {
+  async confirm(actor: Actor, id: string, body: ConsentBody, key: string | undefined, context: AuditContext) {
     const request = await this.request(this.database.manager, id);
     ownRequest(request, actor);
+    const payload = { challengeId: body.challengeId, code: body.code };
+    const replay = await idempotencyReplay(this.database.manager, actor.actorId, 'SERVICE_CONSENT', id, key, payload);
+    if (replay) return replay.response;
+    const customer = await this.core(request.cif_id);
     const now = this.options.clock.now();
     return this.database.transaction(manager => idempotent(manager, actor.actorId, 'SERVICE_CONSENT', id, key,
-      { challengeId: body.challengeId, code: body.code }, now, async () => {
+      payload, now, async () => {
         await lockCustomer(manager, request.cif_id, [request.rm_id]);
         const current = await this.request(manager, id);
         ownRequest(current, actor);
+        const now = this.options.clock.now();
         requireUnexpired(current, now);
+        if (customer.cifId !== current.cif_id) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
         const receipt = await this.otp.consume(manager, body.challengeId, body.code, actor.actorId, 'SERVICE_CONSENT', id, consentPayloadHash(current));
-        const customer = await this.eligible(current.cif_id, current.selected_account_id);
+        this.requireEligible(customer, current.selected_account_id, now);
         const [reservation] = await manager.query("SELECT id FROM rm_capacity_reservations WHERE onboarding_request_id=$1 AND status='ACTIVE' AND expires_at > $2 FOR UPDATE", [id, now]);
         if (!reservation) throw new ApiError(409, 'ONBOARDING_EXISTS', 'Registration reservation unavailable');
         const customerId = randomUUID();
@@ -134,7 +161,9 @@ export class OnboardingService {
         await manager.query("UPDATE rm_capacity_reservations SET status='CONSUMED' WHERE onboarding_request_id=$1", [id]);
         await manager.query("UPDATE onboarding_requests SET status='CONFIRMED' WHERE id=$1", [id]);
         const result = { requestId: id, customerId, serviceId, accountId, status: 'PENDING_RISK_ASSESSMENT' };
-        await appendSuccess(manager, actor.actorId, customerId, 'SERVICE_REGISTERED', 'ServiceRegistered', result, now);
+        await appendSuccess(manager, actor.actorId, customerId, 'SERVICE_REGISTERED', 'ServiceRegistered', result, now,
+          { ...context, before: { requestId: id, status: 'PENDING_CONSENT' },
+            after: { requestId: id, status: result.status, serviceId } });
         return result;
       }));
   }

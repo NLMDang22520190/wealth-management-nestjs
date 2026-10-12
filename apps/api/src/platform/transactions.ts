@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { EntityManager } from 'typeorm';
 import { ApiError } from './http.js';
+import type { AuditContext } from './http.js';
 
 export const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
 
@@ -32,10 +33,27 @@ export async function idempotent<T>(manager: EntityManager, actorId: string, pur
   return response;
 }
 
+/** A committed replay needs no external dependency; locked idempotent() remains the write authority. */
+export async function idempotencyReplay<T>(manager: EntityManager, actorId: string, purpose: string, resource: string,
+  key: string | undefined, payload: unknown): Promise<{ response: T } | undefined> {
+  if (!key || key.length > 200) throw new ApiError(400, 'VALIDATION_ERROR', 'Idempotency-Key is required');
+  const [record] = await manager.query('SELECT payload_hash,response FROM idempotency_records WHERE scope=$1 AND key=$2',
+    [JSON.stringify([actorId, purpose, resource]), key]);
+  if (!record) return undefined;
+  if (record.payload_hash !== hash(JSON.stringify(payload))) throw new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'Key already binds a different request');
+  return { response: record.response as T };
+}
+
+export async function appendAudit(manager: EntityManager, actorId: string, resourceId: string,
+  action: string, payload: unknown, now: Date, metadata: AuditContext & { before: unknown; after: unknown }): Promise<void> {
+  await manager.query(`INSERT INTO audit_events(id,action,outcome,actor_id,resource_id,payload,created_at,metadata)
+    VALUES($1,$2,'SUCCESS',$3,$4,$5,$6,$7)`,
+    [randomUUID(), action, actorId, resourceId, JSON.stringify(payload), now, JSON.stringify(metadata)]);
+}
+
 export async function appendSuccess(manager: EntityManager, actorId: string, resourceId: string,
-  action: string, eventType: string, payload: unknown, now: Date): Promise<void> {
-  await manager.query(`INSERT INTO audit_events(id,action,outcome,actor_id,resource_id,payload,created_at)
-    VALUES($1,$2,'SUCCESS',$3,$4,$5,$6)`, [randomUUID(), action, actorId, resourceId, JSON.stringify(payload), now]);
+  action: string, eventType: string, payload: unknown, now: Date, metadata: AuditContext & { before: unknown; after: unknown }): Promise<void> {
+  await appendAudit(manager, actorId, resourceId, action, payload, now, metadata);
   await manager.query(`INSERT INTO outbox_events(id,event_type,aggregate_id,payload,created_at)
     VALUES($1,$2,$3,$4,$5)`, [randomUUID(), eventType, resourceId, JSON.stringify(payload), now]);
 }
