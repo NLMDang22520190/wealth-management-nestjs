@@ -11,6 +11,7 @@ import { MockActors1791763200000 } from './database/migrations/1791763200000-moc
 import { Onboarding1791763200001 } from './database/migrations/1791763200001-onboarding.js';
 import { AuditMetadata1791763200002 } from './database/migrations/1791763200002-audit-metadata.js';
 import { RiskProfiles1791763200003 } from './database/migrations/1791763200003-risk-profiles.js';
+import { QuestionnaireRetirement1791763200004 } from './database/migrations/1791763200004-questionnaire-retirement.js';
 import { CustomerRiskModule } from './modules/customer-risk/onboarding.module.js';
 import type { CoreBanking } from './modules/customer-risk/onboarding.domain.js';
 import type { OtpDelivery } from './platform/otp.service.js';
@@ -43,7 +44,8 @@ export async function createApplication(options: ApplicationOptions): Promise<Ap
   validateConfiguration(options);
   const dataSource = new DataSource({
     type: 'postgres', url: options.databaseUrl, synchronize: false,
-    migrations: [MockActors1791763200000, Onboarding1791763200001, AuditMetadata1791763200002, RiskProfiles1791763200003], migrationsTableName: 'migrations',
+    migrations: [MockActors1791763200000, Onboarding1791763200001, AuditMetadata1791763200002, RiskProfiles1791763200003,
+      QuestionnaireRetirement1791763200004], migrationsTableName: 'migrations',
     logging: false,
   });
   let app: INestApplication | undefined;

@@ -23,7 +23,7 @@ class RiskController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiOperation({ summary: 'Create a server-scored immutable preview, valid for 24 hours' })
   draft(@Req() request: ApiRequest, @Body() body: RiskDraftBody) {
-    return this.risk.draft(request.actor!, body, this.key(request));
+    return this.risk.draft(request.actor!, body, this.key(request), auditContext(request));
   }
   @Roles('CUSTOMER') @Post('me/risk-assessments/:id/confirm') @HttpCode(200)
   @ApiHeader({ name: 'Idempotency-Key', required: true })

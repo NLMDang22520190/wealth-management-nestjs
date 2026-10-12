@@ -31,7 +31,7 @@ export class RiskService {
       options: question.options.map(option => ({ id: option.id, text: option.text })) })) };
   }
 
-  async draft(actor: Actor, body: RiskDraftBody, key: string | undefined) {
+  async draft(actor: Actor, body: RiskDraftBody, key: string | undefined, context: AuditContext) {
     const customer = await this.access.own(actor);
     return this.database.transaction(manager => idempotent(manager, actor.actorId, 'RISK_ASSESSMENT_DRAFT', customer.id,
       key, body, this.options.clock.now(), async () => {
@@ -53,6 +53,10 @@ export class RiskService {
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`, [id, customer.id, body.questionnaireVersion,
           JSON.stringify(body.answers), result.score, result.category, result.maxProductRisk, JSON.stringify(result.allocation),
           expectedVersion, payloadHash, now, expiresAt]);
+        const auditResult = { id, questionnaireVersion: draft.questionnaire_version,
+          expectedCurrentProfileVersion: expectedVersion, score: draft.score, category: draft.category };
+        await appendAudit(manager, actor.actorId, id, 'RISK_DRAFT_CREATED', auditResult, now,
+          { ...context, before: null, after: auditResult });
         return draftProjection(draft);
       }));
   }
