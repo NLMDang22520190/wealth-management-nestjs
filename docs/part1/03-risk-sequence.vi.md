@@ -20,7 +20,7 @@ sequenceDiagram
     DB-->>API: Draft được lưu
     API-->>UI: Điểm, nhóm risk, tỷ trọng dự kiến
     Note over UI,DB: Preview chưa thay đổi hồ sơ hiện hành
-    UI->>API: POST /otp/challenges (RISK_ASSESSMENT_CONFIRM)
+    UI->>API: POST /otp/challenges (RISK_PROFILE_CONFIRM)
     API->>DB: Lưu challenge gắn actor + draft + hash
     API->>OTP: Gửi mã sau khi transaction đã kết thúc
     OTP-->>C: Mã OTP demo
@@ -52,4 +52,5 @@ Hồ sơ có thời hạn 12 tháng lịch; ngày cuối tháng được điều
 ## Ranh giới tích hợp
 
 OTP và Core trong repo là adapter demo, không phải kết nối ngân hàng thật. Phần 3 cung cấp dữ liệu holdings và cảnh báo để Phần 1 đọc; thuật toán định giá đầy đủ thuộc người phụ trách Phần 3. Audit chỉ lưu metadata và before/after đã lọc, không lưu mã OTP hay access token.
+
 
