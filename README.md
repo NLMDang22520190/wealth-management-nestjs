@@ -39,20 +39,20 @@ Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một �
 
 | RM tra cứu và tạo lời mời (UC01) | Kết quả khảo sát dự kiến (UC02) |
 |---|---|
-| <img src="docs/assets/screenshots/uc01-onboarding-desktop.png" alt="RM tra cứu CIF và chọn tài khoản VND" /> | <img src="docs/assets/screenshots/uc02-risk-desktop.png" alt="Kết quả khảo sát rủi ro dự kiến với phân bổ tài sản" /> |
+| <img src="docs/assets/ui/uc01-onboarding-desktop.png" alt="RM tra cứu CIF và chọn tài khoản VND" /> | <img src="docs/assets/ui/uc02-risk-desktop.png" alt="Kết quả khảo sát rủi ro dự kiến với phân bổ tài sản" /> |
 | **Trưởng nhóm chuyển RM (UC03)** | **Danh sách khách của RM (UC04)** |
-| <img src="docs/assets/screenshots/uc03-assignment-desktop.png" alt="Trưởng nhóm xem tải RM và chọn khách để chuyển" /> | <img src="docs/assets/screenshots/uc04-list-desktop.png" alt="Danh sách khách phụ trách với AUM và cảnh báo drift" /> |
+| <img src="docs/assets/ui/uc03-assignment-desktop.png" alt="Trưởng nhóm xem tải RM và chọn khách để chuyển" /> | <img src="docs/assets/ui/uc04-list-desktop.png" alt="Danh sách khách phụ trách với AUM và cảnh báo drift" /> |
 
 <details>
 <summary>Chi tiết khách hàng và giao diện mobile (375px)</summary>
 
 <p>
-<img src="docs/assets/screenshots/uc04-detail-desktop.png" alt="Chi tiết khách hàng với AUM, thời điểm và nguồn dữ liệu" width="640" />
+<img src="docs/assets/ui/uc04-detail-desktop.png" alt="Chi tiết khách hàng với AUM, thời điểm và nguồn dữ liệu" width="640" />
 </p>
 <p>
-<img src="docs/assets/screenshots/uc04-list-mobile.png" alt="Danh sách khách dạng thẻ trên mobile" width="240" />
-<img src="docs/assets/screenshots/uc02-risk-mobile.png" alt="Kết quả khảo sát trên mobile" width="240" />
-<img src="docs/assets/screenshots/uc03-assignment-mobile.png" alt="Phân công RM trên mobile" width="240" />
+<img src="docs/assets/ui/uc04-list-mobile.png" alt="Danh sách khách dạng thẻ trên mobile" width="240" />
+<img src="docs/assets/ui/uc02-risk-mobile.png" alt="Kết quả khảo sát trên mobile" width="240" />
+<img src="docs/assets/ui/uc03-assignment-mobile.png" alt="Phân công RM trên mobile" width="240" />
 </p>
 </details>
 
