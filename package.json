@@ -3,17 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": ["apps/api"],
-  "engines": { "node": "24.20.0" },
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "engines": {
+    "node": "24.20.0"
+  },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "start:api": "npm run build --workspace @wms/api && node --env-file-if-exists=.env apps/api/dist/main.js",
     "seed:demo": "npm run build --workspace @wms/api && node --env-file-if-exists=.env scripts/seed-demo.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "oxlint apps/api/src",
-    "test:api": "npm run build --workspace @wms/api && vitest run"
+    "lint": "oxlint apps/api/src apps/web/src",
+    "test:api": "npm run build --workspace @wms/api && vitest run",
+    "dev:web": "npm run dev --workspace @wms/web",
+    "build:web": "npm run build --workspace @wms/web"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "24.19.2",
     "@types/pg": "8.23.1",
     "embedded-postgres": "15.18.0-beta.17",
