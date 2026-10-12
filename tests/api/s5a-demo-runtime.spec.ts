@@ -174,9 +174,10 @@ describe('S5a AC01/AC07 real CLI synthetic demo runtime', () => {
       aud: 'wealth-management-api', iat: seconds, exp: seconds + 300 })).toString('base64url');
     const input = `${header}.${payload}`;
     const token = `${input}.${createHmac('sha256', runtimeSecret).update(input).digest('base64url')}`;
-    const unavailable = await request('/onboarding/customer-lookup', { token, body: { cifRef: actors.customer.cifId } });
-    expect(unavailable.status).toBe(503);
-    expect(unavailable.body.code).toBe('CORE_UNAVAILABLE');
+    // DECISION: auth-before-core -> 401 (user, 2026-10-12): with mocks disabled the mock-issuer token is rejected by auth, never reaching Core.
+    const rejected = await request('/onboarding/customer-lookup', { token, body: { cifRef: actors.customer.cifId } });
+    expect(rejected.status).toBe(401);
+    expect(rejected.body.code).toBe('UNAUTHORIZED');
   }, 60_000);
 
   test('AC01 Node24 env-file boots the actual CLI and malformed config exits with sanitized public errors', async () => {
