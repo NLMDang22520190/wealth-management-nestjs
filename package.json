@@ -1,0 +1,22 @@
+{
+  "name": "wealth-management",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/api"],
+  "engines": { "node": "24.20.0" },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "oxlint apps/api/src",
+    "test:api": "npm run build --workspace @wms/api && vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "embedded-postgres": "15.18.0-beta.17",
+    "oxlint": "1.87.0",
+    "typescript": "6.0.3",
+    "vitest": "5.0.3"
+  }
+}
