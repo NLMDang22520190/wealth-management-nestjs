@@ -2,7 +2,7 @@
 
 Ngày lập: 12/10/2026. Thời gian dự kiến: 6 tuần. Người đọc chính: người dựng source chung và phụ trách phân hệ Khách hàng & Hồ sơ rủi ro.
 
-**Trạng thái: kế hoạch để duyệt, chưa triển khai source.** Các tên bảng, API, thư mục, công cụ và thời lượng dưới đây là thiết kế đề xuất, không phải mô tả hệ thống đã chạy. Không có kết quả test ứng dụng trong tài liệu này.
+**Trạng thái: kế hoạch đã duyệt ngày 12/10/2026; Phần 1 đã được triển khai trong repo này.** Tài liệu giữ nguyên nội dung kế hoạch ban đầu. Tên bảng, API và quyết định thực tế có thể khác chi tiết; mô tả hệ thống đang chạy, lệnh chạy và kết quả kiểm tra xem tại [README](../../README.md).
 
 ## 1. Kết quả cần đạt và các lựa chọn đã chốt
 
