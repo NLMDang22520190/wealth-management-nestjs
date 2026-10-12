@@ -4,7 +4,7 @@ Baseline: mô hìnhA trong [kế hoạch đã duyệt](../planning/implementatio
 
 ## Tác nhân và tiền điều kiện chung
 
-Customer, RM, RM_LEADER, Back-office là vai trò từ IAM giả lập đã xác thực; client không tự cấp role/CIF/team. Core Banking mock cung cấp CIF, KYC, trạng thái và tài khoản thanh toán. OTP mock cung cấp challenge/receipt được gắn với tác nhân, thao tác và nội dung bất biến. Mọi mutation có audit; truy cập sai quyền bị từ chối và ghi nhận phù hợp.
+Customer, RM và LEADER (trưởng nhóm) là vai trò của IAM demo hiện tại; Back-office thuộc các phân hệ tiếp theo. Actor lấy từ IAM đã xác thực; client không tự cấp role/CIF/team. Core Banking mock cung cấp CIF, KYC, trạng thái và tài khoản thanh toán. OTP mock cung cấp challenge/receipt được gắn với tác nhân, thao tác và nội dung bất biến. Mọi mutation có audit; truy cập sai quyền bị từ chối và ghi nhận phù hợp.
 
 ## UC01 — Đăng ký dịch vụ
 
@@ -40,7 +40,7 @@ Luồng: lấy questionnaire version → trả lời10 câu duy nhất → serve
 |21–35|BALANCED|3|5 /30 /30 /35 %|
 |36–50|GROWTH|5|5 /15 /20 /60 %|
 
-Mỗi câu có5 mức điểm1–5. Server tra điểm từ option của questionnaire đã version, không tin category/score/maxRisk client gửi. Draft được khóa nội dung khi tạo challenge; sửa câu trả lời làm challenge cũ không còn dùng được. Hai draft dựa trên cùng profile version không được ghi đè nhau âm thầm.
+Mỗi câu có5 mức điểm1–5. Server tra điểm từ option của questionnaire đã version, không tin category/score/maxRisk client gửi. Draft có nội dung bất biến. Sửa câu trả lời tạo draft mới; challenge của draft cũ không thể xác nhận nội dung đã sửa. Hai draft dựa trên cùng profile version không được ghi đè nhau âm thầm.
 
 Hồ sơ có hiệu lực12 tháng lịch từ confirmation; mốc hết hạn loại trừ (now>=expiresAt là expired). Policy ngày cuối tháng/năm nhuận bám quyết định trong plan. Khi giảm risk: giữ nguyên holdings, thông báo RM các holdings vượt mức mới và kích hoạt đánh giá drift qua outbox; không tự bán hoặc sửa ledger.
 
@@ -50,7 +50,7 @@ BR:01 audit,04 expiry,05 scoring; consumerP4 dùng risk snapshot/version/validAt
 
 | Thuộc tính | Nội dung |
 |---|---|
-| Tác nhân | RM_LEADER trong đúng phạm vi nhóm |
+| Tác nhân | LEADER (trưởng nhóm) trong đúng phạm vi nhóm |
 | Tiền điều kiện | Service hoạt động; targetRM active và trong nhóm; request có expected assignment version |
 | Thành công | Đúng1 assignment hiện hành; history preserved; oldRM mất quyền; pending proposal cũ bị hủy nguyên tử |
 | Thất bại | Assignment/proposal giữ nguyên nếu capacity, quyền hoặc cancellation thất bại |
@@ -133,3 +133,4 @@ flowchart LR
     IAM[IAM OTP mock] -. Xác thực .-> P1
     IAM -. OTP .-> U15
 ```
+
