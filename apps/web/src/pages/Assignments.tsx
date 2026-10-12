@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api, describe, intentDone, intentKey } from '../api';
 import { riskLabel } from '../format';
@@ -11,15 +11,43 @@ interface Customer {
   currentRisk: { category: string } | null;
   pendingProposals: { count: number };
 }
-interface Transfer { rmId: string; version: number; changed: boolean; cancelledProposals: number }
+interface Transfer { rmId: string; version: number; changed: boolean; cancelledProposals?: number }
 interface TeamCustomers { items: Array<{ customerId: string; name: string }>; total: number }
 
+const ROSTER_PAGE_SIZE = 50;
 const fetchCustomer = (id: string) => api<Customer>(`/customers/${id}`);
 
 /** UC03 (leader): team capacity directory and a versioned, reasoned transfer of one customer. */
 export function Assignments() {
   const team = useLoad(signal => api<{ items: Rm[] }>('/team/rms', { signal }), []);
-  const roster = useLoad(signal => api<TeamCustomers>('/team/customers?page=1&pageSize=100', { signal }), []);
+  const [search, setSearch] = useState('');
+  const [term, setTerm] = useState('');
+  const [rosterPage, setRosterPage] = useState(1);
+  const [options, setOptions] = useState<TeamCustomers['items']>([]);
+  const [rosterTotal, setRosterTotal] = useState(0);
+  const [rosterBusy, setRosterBusy] = useState(false);
+  const [rosterError, setRosterError] = useState<unknown>(null);
+  const [rosterTick, setRosterTick] = useState(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => { setTerm(search.trim()); setRosterPage(1); }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const query = `page=${rosterPage}&pageSize=${ROSTER_PAGE_SIZE}${term ? `&name=${encodeURIComponent(term)}` : ''}`;
+    setRosterBusy(true); setRosterError(null);
+    api<TeamCustomers>(`/team/customers?${query}`, { signal: controller.signal }).then(
+      data => {
+        if (controller.signal.aborted) return;
+        setOptions(previous => rosterPage === 1 ? data.items : [...previous, ...data.items]);
+        setRosterTotal(data.total); setRosterBusy(false);
+      },
+      (error: unknown) => { if (!controller.signal.aborted) { setRosterError(error); setRosterBusy(false); } },
+    );
+    return () => controller.abort();
+  }, [term, rosterPage, rosterTick]);
   const [customerId, setCustomerId] = useState('');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [target, setTarget] = useState('');
@@ -62,8 +90,10 @@ export function Assignments() {
       intentDone(name);
       const refreshed = await fetchCustomer(customer.customerId);
       setCustomer(refreshed); setTarget(''); setReason(''); team.reload();
+      const cancelled = typeof result.cancelledProposals === 'number'
+        ? ` ${result.cancelledProposals} đề xuất đang chờ duyệt của khách đã bị hủy.` : '';
       setNotice(result.changed
-        ? `Đã chuyển khách hàng sang RM ${result.rmId}. ${result.cancelledProposals} đề xuất đang chờ duyệt của khách đã bị hủy.`
+        ? `Đã chuyển khách hàng sang RM ${result.rmId}.${cancelled}`
         : 'Khách hàng đã thuộc RM này, không có thay đổi.');
     } catch (error) {
       if (error instanceof ApiFailure && error.code === 'RM_ASSIGNMENT_STALE') setStale(true);
@@ -107,15 +137,23 @@ export function Assignments() {
 
       <form className="inline-form" onSubmit={event => void load(event)}>
         <div className="field">
+          <label htmlFor="customer-search">Tìm khách hàng</label>
+          <input id="customer-search" type="search" value={search} onChange={event => setSearch(event.target.value)} autoComplete="off" />
+        </div>
+        <div className="field">
           <label htmlFor="customer-id">Chọn khách hàng</label>
           <select id="customer-id" value={customerId} onChange={event => setCustomerId(event.target.value)}>
             <option value="">Chọn khách hàng</option>
-            {(roster.data?.items ?? []).map(item => <option key={item.customerId} value={item.customerId} label={item.name} aria-label={item.name} />)}
+            {options.map(item => <option key={item.customerId} value={item.customerId}>{item.name}</option>)}
           </select>
+          <p className="hint">Hiển thị {options.length}/{rosterTotal} khách hàng</p>
+          {options.length < rosterTotal ? (
+            <button type="button" className="secondary" onClick={() => setRosterPage(rosterPage + 1)} disabled={rosterBusy}>Tải thêm khách hàng</button>
+          ) : null}
         </div>
         <button type="submit" disabled={busy}>Tải thông tin khách hàng</button>
       </form>
-      {roster.error ? <ErrorAlert>{describe(roster.error)} <button type="button" className="link" onClick={roster.reload}>Thử lại</button></ErrorAlert> : null}
+      {rosterError ? <ErrorAlert>{describe(rosterError)} <button type="button" className="link" onClick={() => setRosterTick(value => value + 1)}>Thử lại</button></ErrorAlert> : null}
       {busy ? <Loading label="Đang xử lý…" /> : null}
       {message ? (
         <ErrorAlert>
