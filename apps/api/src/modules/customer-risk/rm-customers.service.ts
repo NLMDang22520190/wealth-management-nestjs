@@ -42,9 +42,6 @@ export class RmCustomersService {
 
   async list(actor: Actor, query: CustomerListQuery) {
     if (actor.role !== 'RM' || !actor.rmId) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
-    // An RM with no current assignment (for example after a transfer) has no customer access at all.
-    const [owned] = await this.database.query('SELECT 1 FROM rm_assignment_history WHERE rm_id=$1 AND valid_to IS NULL LIMIT 1', [actor.rmId]);
-    if (!owned) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
     const now = this.options.clock.now();
     const params: unknown[] = [actor.rmId];
     const filters: string[] = [];
