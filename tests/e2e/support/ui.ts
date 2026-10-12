@@ -35,3 +35,19 @@ export async function expectNoHorizontalOverflow(page: Page) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow, 'no horizontal page scroll at this viewport').toBeLessThanOrEqual(1);
 }
+
+/** S10 B13: OTP is six single-digit boxes in a group named `Mã OTP`, labelled `Chữ số 1` … `Chữ số 6`. */
+export function otpGroup(page: Page) { return page.getByRole('group', { name: 'Mã OTP' }); }
+export function otpBox(page: Page, position: number) { return otpGroup(page).getByLabel(`Chữ số ${position}`); }
+
+export async function expectOtpEmpty(page: Page) {
+  await expect(otpGroup(page)).toBeVisible();
+  for (let position = 1; position <= 6; position++) await expect(otpBox(page, position)).toHaveValue('');
+}
+
+/** Types a code like a user: focus box 1 and type; focus must advance by itself (no per-box clicking). Clears old digits first. */
+export async function typeOtp(page: Page, code: string) {
+  for (let position = 6; position >= 1; position--) await otpBox(page, position).fill('');
+  await otpBox(page, 1).click();
+  await page.keyboard.type(code);
+}

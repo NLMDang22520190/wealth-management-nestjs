@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, describe, intentDone, intentKey } from '../api';
 import { formatDateTime, riskLabel } from '../format';
 import type { Allocation } from '../ui';
-import { AllocationSummary, ErrorAlert, Loading, OtpInbox, PageTitle, Panel, useLoad } from '../ui';
+import { AllocationSummary, ErrorAlert, Loading, OtpCodeInput, OtpInbox, PageTitle, Panel, ResendCode, useLoad } from '../ui';
 
 interface Questionnaire { version: string; questions: Array<{ id: string; text: string; options: Array<{ id: string; text: string }> }> }
 interface Draft { id: string; score: number; category: string; maxProductRisk: number; allocation: Allocation; expiresAt: string; expectedCurrentProfileVersion: number }
@@ -20,6 +20,11 @@ export function RiskSurvey() {
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [step, setStep] = useState(0);
+  const questionHeading = useRef<HTMLParagraphElement>(null);
+  const stepMoved = useRef(false);
+  useEffect(() => { if (stepMoved.current) questionHeading.current?.focus(); }, [step]);
+  const goTo = (target: number) => { stepMoved.current = true; setStep(target); };
 
   const questions = questionnaire.data?.questions ?? [];
   const answered = questions.filter(question => answers[question.id]).length;
@@ -88,21 +93,32 @@ export function RiskSurvey() {
             </div>
             <span>{answered}/{questions.length} câu</span>
           </div>
-          {questions.map((question, index) => (
-            <div key={question.id} className="question">
-              <p id={`q-${question.id}`} className="question-text"><span className="question-number">Câu {index + 1}.</span> {question.text}</p>
-              <div role="radiogroup" aria-labelledby={`q-${question.id}`} className="options">
-                {question.options.map(option => (
-                  <label key={option.id} className="choice">
-                    <input type="radio" name={`q-${question.id}`} value={option.id}
-                      checked={answers[question.id] === option.id} onChange={() => choose(question.id, option.id)} />
-                    <span>{option.text}</span>
-                  </label>
-                ))}
+          {questions[step] ? (() => {
+            const question = questions[step]!;
+            const last = step === questions.length - 1;
+            const isAnswered = Boolean(answers[question.id]);
+            return (
+              <div key={question.id} className="question">
+                <p className="question-step">Câu {step + 1}/{questions.length}</p>
+                <p id={`q-${question.id}`} ref={questionHeading} tabIndex={-1} className="question-text">{question.text}</p>
+                <div role="radiogroup" aria-labelledby={`q-${question.id}`} className="options">
+                  {question.options.map(option => (
+                    <label key={option.id} className="choice">
+                      <input type="radio" name={`q-${question.id}`} value={option.id}
+                        checked={answers[question.id] === option.id} onChange={() => choose(question.id, option.id)} />
+                      <span>{option.text}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="wizard-nav">
+                  <button type="button" className="secondary" onClick={() => goTo(step - 1)} disabled={step === 0 || busy}>Câu trước</button>
+                  {last
+                    ? <button type="button" onClick={() => void preview()} disabled={!isAnswered || busy}>Xem kết quả dự kiến</button>
+                    : <button type="button" onClick={() => goTo(step + 1)} disabled={!isAnswered}>Câu tiếp</button>}
+                </div>
               </div>
-            </div>
-          ))}
-          <button type="button" onClick={() => void preview()} disabled={busy}>Xem kết quả dự kiến</button>
+            );
+          })() : null}
           {busy ? <Loading label="Đang xử lý…" /> : null}
           {failure ? <ErrorAlert>{failure}</ErrorAlert> : null}
           {draft ? (
@@ -115,13 +131,10 @@ export function RiskSurvey() {
               <button type="button" onClick={() => void sendOtp()} disabled={busy}>Gửi mã OTP</button>
               {challenge ? (
                 <div className="otp-step">
-                  <OtpInbox challengeId={challenge.challengeId} />
-                  <div className="field">
-                    <label htmlFor="risk-otp">Mã OTP</label>
-                    <input id="risk-otp" value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                      inputMode="numeric" autoComplete="off" maxLength={6} />
-                  </div>
-                  <button type="button" onClick={() => void confirm()} disabled={busy}>Xác nhận hồ sơ rủi ro</button>
+                  <OtpInbox key={`inbox-${challenge.challengeId}`} challengeId={challenge.challengeId} />
+                  <OtpCodeInput key={challenge.challengeId} onChange={setCode} disabled={busy} />
+                  <ResendCode key={`resend-${challenge.challengeId}`} onResend={() => void sendOtp()} busy={busy} />
+                  <button type="button" onClick={() => void confirm()} disabled={busy || code.length < 6}>Xác nhận hồ sơ rủi ro</button>
                 </div>
               ) : null}
             </Panel>

@@ -30,6 +30,15 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     await expect(page.getByRole('region', { name: 'Khách hàng cần chuyển' }).getByText('Khách hàng demo Alpha')).toBeVisible();
   }
 
+  /** S10 B13 AC4: `Xác nhận chuyển` opens the dialog; `Chuyển khách hàng` inside it performs the transfer. */
+  async function confirmInDialog(page: Page) {
+    await page.getByRole('button', { name: 'Xác nhận chuyển' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Xác nhận chuyển RM' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Chuyển khách hàng' }).click();
+    await expect(dialog).toBeHidden();
+  }
+
   test('AC07 leader sees RM capacity x/80 and transfers a customer with a reason', async ({ page }) => {
     await openApp(page);
     await switchRole(page, 'leader-alpha');
@@ -48,8 +57,31 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     await expect(page.getByRole('alert')).toContainText('Vui lòng nhập lý do chuyển'); // validation, nothing sent
     expect(await sql("SELECT id FROM rm_assignment_history WHERE reason IS NOT NULL")).toHaveLength(0);
 
+    await expect(page.getByRole('dialog')).toHaveCount(0); // validation comes first: no dialog without a reason
     await page.getByLabel('Lý do chuyển').fill('Cân đối tải công việc giữa các RM');
-    await page.getByRole('button', { name: 'Xác nhận chuyển' }).click();
+
+    const posts: string[] = [];
+    page.on('request', request => { if (request.method() === 'POST' && request.url().includes('/rm-assignment')) posts.push(request.url()); });
+    const open = page.getByRole('button', { name: 'Xác nhận chuyển' });
+    await open.click();
+    const dialog = page.getByRole('dialog', { name: 'Xác nhận chuyển RM' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(new RegExp(`${ids.rmAlpha}[\\s\\S]*${ids.rmBeta}`)); // current RM -> target RM
+    await expect(dialog).toContainText('1 đề xuất đang chờ duyệt sẽ bị hủy'); // N = pending count loaded with the customer (the 2 added later are unknown to the page)
+    await dialog.getByRole('button', { name: 'Hủy' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(open).toBeFocused();
+    await open.click();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(open).toBeFocused(); // focus returns to the opener
+    expect(posts, 'cancelling or escaping the dialog sends nothing').toHaveLength(0);
+    expect(await sql("SELECT id FROM rm_assignment_history WHERE reason IS NOT NULL")).toHaveLength(0);
+    expect(await sql("SELECT id FROM proposals WHERE customer_id=$1 AND status='PENDING_APPROVAL'", [alphaId])).toHaveLength(3);
+
+    await confirmInDialog(page);
+    expect(posts).toHaveLength(1);
     await expect(page.getByText('Đã chuyển khách hàng')).toBeVisible();
     await expect(page.getByText('đề xuất đang chờ duyệt của khách đã bị hủy', { exact: false })).toBeVisible();
     await expect(page.getByText('3 đề xuất đang chờ duyệt của khách đã bị hủy', { exact: false })).toBeVisible(); // exact server count
@@ -73,7 +105,7 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
 
     await page.getByLabel('RM nhận').selectOption(ids.rmBeta);
     await page.getByLabel('Lý do chuyển').fill('Chuyển với phiên bản đã cũ');
-    await page.getByRole('button', { name: 'Xác nhận chuyển' }).click();
+    await confirmInDialog(page);
     await expect(page.getByRole('alert')).toContainText('Phân công đã thay đổi');
     await page.getByRole('button', { name: 'Tải lại' }).click();
     await expect(page.getByText('Phiên bản phân công: 2')).toBeVisible();
@@ -143,7 +175,7 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     await expect(page.getByRole('region', { name: 'Khách hàng cần chuyển' })).toBeVisible();
     await page.getByLabel('RM nhận').selectOption(ids.rmBeta);
     await page.getByLabel('Lý do chuyển').fill('Chuyển với phản hồi thiếu trường hủy');
-    await page.getByRole('button', { name: 'Xác nhận chuyển' }).click();
+    await confirmInDialog(page);
     const notice = page.getByRole('status').filter({ hasText: 'Đã chuyển khách hàng' });
     await expect(notice).toBeVisible();
     await expect(notice).not.toContainText('undefined');
