@@ -12,12 +12,22 @@ async function bootstrap(): Promise<void> {
   if (!['development', 'test', 'production'].includes(environment)
     || !['true', 'false'].includes(mockSetting)
     || !Number.isInteger(port) || port < 1 || port > 65535) throw new ConfigurationError();
+  const limit = (name: string): number | undefined => {
+    const raw = process.env[name];
+    if (raw === undefined) return undefined;
+    if (!/^[1-9]\d{0,8}$/.test(raw)) throw new ConfigurationError();
+    return Number(raw);
+  };
+  const lookupRateLimitPerMinute = limit('LOOKUP_RATE_LIMIT_PER_MINUTE');
+  const inviteRateLimitPerMinute = limit('INVITE_RATE_LIMIT_PER_MINUTE');
   const { app } = await createApplication({
     databaseUrl: process.env.DATABASE_URL ?? '',
     environment: environment as ApplicationOptions['environment'],
     mockEnabled: mockSetting === 'true',
     jwtSecret: process.env.JWT_SECRET ?? '',
     clock: { now: () => new Date() }, logger,
+    ...(lookupRateLimitPerMinute !== undefined ? { lookupRateLimitPerMinute } : {}),
+    ...(inviteRateLimitPerMinute !== undefined ? { inviteRateLimitPerMinute } : {}),
     ...(environment !== 'production' && mockSetting === 'true' ? { coreBanking: demoCoreBanking } : {}),
   });
   app.enableShutdownHooks();

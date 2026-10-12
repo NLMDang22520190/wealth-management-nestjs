@@ -26,8 +26,14 @@ export async function startApiFixture(configuration: { environment?: 'test' | 'p
     otpDelivery: undefined as ((delivery: OtpDelivery) => Promise<void>) | undefined };
   const deliveries: OtpDelivery[] = [];
   const logs: string[] = [];
-  const capture = (...values: unknown[]) => logs.push(inspect(values, { depth: 8 }));
-  const logger: LoggerService = { log: capture, error: capture, warn: capture, debug: capture, verbose: capture };
+  const logEntries: Array<{ level: string; text: string }> = [];
+  const capturing = (level: string) => (...values: unknown[]) => {
+    const text = inspect(values, { depth: 8 });
+    logs.push(text);
+    logEntries.push({ level, text });
+  };
+  const logger: LoggerService = { log: capturing('log'), error: capturing('error'), warn: capturing('warn'),
+    debug: capturing('debug'), verbose: capturing('verbose') };
   let application: { app: INestApplication; dataSource: DataSource } | undefined;
   try {
     const compiled = new URL('../../apps/api/dist/application.js', import.meta.url).href;
@@ -62,7 +68,7 @@ export async function startApiFixture(configuration: { environment?: 'test' | 'p
       expect(response.status).toBe(200);
       return response.body.accessToken;
     };
-    return { ...application!, state, deliveries, logs, request, tokenFor,
+    return { ...application!, state, deliveries, logs, logEntries, request, tokenFor,
       async stop() { try { await application?.app.close(); } finally { await database.stop(); } } };
   } catch (error) {
     try { await application?.app.close(); } finally { await database.stop(); }

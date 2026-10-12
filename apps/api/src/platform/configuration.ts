@@ -16,6 +16,8 @@ export function validateConfiguration(options: ApplicationOptions): void {
     || (options.environment === 'production' && options.mockEnabled)
     || typeof options.jwtSecret !== 'string' || options.jwtSecret.trim().length < 32
     || /^(change[-_ ]?me|default|secret|password)/i.test(options.jwtSecret)
+    || [options.lookupRateLimitPerMinute, options.inviteRateLimitPerMinute]
+      .some(limit => limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1))
     || typeof options.clock?.now !== 'function' || typeof options.logger?.error !== 'function') {
     throw new ConfigurationError();
   }

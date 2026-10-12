@@ -54,7 +54,9 @@ export class ApiErrorFilter implements ExceptionFilter {
     };
     const [code, message] = fallback[status] ?? ['INTERNAL_ERROR', 'Unexpected server error'];
     const body = exception instanceof ApiError ? exception.getResponse() as object : { code, message, details: [] };
-    this.logger.error({ code, status, requestId: request.requestId });
+    const entry = { code: (body as { code?: string }).code ?? code, status, requestId: request.requestId };
+    if (status >= 500) this.logger.error(entry);
+    else this.logger.warn(entry);
     response.status(status).json({ ...body, requestId: request.requestId });
   }
 }
