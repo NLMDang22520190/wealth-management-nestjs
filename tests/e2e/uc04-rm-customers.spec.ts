@@ -51,7 +51,7 @@ test.describe('UC04 RM customers journey (AC07 + AC02)', () => {
     await expectNoHorizontalOverflow(page);
   });
 
-  test('F2 each list row shows the Cảnh báo drift count from the API (0 for a fresh profile, 1 after a downgrade over a risky holding)', async ({ page }) => {
+  test('F2 each list row shows the Kiểm tra danh mục chờ count from the API (0 for a fresh profile, 1 after a downgrade over a risky holding)', async ({ page }) => {
     await addHolding(betaId, 'e2e-risk-5-fund', '500000.00', '2026-01-15T04:00:00.000Z', 5);
     await activateRisk('customer-beta', 0, 1); // GROWTH -> CONSERVATIVE: queues a holdings/drift check
     const token = await tokenFor('rm-alpha');
@@ -59,9 +59,23 @@ test.describe('UC04 RM customers journey (AC07 + AC02)', () => {
     expect(await drift(alphaId)).toBe(0);
     expect(await drift(betaId)).toBe(1);
     await openList(page);
-    await expect(row(page, 'Khách hàng demo Alpha')).toContainText('Cảnh báo drift: 0');
-    await expect(row(page, 'Khách hàng demo Beta')).toContainText('Cảnh báo drift: 1');
+    await expect(row(page, 'Khách hàng demo Alpha')).toContainText('Kiểm tra danh mục chờ: 0');
+    await expect(row(page, 'Khách hàng demo Beta')).toContainText('Kiểm tra danh mục chờ: 1');
+    await expect(page.getByText('Cảnh báo drift')).toHaveCount(0); // B3: old list label is gone
+    await page.getByRole('link', { name: 'Khách hàng demo Beta' }).click();
+    await expect(page.getByRole('heading', { name: 'Khách hàng demo Beta' })).toBeVisible();
+    await expect(page.getByText('Kiểm tra danh mục chờ: 1')).toBeVisible(); // B3: detail uses the same label
+    await expect(page.getByText('Cảnh báo lệch rủi ro')).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
+  });
+
+  test('B6 every th of the customers table head has role=columnheader (6 on desktop)', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'column headers are asserted on the desktop table layout');
+    await openList(page);
+    await expect(row(page, 'Khách hàng demo Alpha')).toBeVisible();
+    const roles = await page.locator('table.customers thead th').evaluateAll(cells => cells.map(cell => cell.getAttribute('role')));
+    expect(roles).toEqual(Array(6).fill('columnheader'));
+    await expect(page.getByRole('columnheader')).toHaveCount(6);
   });
 
   test('F6 mobile list keeps name, risk label, AUM and drift fully inside the 375px viewport without inner scrolling and without breaking the risk label', async ({ page }, testInfo) => {
@@ -77,7 +91,7 @@ test.describe('UC04 RM customers journey (AC07 + AC02)', () => {
         name: current.getByRole('link', { name }),
         risk: current.getByText(label, { exact: true }),
         ...(name.endsWith('Alpha') ? { aum: current.getByText(/900\.000,00/) } : {}),
-        drift: current.getByText(/Cảnh báo drift: \d+/), // last, so layout failures of the other parts are reported first
+        drift: current.getByText(/Kiểm tra danh mục chờ: \d+/), // last, so layout failures of the other parts are reported first
       };
       for (const [part, locator] of Object.entries(parts)) {
         await expect(locator, `${name}: ${part}`).toBeVisible();
