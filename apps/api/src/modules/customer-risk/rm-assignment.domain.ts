@@ -13,6 +13,6 @@ export interface AssignmentRow {
   id: string; customer_id: string; rm_id: string; team_id: string; version: number;
 }
 
-export function assignmentProjection(row: AssignmentRow, changed: boolean) {
-  return { customerId: row.customer_id, rmId: row.rm_id, teamId: row.team_id, version: row.version, changed };
+export function assignmentProjection(row: AssignmentRow, changed: boolean, cancelledProposals = 0) {
+  return { customerId: row.customer_id, rmId: row.rm_id, teamId: row.team_id, version: row.version, changed, cancelledProposals };
 }

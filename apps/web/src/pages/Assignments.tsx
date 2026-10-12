@@ -11,14 +11,15 @@ interface Customer {
   currentRisk: { category: string } | null;
   pendingProposals: { count: number };
 }
-interface Transfer { rmId: string; version: number; changed: boolean }
+interface Transfer { rmId: string; version: number; changed: boolean; cancelledProposals: number }
+interface TeamCustomers { items: Array<{ customerId: string; name: string }>; total: number }
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const fetchCustomer = (id: string) => api<Customer>(`/customers/${id}`);
 
 /** UC03 (leader): team capacity directory and a versioned, reasoned transfer of one customer. */
 export function Assignments() {
   const team = useLoad(signal => api<{ items: Rm[] }>('/team/rms', { signal }), []);
+  const roster = useLoad(signal => api<TeamCustomers>('/team/customers?page=1&pageSize=100', { signal }), []);
   const [customerId, setCustomerId] = useState('');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [target, setTarget] = useState('');
@@ -30,9 +31,9 @@ export function Assignments() {
 
   const load = async (event: FormEvent) => {
     event.preventDefault();
-    const id = customerId.trim();
+    const id = customerId;
     setNotice(null); setFailure(null); setStale(false);
-    if (!uuidPattern.test(id)) { setCustomer(null); setFailure('Mã khách hàng phải là UUID hợp lệ.'); return; }
+    if (!id) { setCustomer(null); setFailure('Vui lòng chọn khách hàng.'); return; }
     setBusy(true);
     try { setCustomer(await fetchCustomer(id)); setTarget(''); setReason(''); }
     catch (error) { setCustomer(null); setFailure(error); }
@@ -59,12 +60,10 @@ export function Assignments() {
       const result = await api<Transfer>(`/customers/${customer.customerId}/rm-assignment`, { key: intentKey(name, intent),
         body: { targetRmId: target, reason: reason.trim(), expectedAssignmentVersion: customer.currentAssignment.version } });
       intentDone(name);
-      const before = customer.pendingProposals.count;
       const refreshed = await fetchCustomer(customer.customerId);
-      const cancelled = Math.max(0, before - refreshed.pendingProposals.count);
       setCustomer(refreshed); setTarget(''); setReason(''); team.reload();
       setNotice(result.changed
-        ? `Đã chuyển khách hàng sang RM ${result.rmId}. ${cancelled} đề xuất đang chờ duyệt của khách đã bị hủy.`
+        ? `Đã chuyển khách hàng sang RM ${result.rmId}. ${result.cancelledProposals} đề xuất đang chờ duyệt của khách đã bị hủy.`
         : 'Khách hàng đã thuộc RM này, không có thay đổi.');
     } catch (error) {
       if (error instanceof ApiFailure && error.code === 'RM_ASSIGNMENT_STALE') setStale(true);
@@ -108,11 +107,15 @@ export function Assignments() {
 
       <form className="inline-form" onSubmit={event => void load(event)}>
         <div className="field">
-          <label htmlFor="customer-id">Mã khách hàng</label>
-          <input id="customer-id" value={customerId} onChange={event => setCustomerId(event.target.value)} autoComplete="off" spellCheck={false} />
+          <label htmlFor="customer-id">Chọn khách hàng</label>
+          <select id="customer-id" value={customerId} onChange={event => setCustomerId(event.target.value)}>
+            <option value="">Chọn khách hàng</option>
+            {(roster.data?.items ?? []).map(item => <option key={item.customerId} value={item.customerId} label={item.name} aria-label={item.name} />)}
+          </select>
         </div>
         <button type="submit" disabled={busy}>Tải thông tin khách hàng</button>
       </form>
+      {roster.error ? <ErrorAlert>{describe(roster.error)} <button type="button" className="link" onClick={roster.reload}>Thử lại</button></ErrorAlert> : null}
       {busy ? <Loading label="Đang xử lý…" /> : null}
       {message ? (
         <ErrorAlert>

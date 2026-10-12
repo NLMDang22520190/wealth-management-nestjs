@@ -18,7 +18,7 @@ const SELECT = `
     COALESCE(dr.count,0)::integer AS drift_count, COALESCE(pp.count,0)::integer AS pending_count
   FROM scope s
   LEFT JOIN risk_profiles rp ON rp.id=s.current_risk_profile_id
-  LEFT JOIN (SELECT customer_id, sum(market_value) AS value, max(as_of) AS as_of,
+  LEFT JOIN (SELECT customer_id, sum(market_value) AS value, min(as_of) AS as_of,
       CASE WHEN count(DISTINCT provenance)=1 THEN min(provenance) END AS provenance
     FROM (SELECT DISTINCT ON (customer_id,product_id) customer_id,product_id,market_value,as_of,provenance
       FROM holdings_read_snapshots WHERE customer_id IN (SELECT id FROM scope)

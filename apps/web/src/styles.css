@@ -162,3 +162,19 @@ tbody th { font-weight: 600; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Allocation list */
+.allocation { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px 12px; }
+.allocation li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+
+/* Mobile customer list: one card per customer, no horizontal scrolling */
+@media (max-width: 719px) {
+  table.customers, table.customers tbody, table.customers tr, table.customers td, table.customers th { display: block; width: 100%; }
+  table.customers thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  table.customers tr { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  table.customers tbody tr:last-child { border-bottom: 0; }
+  table.customers th, table.customers td { padding: 2px 0; border: 0; text-align: left; white-space: normal; }
+  table.customers td[data-label]::before { content: attr(data-label) ': '; color: var(--ink-soft); font-size: 0.85rem; }
+  table.customers .c-name { font-size: 1.05rem; }
+  table.customers .c-risk { display: block; }
+}

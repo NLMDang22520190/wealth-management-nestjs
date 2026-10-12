@@ -1,8 +1,9 @@
 import { api, describe } from '../api';
 import { formatDate, formatDateTime, riskLabel } from '../format';
-import { Empty, ErrorAlert, Loading, PageTitle, Panel, useLoad } from '../ui';
+import type { Allocation } from '../ui';
+import { AllocationSummary, Empty, ErrorAlert, Loading, PageTitle, Panel, useLoad } from '../ui';
 
-interface Profile { id: string; version: number; score: number; category: string; confirmedAt: string; expiresAt: string; valid: boolean }
+interface Profile { id: string; version: number; score: number; category: string; maxProductRisk: number; allocation: Allocation; confirmedAt: string; expiresAt: string; valid: boolean }
 interface Overview {
   current: Profile | null;
   holdingsCheck: null | { status: string; asOf: string | null; provenance: string | null; incompatibleHoldings: Array<{ productId: string; productRisk: number; maxProductRisk: number }> };
@@ -28,6 +29,7 @@ export function RiskProfile() {
             <>
               <p className="result-category">{riskLabel(overview.data.current.category)}</p>
               <p>Điểm: {overview.data.current.score}</p>
+              <AllocationSummary maxProductRisk={overview.data.current.maxProductRisk} allocation={overview.data.current.allocation} />
               <p>Hết hạn: {formatDate(overview.data.current.expiresAt)}</p>
               {overview.data.current.valid ? null : <p className="badge bad">Hồ sơ đã quá hạn, cần làm lại khảo sát</p>}
               <p className="hint">Xác nhận lúc {formatDateTime(overview.data.current.confirmedAt)}, phiên bản {overview.data.current.version}.</p>

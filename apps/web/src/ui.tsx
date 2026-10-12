@@ -78,3 +78,19 @@ export function OtpInbox({ challengeId }: { challengeId: string }) {
     </div>
   );
 }
+
+export interface Allocation { cash: number; deposit: number; bond: number; fund: number }
+
+const allocationRows: Array<[keyof Allocation, string]> = [['cash', 'Tiền mặt'], ['deposit', 'Tiền gửi'], ['bond', 'Trái phiếu'], ['fund', 'Chứng chỉ quỹ']];
+
+/** Server-owned risk result details: maximum product risk and the target asset allocation. */
+export function AllocationSummary({ maxProductRisk, allocation }: { maxProductRisk: number; allocation: Allocation }) {
+  return (
+    <>
+      <p>Rủi ro sản phẩm tối đa: {maxProductRisk}</p>
+      <ul className="allocation" aria-label="Phân bổ tài sản">
+        {allocationRows.map(([key, label]) => <li key={key}><span>{label}</span><strong>{allocation[key]}%</strong></li>)}
+      </ul>
+    </>
+  );
+}

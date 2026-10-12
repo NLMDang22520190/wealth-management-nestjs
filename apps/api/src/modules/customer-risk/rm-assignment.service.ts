@@ -29,6 +29,21 @@ export class RmAssignmentService {
       available: Math.max(0, 80 - row.assigned - row.reserved), capacityLimit: 80 })) };
   }
 
+ async customers(actor: Actor, paging: { page: number; pageSize: number }, name: string | undefined) {
+    if (actor.role !== 'LEADER' || !actor.teamId) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
+    const params: unknown[] = [actor.teamId];
+    let filter = '';
+    if (name) { params.push(`%${name.replace(/[\\%_]/g, '\\$&')}%`); filter = ' AND c.name ILIKE $2'; }
+    const from = `FROM customers c JOIN rm_assignment_history a ON a.customer_id=c.id AND a.valid_to IS NULL
+      WHERE a.team_id=$1${filter}`;
+    const [count] = await this.database.query(`SELECT count(*)::integer AS total ${from}`, params);
+    const rows = await this.database.query(`SELECT c.id,c.name,a.rm_id,a.version ${from} ORDER BY c.name,c.id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, paging.pageSize, (paging.page - 1) * paging.pageSize]);
+    return { page: paging.page, pageSize: paging.pageSize, total: count.total,
+      items: rows.map((row: { id: string; name: string; rm_id: string; version: number }) =>
+        ({ customerId: row.id, name: row.name, rmId: row.rm_id, assignmentVersion: row.version })) };
+  }
+
   async assign(actor: Actor, customerId: string, body: RmAssignmentBody, key: string | undefined, context: AuditContext) {
     if (actor.role !== 'LEADER' || !actor.teamId) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
     return this.access.withAssignmentTransaction(customerId, [body.targetRmId], manager =>
@@ -52,11 +67,11 @@ export class RmAssignmentService {
           (id,customer_id,rm_id,team_id,valid_from,provisional,version,assigned_by,reason)
           VALUES($1,$2,$3,$4,$5,false,$6,$7,$8) RETURNING *`,
           [randomUUID(), customerId, body.targetRmId, destination.team_id, now, current.version + 1, actor.actorId, body.reason]);
-        await this.cancellation.forRmTransfer(manager, customerId, current.rm_id, now);
+        const cancelled = await this.cancellation.forRmTransfer(manager, customerId, current.rm_id, now);
         await appendSuccess(manager, actor.actorId, customerId, 'RM_ASSIGNMENT_CHANGED', 'RmAssignmentChanged',
           { customerId, previousRmId: current.rm_id, rmId: next.rm_id, version: next.version }, now,
           { ...context, before: { rmId: current.rm_id, version: current.version }, after: { rmId: next.rm_id, version: next.version } });
-        return assignmentProjection(next, true);
+        return assignmentProjection(next, true, cancelled);
       }));
   }
 }

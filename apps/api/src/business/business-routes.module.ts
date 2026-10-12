@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Module, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../auth/guards.js';
-import { auditContext } from '../platform/http.js';
+import { ApiError, auditContext } from '../platform/http.js';
 import type { ApiRequest } from '../platform/http.js';
 import { CustomerRiskModule } from '../modules/customer-risk/onboarding.module.js';
 import { RiskConfirmBody, RiskDraftBody, riskPaging } from '../modules/customer-risk/risk.domain.js';
@@ -62,6 +62,12 @@ class RmController {
   constructor(private readonly assignments: RmAssignmentService, private readonly customers: RmCustomersService) {}
   @Roles('LEADER') @Get('team/rms')
   team(@Req() request: ApiRequest) { return this.assignments.team(request.actor!); }
+  @Roles('LEADER') @Get('team/customers')
+  @ApiOperation({ summary: 'List customers currently assigned to RMs of the authenticated leader team' })
+  teamCustomers(@Req() request: ApiRequest, @Query('page') page?: string, @Query('pageSize') pageSize?: string, @Query('name') name?: string) {
+    if (name !== undefined && (typeof name !== 'string' || name.trim().length === 0 || name.length > 100)) throw new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed');
+    return this.assignments.customers(request.actor!, riskPaging(page, pageSize), name?.trim());
+  }
   @Roles('LEADER') @Post('customers/:id/rm-assignment') @HttpCode(200)
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   assign(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string, @Body() body: RmAssignmentBody) {

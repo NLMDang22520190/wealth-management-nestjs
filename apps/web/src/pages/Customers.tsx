@@ -78,21 +78,22 @@ export function CustomerList() {
           <p className="total">Tổng: {list.data.total} khách hàng</p>
           {list.data.items.length === 0 ? <Empty>Không có khách hàng phù hợp</Empty> : (
             <div className="table-wrap">
-              <table className="customers">
-                <thead>
-                  <tr>
-                    <th scope="col">Khách hàng</th><th scope="col">Rủi ro</th><th scope="col">Hết hạn hồ sơ</th>
-                    <th scope="col" className="num">AUM</th><th scope="col" className="num">Đề xuất</th>
+              <table className="customers" role="table">
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th scope="col" role="columnheader">Khách hàng</th><th scope="col">Rủi ro</th><th scope="col">Hết hạn hồ sơ</th>
+                    <th scope="col" className="num">AUM</th><th scope="col" className="num">Đề xuất</th><th scope="col" className="num">Cảnh báo</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup">
                   {list.data.items.map(row => (
-                    <tr key={row.customerId}>
-                      <th scope="row"><a href={`#/rm/customers/${row.customerId}`}>{row.name}</a></th>
-                      <td>{row.currentRisk ? riskLabel(row.currentRisk.category) : <span className="muted">Chưa có</span>}</td>
-                      <td>{row.currentRisk ? <>{formatDate(row.currentRisk.expiresAt)}{row.currentRisk.valid ? '' : ' (quá hạn)'}</> : <span className="muted">Chưa có</span>}</td>
-                      <td className="num"><AumCell aum={row.aum} /></td>
-                      <td className="num">{row.pendingProposals.count}</td>
+                    <tr key={row.customerId} role="row">
+                      <th scope="row" role="rowheader" className="c-name"><a href={`#/rm/customers/${row.customerId}`}>{row.name}</a></th>
+                      <td role="cell" className="c-risk" data-label="Rủi ro">{row.currentRisk ? riskLabel(row.currentRisk.category) : <span className="muted">Chưa có</span>}</td>
+                      <td role="cell" data-label="Hết hạn hồ sơ">{row.currentRisk ? <>{formatDate(row.currentRisk.expiresAt)}{row.currentRisk.valid ? '' : ' (quá hạn)'}</> : <span className="muted">Chưa có</span>}</td>
+                      <td role="cell" className="num" data-label="AUM"><AumCell aum={row.aum} /></td>
+                      <td role="cell" className="num" data-label="Đề xuất">{row.pendingProposals.count}</td>
+                      <td role="cell" className="num c-drift">Cảnh báo drift: {row.driftAlerts.count}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { api, describe, intentDone, intentKey } from '../api';
 import { formatDateTime, riskLabel } from '../format';
-import { ErrorAlert, Loading, OtpInbox, PageTitle, Panel, useLoad } from '../ui';
+import type { Allocation } from '../ui';
+import { AllocationSummary, ErrorAlert, Loading, OtpInbox, PageTitle, Panel, useLoad } from '../ui';
 
 interface Questionnaire { version: string; questions: Array<{ id: string; text: string; options: Array<{ id: string; text: string }> }> }
-interface Draft { id: string; score: number; category: string; expiresAt: string; expectedCurrentProfileVersion: number }
+interface Draft { id: string; score: number; category: string; maxProductRisk: number; allocation: Allocation; expiresAt: string; expectedCurrentProfileVersion: number }
 interface Challenge { challengeId: string; expiresAt: string }
 
 const surveyErrors = { '404': 'Bạn cần đồng ý dịch vụ trước khi làm khảo sát rủi ro. Mở mục Lời mời dịch vụ.' };
@@ -108,6 +109,7 @@ export function RiskSurvey() {
             <Panel title="Kết quả dự kiến" className="preview">
               <p className="result-category">{riskLabel(draft.category)}</p>
               <p>Điểm: {draft.score}</p>
+              <AllocationSummary maxProductRisk={draft.maxProductRisk} allocation={draft.allocation} />
               <p className="badge wait">Bản nháp, chưa có hiệu lực</p>
               <p className="hint">Bản xem trước dùng được đến {formatDateTime(draft.expiresAt)}.</p>
               <button type="button" onClick={() => void sendOtp()} disabled={busy}>Gửi mã OTP</button>
