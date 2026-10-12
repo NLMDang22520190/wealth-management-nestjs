@@ -15,7 +15,12 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
   });
 
   async function loadCustomer(page: Page) {
-    await page.getByLabel('Mã khách hàng').fill(alphaId);
+    // F3: the leader picks from the team's customers by name; no UUID typing.
+    await expect(page.getByLabel('Mã khách hàng')).toHaveCount(0);
+    const picker = page.getByLabel('Chọn khách hàng');
+    await expect(picker.getByRole('option', { name: /Khách hàng demo Alpha/ })).toHaveCount(1);
+    await expect(picker.getByRole('option', { name: /Khách hàng demo Beta/ })).toHaveCount(1);
+    await picker.selectOption(alphaId);
     await page.getByRole('button', { name: 'Tải thông tin khách hàng' }).click();
     await expect(page.getByText('Khách hàng demo Alpha')).toBeVisible();
   }
@@ -30,6 +35,9 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
 
     await loadCustomer(page);
     await expect(page.getByText('Phiên bản phân công: 1')).toBeVisible();
+    // F4: two more pending proposals appear after the page loaded the customer; only the server knows the real count (1 + 2 = 3).
+    await addPendingProposal(alphaId);
+    await addPendingProposal(alphaId);
     await page.getByLabel('RM nhận').selectOption(ids.rmBeta);
     await page.getByRole('button', { name: 'Xác nhận chuyển' }).click();
     await expect(page.getByRole('alert')).toContainText('Vui lòng nhập lý do chuyển'); // validation, nothing sent
@@ -39,6 +47,7 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     await page.getByRole('button', { name: 'Xác nhận chuyển' }).click();
     await expect(page.getByText('Đã chuyển khách hàng')).toBeVisible();
     await expect(page.getByText('đề xuất đang chờ duyệt của khách đã bị hủy', { exact: false })).toBeVisible();
+    await expect(page.getByText('3 đề xuất đang chờ duyệt của khách đã bị hủy', { exact: false })).toBeVisible(); // exact server count
     await expect(directory.getByRole('row', { name: new RegExp(ids.rmAlpha) })).toContainText('1/80');
     await expect(directory.getByRole('row', { name: new RegExp(ids.rmBeta) })).toContainText('1/80');
     const current = await sql<{ rm_id: string; reason: string }>('SELECT rm_id,reason FROM rm_assignment_history WHERE customer_id=$1 AND valid_to IS NULL', [alphaId]);

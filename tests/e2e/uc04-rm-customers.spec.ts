@@ -51,6 +51,58 @@ test.describe('UC04 RM customers journey (AC07 + AC02)', () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  test('F2 each list row shows the Cảnh báo drift count from the API (0 for a fresh profile, 1 after a downgrade over a risky holding)', async ({ page }) => {
+    await addHolding(betaId, 'e2e-risk-5-fund', '500000.00', '2026-01-15T04:00:00.000Z', 5);
+    await activateRisk('customer-beta', 0, 1); // GROWTH -> CONSERVATIVE: queues a holdings/drift check
+    const token = await tokenFor('rm-alpha');
+    const drift = async (id: string) => (await api(`/customers/${id}`, { token })).body.driftAlerts.count as number;
+    expect(await drift(alphaId)).toBe(0);
+    expect(await drift(betaId)).toBe(1);
+    await openList(page);
+    await expect(row(page, 'Khách hàng demo Alpha')).toContainText('Cảnh báo drift: 0');
+    await expect(row(page, 'Khách hàng demo Beta')).toContainText('Cảnh báo drift: 1');
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test('F6 mobile list keeps name, risk label, AUM and drift fully inside the 375px viewport without inner scrolling and without breaking the risk label', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile', 'viewport check applies to the mobile project');
+    await addHolding(alphaId, 'e2e-fund-a', '900000.00', '2026-01-15T04:00:00.000Z');
+    await openList(page);
+    const width = page.viewportSize()!.width;
+    expect(width).toBe(375);
+    for (const [name, label] of [['Khách hàng demo Alpha', 'Cân bằng'], ['Khách hàng demo Beta', 'Tăng trưởng']] as const) {
+      const current = row(page, name);
+      await expect(current).toBeVisible();
+      const parts = {
+        name: current.getByRole('link', { name }),
+        risk: current.getByText(label, { exact: true }),
+        ...(name.endsWith('Alpha') ? { aum: current.getByText(/900\.000,00/) } : {}),
+        drift: current.getByText(/Cảnh báo drift: \d+/), // last, so layout failures of the other parts are reported first
+      };
+      for (const [part, locator] of Object.entries(parts)) {
+        await expect(locator, `${name}: ${part}`).toBeVisible();
+        const box = (await locator.boundingBox())!;
+        expect(box.x, `${name}: ${part} left edge`).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width, `${name}: ${part} right edge within ${width}px`).toBeLessThanOrEqual(width);
+      }
+      // The label stays on one line: a break inside "Tăng trưởng"/"Cân bằng" would at least double its height.
+      const lines = await parts.risk.evaluate(element => {
+        const style = getComputedStyle(element);
+        const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5;
+        return element.getBoundingClientRect().height / lineHeight;
+      });
+      expect(lines, `${name}: risk label wraps`).toBeLessThan(1.6);
+      // Nothing around the row scrolls horizontally on its own.
+      const hiddenWidth = await current.evaluate(element => {
+        let worst = 0;
+        for (let node: Element | null = element; node; node = node.parentElement) worst = Math.max(worst, node.scrollWidth - node.clientWidth);
+        return worst;
+      });
+      expect(hiddenWidth, `${name}: content wider than its container (inner horizontal scroll)`).toBeLessThanOrEqual(1);
+    }
+    await expectNoHorizontalOverflow(page);
+  });
+
   test('AC07 customer detail shows risk, expiry, decimal-exact AUM with asOf and provenance, and pending proposals', async ({ page }) => {
     await addHolding(alphaId, 'e2e-fund-a', '1250000.50', '2026-01-15T04:59:00.000Z');
     await openList(page);

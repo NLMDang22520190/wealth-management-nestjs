@@ -90,9 +90,9 @@ export async function activateRisk(customerActorId: string, optionIndex: number,
   return confirmed.body;
 }
 
-export async function addHolding(customerId: string, productId: string, marketValue: string, asOf: string) {
+export async function addHolding(customerId: string, productId: string, marketValue: string, asOf: string, productRisk = 3) {
   await sql(`INSERT INTO holdings_read_snapshots(id,customer_id,product_id,product_risk,asset_class,quantity,market_value,as_of,provenance)
-    VALUES($1,$2,$3,3,'FUND',1,$4,$5,'SYNTHETIC_P3_READ_BRIDGE')`, [randomUUID(), customerId, productId, marketValue, asOf]);
+    VALUES($1,$2,$3,$6,'FUND',1,$4,$5,'SYNTHETIC_P3_READ_BRIDGE')`, [randomUUID(), customerId, productId, marketValue, asOf, productRisk]);
 }
 
 export async function addPendingProposal(customerId: string, authorRmId = ids.rmAlpha) {

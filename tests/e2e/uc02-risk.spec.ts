@@ -1,10 +1,22 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { api, registerCustomer, resetBusinessState, sql, tokenFor, vnDate } from './support/stack';
 import { expectNoHorizontalOverflow, goTo, openApp, readDemoInbox, switchRole } from './support/ui';
 
 async function answer(page: Page, question: number, option: number) {
   await page.getByRole('radiogroup').nth(question).getByRole('radio').nth(option).check();
+}
+
+/** F1 (05-review.md): region shows `Rủi ro sản phẩm tối đa: N` and a list named `Phân bổ tài sản` with the four classes and server percentages. */
+async function expectAllocation(region: Locator, maxProductRisk: number, allocation: { cash: number; deposit: number; bond: number; fund: number }) {
+  await expect(region).toContainText(`Rủi ro sản phẩm tối đa: ${maxProductRisk}`);
+  const list = region.getByRole('list', { name: 'Phân bổ tài sản' });
+  await expect(list).toBeVisible();
+  await expect(list.getByRole('listitem')).toHaveCount(4);
+  const rows: Array<[string, number]> = [['Tiền mặt', allocation.cash], ['Tiền gửi', allocation.deposit], ['Trái phiếu', allocation.bond], ['Chứng chỉ quỹ', allocation.fund]];
+  for (const [label, percent] of rows) {
+    await expect(list.getByRole('listitem').filter({ hasText: label })).toContainText(new RegExp(`(^|\\D)${percent}\\s*%`));
+  }
 }
 
 test.describe('UC02 risk survey journey (AC07)', () => {
@@ -31,6 +43,7 @@ test.describe('UC02 risk survey journey (AC07)', () => {
     await expect(preview).toContainText('Cân bằng');
     await expect(preview).toContainText('Điểm: 30');
     await expect(preview).toContainText('Bản nháp, chưa có hiệu lực');
+    await expectAllocation(preview, 3, { cash: 5, deposit: 30, bond: 30, fund: 35 }); // F1 BALANCED matrix from the API
     expect(await sql('SELECT id FROM risk_profiles')).toHaveLength(0); // preview is not a confirmed profile
 
     // Changing an answer invalidates the previous preview; a new preview is required.
@@ -39,6 +52,7 @@ test.describe('UC02 risk survey journey (AC07)', () => {
     await page.getByRole('button', { name: 'Xem kết quả dự kiến' }).click();
     await expect(preview).toContainText('Tăng trưởng');
     await expect(preview).toContainText('Điểm: 40');
+    await expectAllocation(preview, 5, { cash: 5, deposit: 15, bond: 20, fund: 60 }); // F1 GROWTH matrix from the API
     expect(await sql('SELECT id FROM risk_assessment_drafts')).toHaveLength(2);
 
     await page.getByRole('button', { name: 'Gửi mã OTP' }).click();
@@ -54,6 +68,8 @@ test.describe('UC02 risk survey journey (AC07)', () => {
     await expect(current).toContainText('Điểm: 40');
     const profile = await api('/me/risk-profile', { token: await tokenFor('customer-alpha') });
     expect(profile.body.current.category).toBe('GROWTH');
+    expect(profile.body.current.maxProductRisk).toBe(5);
+    await expectAllocation(current, profile.body.current.maxProductRisk, profile.body.current.allocation); // F1 profile region, values from the API
     await expect(current).toContainText(`Hết hạn: ${vnDate(profile.body.current.expiresAt)}`);
     const history = page.getByRole('region', { name: 'Lịch sử đánh giá' });
     await expect(history.getByRole('listitem')).toHaveCount(1);
