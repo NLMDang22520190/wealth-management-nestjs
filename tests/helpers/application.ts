@@ -21,7 +21,9 @@ export function eligibleCustomer(cifId: string = actors.customer.cifId): CoreCus
 /** Network and time are boundaries; Nest, PostgreSQL and transaction collaborators are real. */
 export async function startApiFixture(configuration: { environment?: 'test' | 'production'; mockEnabled?: boolean } = {}) {
   const database = await startTestDatabase();
-  const state = { now: new Date(TEST_NOW), core: eligibleCustomer() as CoreCustomer | null, coreFailure: false };
+  const state = { now: new Date(TEST_NOW), core: eligibleCustomer() as CoreCustomer | null, coreFailure: false,
+    coreLookup: undefined as ((reference: string) => Promise<CoreCustomer | null>) | undefined,
+    otpDelivery: undefined as ((delivery: OtpDelivery) => Promise<void>) | undefined };
   const deliveries: OtpDelivery[] = [];
   const logs: string[] = [];
   const capture = (...values: unknown[]) => logs.push(inspect(values, { depth: 8 }));
@@ -35,21 +37,22 @@ export async function startApiFixture(configuration: { environment?: 'test' | 'p
       jwtSecret: 'wms-test-only-secret-at-least-32-characters', logger,
       clock: { now: () => new Date(state.now) },
       coreBanking: { lookup: async (reference: string) => {
+        if (state.coreLookup) return state.coreLookup(reference);
         if (state.coreFailure) throw Object.assign(new Error('Synthetic Core timeout'), { code: 'CORE_TIMEOUT' });
         if (reference === actors.otherCustomer.cifId) return eligibleCustomer(actors.otherCustomer.cifId);
         return state.core ? structuredClone(state.core) : null;
       } },
-      otpDelivery: async (delivery: OtpDelivery) => { deliveries.push({ ...delivery }); },
+      otpDelivery: async (delivery: OtpDelivery) => { await state.otpDelivery?.(delivery); deliveries.push({ ...delivery }); },
     });
     await seedTestActors(application!.dataSource);
     await application!.app.listen(0, '127.0.0.1');
     const baseUrl = await application!.app.getUrl();
-    const request = async (path: string, input: { method?: string; token?: string; body?: unknown; key?: string } = {}): Promise<HttpResponse> => {
+    const request = async (path: string, input: { method?: string; token?: string; body?: unknown; key?: string; headers?: Record<string, string> } = {}): Promise<HttpResponse> => {
       const response = await fetch(`${baseUrl}/api/v1${path}`, {
         method: input.method ?? 'GET',
         headers: { ...(input.body === undefined ? {} : { 'content-type': 'application/json' }),
           ...(input.token ? { authorization: `Bearer ${input.token}` } : {}),
-          ...(input.key ? { 'idempotency-key': input.key } : {}) },
+          ...(input.key ? { 'idempotency-key': input.key } : {}), ...input.headers },
         ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
       });
       return { status: response.status, body: await response.json(), headers: response.headers };
