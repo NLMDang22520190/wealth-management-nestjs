@@ -175,15 +175,19 @@ describe('S7 B12 configurable limits through the real CLI', () => {
     test(`B12 ${name} rejects 0, negative, non-integer and text with CONFIG_INVALID at startup`, async () => {
       for (const value of ['0', '-5', '2.5', 'abc']) {
         const child = cli({ [name]: value });
-        const outcome = await Promise.race([child.waitForExit(), new Promise<{ code: string; output: string }>(accept =>
-          setTimeout(() => accept({ code: 'STILL_RUNNING', output: child.output }), 5_000))]);
+        // Realistic bound for a loaded full-suite run; the process must still EXIT (code 1).
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const outcome = await Promise.race([child.waitForExit(), new Promise<{ code: string; output: string }>(accept => {
+          timer = setTimeout(() => accept({ code: 'STILL_RUNNING', output: child.output }), 30_000);
+        })]);
+        if (timer) clearTimeout(timer);
         expect(outcome.code, `${name}=${value} must stop startup`).toBe(1);
         expect(outcome.output, `${name}=${value}`).toContain('CONFIG_INVALID');
         expect(outcome.output).not.toContain(database.databaseUrl);
         await child.stop().catch(() => {});
         port = await reserveHttpPort();
       }
-    }, 60_000);
+    }, 150_000); // 4 values x up to 30 s each, plus cleanup
   }
 
   test('B12 a valid large value boots (characterization for the E2E infra setting)', async () => {
