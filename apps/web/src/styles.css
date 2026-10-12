@@ -243,3 +243,62 @@ tbody th a:hover { color: var(--action); text-decoration: underline; }
   table.customers .c-name { font-size: 1.02rem; margin-bottom: 4px; }
   table.customers .c-risk { display: block; }
 }
+
+/* S10 wizard, OTP boxes, stepper, confirmation dialog */
+.question-step { margin: 0 0 6px; font-size: 0.82rem; font-weight: 600; color: var(--action-dark); font-variant-numeric: tabular-nums; }
+.question .question-text { font-size: 1.12rem; line-height: 1.45; margin: 0 0 14px; outline: none; }
+.wizard-nav { display: flex; justify-content: space-between; gap: 12px; margin-top: 16px; }
+.wizard-nav button { min-width: 132px; }
+.wizard-nav button:only-child { margin-left: auto; }
+
+.otp-boxes { display: flex; gap: 8px; margin: 4px 0 12px; }
+.otp-box {
+  width: 48px; min-width: 0; flex: 0 1 48px; height: 56px; padding: 0; text-align: center; font: 700 1.45rem/1 var(--sans);
+  font-variant-numeric: tabular-nums; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.otp-box:focus { border-color: var(--action); box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.2); outline: none; }
+.otp-box:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.otp-box:disabled { opacity: 0.6; }
+.resend { margin: 0 0 14px; }
+button.resend { min-height: 40px; padding: 6px 14px; }
+
+.stepper { list-style: none; margin: 0 0 20px; padding: 0; display: flex; gap: 0; counter-reset: none; }
+.stepper li { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 10px; color: var(--ink-soft); font-weight: 500; position: relative; }
+.stepper li + li::before { content: ''; flex: 0 1 28px; min-width: 10px; height: 2px; background: var(--line-strong); margin-right: 2px; }
+.stepper li.done + li::before, .stepper li.current::before { background: var(--action); }
+.stepper-dot {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 0.82rem; font-weight: 700;
+  border: 1.5px solid var(--line-strong); background: var(--surface); color: var(--ink-soft);
+}
+.stepper li.current { color: var(--ink); font-weight: 600; }
+.stepper li.current .stepper-dot { background: var(--action); border-color: var(--action); color: #fff; box-shadow: 0 0 0 4px var(--action-tint); }
+.stepper li.done { color: var(--action-dark); }
+.stepper li.done .stepper-dot { background: var(--action-tint); border-color: var(--action); color: var(--action-dark); }
+.stepper-label { min-width: 0; }
+
+.confirm-dialog {
+  width: min(460px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--surface); color: var(--ink); box-shadow: 0 24px 64px rgba(16, 42, 76, 0.28);
+}
+.confirm-dialog::backdrop { background: rgba(14, 26, 43, 0.55); }
+.confirm-dialog h3 { margin: 0 0 12px; font-size: 1.15rem; color: var(--ink); }
+.confirm-dialog p { margin: 0 0 10px; }
+.transfer-route { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.transfer-route .arrow { color: var(--action); font-weight: 700; }
+.transfer-reason { color: var(--ink-soft); }
+.transfer-warning { background: var(--wait-bg); color: var(--wait); border-radius: var(--radius); padding: 10px 14px; font-weight: 600; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: no-preference) {
+  .confirm-dialog[open] { animation: dialog-in 0.16s ease-out; }
+  @keyframes dialog-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}
+@media (max-width: 480px) {
+  .otp-boxes { gap: 6px; }
+  .otp-box { flex: 1 1 0; width: auto; height: 52px; }
+  .stepper li + li::before { display: none; }
+  .stepper { gap: 6px; }
+  .stepper li { flex-direction: column; align-items: flex-start; gap: 6px; font-size: 0.85rem; }
+  .wizard-nav button { min-width: 0; flex: 1 1 0; }
+  .dialog-actions button { flex: 1 1 auto; }
+}

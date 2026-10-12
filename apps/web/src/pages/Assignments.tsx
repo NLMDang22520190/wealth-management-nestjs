@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api, describe, intentDone, intentKey } from '../api';
 import { riskLabel } from '../format';
@@ -56,6 +56,17 @@ export function Assignments() {
   const [stale, setStale] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const opener = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (confirming && dialog.current && !dialog.current.open) dialog.current.showModal(); }, [confirming]);
+  const wasConfirming = useRef(false);
+  useEffect(() => {
+    // The modal makes the page inert until it is removed, so focus goes back to the opener only after it is gone.
+    if (wasConfirming.current && !confirming) opener.current?.focus();
+    wasConfirming.current = confirming;
+  }, [confirming]);
+  const closeDialog = () => setConfirming(false);
 
   const load = async (event: FormEvent) => {
     event.preventDefault();
@@ -76,11 +87,16 @@ export function Assignments() {
     finally { setBusy(false); }
   };
 
-  const transfer = async () => {
+  const requestTransfer = () => {
     if (!customer) return;
     setNotice(null); setFailure(null); setStale(false);
     if (!target) { setFailure('Vui lòng chọn RM nhận.'); return; }
     if (!reason.trim()) { setFailure('Vui lòng nhập lý do chuyển.'); return; }
+    setConfirming(true);
+  };
+
+  const transfer = async () => {
+    if (!customer || !target || !reason.trim()) return;
     const name = `assign-${customer.customerId}`;
     const intent = `${target}:${customer.currentAssignment.version}:${reason.trim()}`;
     setBusy(true);
@@ -184,8 +200,28 @@ export function Assignments() {
             <textarea id="reason" value={reason} onChange={event => setReason(event.target.value)} rows={3} />
           </div>
           <p className="hint">Khi chuyển, các đề xuất đang chờ duyệt của khách do RM cũ lập sẽ bị hủy.</p>
-          <button type="button" onClick={() => void transfer()} disabled={busy}>Xác nhận chuyển</button>
+          <button type="button" ref={opener} onClick={requestTransfer} disabled={busy}>Xác nhận chuyển</button>
         </Panel>
+      ) : null}
+
+      {confirming && customer ? (
+        <dialog ref={dialog} className="confirm-dialog" aria-modal="true" aria-labelledby="transfer-title" onClose={closeDialog} onCancel={closeDialog}>
+          <h3 id="transfer-title">Xác nhận chuyển RM</h3>
+          <p>Chuyển <strong>{customer.name}</strong> sang RM mới.</p>
+          <p className="transfer-route">
+            <code>{customer.currentAssignment.rmId}</code><span aria-hidden="true" className="arrow">→</span><code>{target}</code>
+          </p>
+          <p className="transfer-reason">Lý do: {reason.trim()}</p>
+          <p className={customer.pendingProposals.count > 0 ? 'transfer-warning' : 'hint'}>
+            {customer.pendingProposals.count > 0
+              ? `${customer.pendingProposals.count} đề xuất đang chờ duyệt sẽ bị hủy`
+              : 'Khách hàng không có đề xuất đang chờ duyệt.'}
+          </p>
+          <div className="dialog-actions">
+            <button type="button" className="secondary" onClick={closeDialog}>Hủy</button>
+            <button type="button" onClick={() => { closeDialog(); void transfer(); }}>Chuyển khách hàng</button>
+          </div>
+        </dialog>
       ) : null}
     </>
   );

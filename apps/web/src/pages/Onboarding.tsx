@@ -42,6 +42,9 @@ export function Onboarding() {
     finally { setBusy(null); }
   };
 
+  const steps = ['Tra cứu', 'Chọn tài khoản', 'Gửi lời mời'];
+  const currentStep = invitation ? steps.length : account ? 2 : lookup ? 1 : 0;
+
   const message = (() => {
     if (!failure) return null;
     if (typeof failure === 'object' && 'validation' in failure) return String((failure as { validation: string }).validation);
@@ -51,6 +54,14 @@ export function Onboarding() {
   return (
     <>
       <PageTitle title="Đăng ký khách hàng" hint="Tra cứu khách hàng từ hệ thống lõi, chọn tài khoản VND của chính khách hàng và gửi lời mời dịch vụ." />
+      <ol className="stepper" aria-label="Tiến trình đăng ký">
+        {steps.map((label, index) => (
+          <li key={label} aria-current={index === currentStep ? 'step' : undefined} className={index < currentStep ? 'done' : index === currentStep ? 'current' : ''}>
+            <span className="stepper-dot" aria-hidden="true">{index < currentStep ? '✓' : index + 1}</span>
+            <span className="stepper-label">{label}</span>
+          </li>
+        ))}
+      </ol>
       <form className="inline-form" onSubmit={event => void search(event)}>
         <div className="field">
           <label htmlFor="cif">Mã CIF hoặc định danh</label>

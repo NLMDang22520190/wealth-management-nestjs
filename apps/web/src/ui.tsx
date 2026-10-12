@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ClipboardEvent, KeyboardEvent, ReactNode } from 'react';
 import { api, describe, isAbort } from './api';
 
 export interface Loaded<T> { data: T | undefined; error: unknown; loading: boolean; reload: () => void }
@@ -77,6 +77,65 @@ export function OtpInbox({ challengeId }: { challengeId: string }) {
       ) : null}
     </div>
   );
+}
+
+const OTP_LENGTH = 6;
+const RESEND_SECONDS = 30;
+
+/** Six single-digit boxes. Owns its digits: remount it (change `key`) to clear it. Reports the digits typed so far; six means complete. */
+export function OtpCodeInput({ onChange, disabled }: { onChange: (code: string) => void; disabled?: boolean }) {
+  const [digits, setDigits] = useState<string[]>(() => Array.from({ length: OTP_LENGTH }, () => ''));
+  const boxes = useRef<Array<HTMLInputElement | null>>([]);
+  const update = (next: string[]) => { setDigits(next); onChange(next.join('')); };
+  const focusBox = (position: number) => boxes.current[Math.max(0, Math.min(OTP_LENGTH - 1, position))]?.focus();
+
+  const type = (position: number, raw: string) => {
+    const typed = raw.replace(/\D/g, '');
+    const next = [...digits];
+    next[position] = typed.slice(-1);
+    update(next);
+    if (typed && position < OTP_LENGTH - 1) focusBox(position + 1);
+  };
+  const press = (position: number, event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Backspace' && digits[position] === '' && position > 0) { event.preventDefault(); focusBox(position - 1); }
+    else if (event.key === 'ArrowLeft') { event.preventDefault(); focusBox(position - 1); }
+    else if (event.key === 'ArrowRight') { event.preventDefault(); focusBox(position + 1); }
+  };
+  const paste = (position: number, event: ClipboardEvent<HTMLInputElement>) => {
+    const text = event.clipboardData.getData('text') || event.clipboardData.getData('text/plain');
+    const pasted = text.replace(/\D/g, '');
+    if (!pasted) return;
+    event.preventDefault();
+    const next = [...digits];
+    const start = pasted.length >= OTP_LENGTH ? 0 : position;
+    [...pasted.slice(0, OTP_LENGTH - start)].forEach((digit, offset) => { next[start + offset] = digit; });
+    update(next);
+    focusBox(Math.min(start + pasted.length, OTP_LENGTH) - 1);
+  };
+
+  return (
+    <div role="group" aria-label="Mã OTP" className="otp-boxes">
+      {digits.map((digit, position) => (
+        <input key={position} ref={element => { boxes.current[position] = element; }} className="otp-box" aria-label={`Chữ số ${position + 1}`}
+          value={digit} maxLength={1} inputMode="numeric" autoComplete={position === 0 ? 'one-time-code' : 'off'} disabled={disabled}
+          onChange={event => type(position, event.target.value)} onKeyDown={event => press(position, event)}
+          onPaste={event => paste(position, event)} onFocus={event => event.target.select()} />
+      ))}
+    </div>
+  );
+}
+
+/** Countdown, then a button to request a fresh code. Remount (change `key`) when a new challenge is issued. */
+export function ResendCode({ onResend, busy }: { onResend: () => void; busy: boolean }) {
+  const [left, setLeft] = useState(RESEND_SECONDS);
+  useEffect(() => {
+    if (left <= 0) return undefined;
+    const timer = setTimeout(() => setLeft(value => value - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [left]);
+  return left > 0
+    ? <p className="hint resend">Gửi lại mã sau {left}s</p>
+    : <button type="button" className="secondary resend" onClick={onResend} disabled={busy}>Gửi lại mã</button>;
 }
 
 export interface Allocation { cash: number; deposit: number; bond: number; fund: number }

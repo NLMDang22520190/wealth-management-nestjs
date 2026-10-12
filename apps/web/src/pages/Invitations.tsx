@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, describe, intentDone, intentKey } from '../api';
 import { formatDateTime } from '../format';
-import { Empty, ErrorAlert, Loading, OtpInbox, PageTitle, Panel, useLoad } from '../ui';
+import { Empty, ErrorAlert, Loading, OtpCodeInput, OtpInbox, PageTitle, Panel, ResendCode, useLoad } from '../ui';
 
 interface Invitation { id: string; status: string; expiresAt: string; termsVersion: string }
 interface Detail extends Invitation { terms: string }
@@ -68,14 +68,11 @@ function InvitationCard({ item }: { item: Invitation }) {
           <button type="button" onClick={() => void sendOtp()} disabled={!agreed || busy}>Gửi mã OTP</button>
           {challenge ? (
             <div className="otp-step">
-              <OtpInbox challengeId={challenge.challengeId} />
+              <OtpInbox key={`inbox-${challenge.challengeId}`} challengeId={challenge.challengeId} />
               <p className="hint">Mã có hiệu lực đến {formatDateTime(challenge.expiresAt)}.</p>
-              <div className="field">
-                <label htmlFor={`otp-${item.id}`}>Mã OTP</label>
-                <input id={`otp-${item.id}`} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                  inputMode="numeric" autoComplete="off" maxLength={6} />
-              </div>
-              <button type="button" onClick={() => void confirm()} disabled={busy}>Xác nhận đồng ý</button>
+              <OtpCodeInput key={challenge.challengeId} onChange={setCode} disabled={busy} />
+              <ResendCode key={`resend-${challenge.challengeId}`} onResend={() => void sendOtp()} busy={busy} />
+              <button type="button" onClick={() => void confirm()} disabled={busy || code.length < 6}>Xác nhận đồng ý</button>
             </div>
           ) : null}
         </>
