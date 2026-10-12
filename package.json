@@ -7,6 +7,7 @@
   "engines": { "node": "24.20.0" },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "start:api": "npm run build --workspace @wms/api && npm run start --workspace @wms/api",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "oxlint apps/api/src",
     "test:api": "npm run build --workspace @wms/api && vitest run"
