@@ -8,6 +8,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "start:api": "npm run build --workspace @wms/api && npm run start --workspace @wms/api",
+    "seed:demo": "npm run build --workspace @wms/api && node scripts/seed-demo.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "oxlint apps/api/src",
     "test:api": "npm run build --workspace @wms/api && vitest run"
