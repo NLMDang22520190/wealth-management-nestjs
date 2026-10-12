@@ -41,7 +41,7 @@ sequenceDiagram
 
 ## Quy tắc chấm điểm
 
-| Tổng điểm | Nhóm | Mức rủi ro sản phẩm tối đa | Tiền / Trái phiếu / Chứng chỉ quỹ / Cổ phiếu |
+| Tổng điểm | Nhóm | Mức rủi ro sản phẩm tối đa | Tiền / Tiền gửi / Trái phiếu / Quỹ |
 |---|---|---|---|
 | 10–20 | Conservative | 2 | 10% / 50% / 30% / 10% |
 | 21–35 | Balanced | 3 | 5% / 30% / 30% / 35% |
@@ -52,3 +52,4 @@ Hồ sơ có thời hạn 12 tháng lịch; ngày cuối tháng được điều
 ## Ranh giới tích hợp
 
 OTP và Core trong repo là adapter demo, không phải kết nối ngân hàng thật. Phần 3 cung cấp dữ liệu holdings và cảnh báo để Phần 1 đọc; thuật toán định giá đầy đủ thuộc người phụ trách Phần 3. Audit chỉ lưu metadata và before/after đã lọc, không lưu mã OTP hay access token.
+
