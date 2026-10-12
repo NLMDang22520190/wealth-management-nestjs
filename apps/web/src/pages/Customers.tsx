@@ -81,8 +81,8 @@ export function CustomerList() {
               <table className="customers" role="table">
                 <thead role="rowgroup">
                   <tr role="row">
-                    <th scope="col" role="columnheader">Khách hàng</th><th scope="col">Rủi ro</th><th scope="col">Hết hạn hồ sơ</th>
-                    <th scope="col" className="num">AUM</th><th scope="col" className="num">Đề xuất</th><th scope="col" className="num">Cảnh báo</th>
+                    <th scope="col" role="columnheader">Khách hàng</th><th scope="col" role="columnheader">Rủi ro</th><th scope="col" role="columnheader">Hết hạn hồ sơ</th>
+                    <th scope="col" role="columnheader" className="num">AUM</th><th scope="col" role="columnheader" className="num">Đề xuất</th><th scope="col" role="columnheader" className="num">Kiểm tra chờ</th>
                   </tr>
                 </thead>
                 <tbody role="rowgroup">
@@ -93,7 +93,7 @@ export function CustomerList() {
                       <td role="cell" data-label="Hết hạn hồ sơ">{row.currentRisk ? <>{formatDate(row.currentRisk.expiresAt)}{row.currentRisk.valid ? '' : ' (quá hạn)'}</> : <span className="muted">Chưa có</span>}</td>
                       <td role="cell" className="num" data-label="AUM"><AumCell aum={row.aum} /></td>
                       <td role="cell" className="num" data-label="Đề xuất">{row.pendingProposals.count}</td>
-                      <td role="cell" className={`num c-drift${row.driftAlerts.count > 0 ? ' has-alert' : ''}`}>Cảnh báo drift: {row.driftAlerts.count}</td>
+                      <td role="cell" className={`num c-drift${row.driftAlerts.count > 0 ? ' has-alert' : ''}`}>Kiểm tra danh mục chờ: {row.driftAlerts.count}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -145,7 +145,7 @@ export function CustomerDetail({ customerId }: { customerId: string }) {
           </Panel>
           <Panel title="Công việc cần theo dõi">
             <p>Đề xuất chờ duyệt: {customer.pendingProposals.count}</p>
-            <p>Cảnh báo lệch rủi ro: {customer.driftAlerts.count}</p>
+            <p>Kiểm tra danh mục chờ: {customer.driftAlerts.count}</p>
           </Panel>
         </>
       ) : null}
