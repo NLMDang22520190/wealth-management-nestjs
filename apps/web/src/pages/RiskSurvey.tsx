@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { api, describe, intentDone, intentKey } from '../api';
 import { formatDateTime, riskLabel } from '../format';
 import type { Allocation } from '../ui';
-import { AllocationSummary, ErrorAlert, Loading, OtpCodeInput, OtpInbox, PageTitle, Panel, ResendCode, useLoad } from '../ui';
+import { AlertAction, AllocationSummary, Choice, ErrorAlert, Loading, OtpCodeInput, OtpInbox, PageTitle, Panel, ResendCode, choiceInput, useLoad } from '../ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 
 interface Questionnaire { version: string; questions: Array<{ id: string; text: string; options: Array<{ id: string; text: string }> }> }
 interface Draft { id: string; score: number; category: string; maxProductRisk: number; allocation: Allocation; expiresAt: string; expectedCurrentProfileVersion: number }
@@ -72,8 +75,8 @@ export function RiskSurvey() {
     return (
       <>
         <PageTitle title="Khảo sát rủi ro" />
-        <Panel title="Hoàn tất" className="success">
-          <p className="success-line">Đã xác nhận hồ sơ rủi ro</p>
+        <Panel title="Hoàn tất" tone="success">
+          <p className="font-semibold text-ok">Đã xác nhận hồ sơ rủi ro</p>
           <p>Hồ sơ mới có hiệu lực ngay. Mở mục Hồ sơ rủi ro để xem điểm, ngày hết hạn và lịch sử.</p>
         </Panel>
       </>
@@ -83,38 +86,36 @@ export function RiskSurvey() {
   return (
     <>
       <PageTitle title="Khảo sát rủi ro" hint="Trả lời mười câu hỏi. Điểm và mức rủi ro do hệ thống tính; kết quả dự kiến chỉ có hiệu lực sau khi bạn xác nhận bằng OTP." />
-      {questionnaire.loading ? <Loading /> : null}
-      {questionnaire.error ? <ErrorAlert>{describe(questionnaire.error, surveyErrors)} <button type="button" className="link" onClick={questionnaire.reload}>Thử lại</button></ErrorAlert> : null}
+      {questionnaire.loading ? <Loading skeleton /> : null}
+      {questionnaire.error ? <ErrorAlert>{describe(questionnaire.error, surveyErrors)} <AlertAction onClick={questionnaire.reload}>Thử lại</AlertAction></ErrorAlert> : null}
       {questionnaire.data ? (
         <>
-          <div className="progress">
-            <div role="progressbar" aria-label="Tiến độ khảo sát" aria-valuemin={0} aria-valuemax={questions.length} aria-valuenow={answered}>
-              <span style={{ width: `${(answered / questions.length) * 100}%` }} />
-            </div>
-            <span>{answered}/{questions.length} câu</span>
+          <div className="sticky top-0 z-10 mb-4 flex items-center gap-3 bg-background py-2.5 text-[0.9rem] font-semibold">
+            <Progress className="flex-1" aria-label="Tiến độ khảo sát" aria-valuemin={0} aria-valuemax={questions.length} aria-valuenow={answered} value={answered} max={questions.length} />
+            <span className="tabular-nums">{answered}/{questions.length} câu</span>
           </div>
           {questions[step] ? (() => {
             const question = questions[step]!;
             const last = step === questions.length - 1;
             const isAnswered = Boolean(answers[question.id]);
             return (
-              <div key={question.id} className="question">
-                <p className="question-step">Câu {step + 1}/{questions.length}</p>
-                <p id={`q-${question.id}`} ref={questionHeading} tabIndex={-1} className="question-text">{question.text}</p>
-                <div role="radiogroup" aria-labelledby={`q-${question.id}`} className="options">
+              <div key={question.id} className="mb-5 rounded-xl border bg-card p-[18px] shadow-sm">
+                <p className="mb-1.5 text-[0.82rem] font-semibold text-accent-foreground tabular-nums">Câu {step + 1}/{questions.length}</p>
+                <p id={`q-${question.id}`} ref={questionHeading} tabIndex={-1} className="mb-3.5 text-[1.12rem] leading-snug font-semibold outline-none">{question.text}</p>
+                <div role="radiogroup" aria-labelledby={`q-${question.id}`}>
                   {question.options.map(option => (
-                    <label key={option.id} className="choice">
-                      <input type="radio" name={`q-${question.id}`} value={option.id}
+                    <Choice key={option.id}>
+                      <input type="radio" className={choiceInput} name={`q-${question.id}`} value={option.id}
                         checked={answers[question.id] === option.id} onChange={() => choose(question.id, option.id)} />
                       <span>{option.text}</span>
-                    </label>
+                    </Choice>
                   ))}
                 </div>
-                <div className="wizard-nav">
-                  <button type="button" className="secondary" onClick={() => goTo(step - 1)} disabled={step === 0 || busy}>Câu trước</button>
+                <div className="mt-4 flex justify-between gap-3 *:max-sm:flex-1 *:sm:min-w-[132px] *:only:ml-auto">
+                  <Button type="button" variant="outline" onClick={() => goTo(step - 1)} disabled={step === 0 || busy}>Câu trước</Button>
                   {last
-                    ? <button type="button" onClick={() => void preview()} disabled={!isAnswered || busy}>Xem kết quả dự kiến</button>
-                    : <button type="button" onClick={() => goTo(step + 1)} disabled={!isAnswered}>Câu tiếp</button>}
+                    ? <Button type="button" onClick={() => void preview()} disabled={!isAnswered || busy}>Xem kết quả dự kiến</Button>
+                    : <Button type="button" onClick={() => goTo(step + 1)} disabled={!isAnswered}>Câu tiếp</Button>}
                 </div>
               </div>
             );
@@ -122,19 +123,19 @@ export function RiskSurvey() {
           {busy ? <Loading label="Đang xử lý…" /> : null}
           {failure ? <ErrorAlert>{failure}</ErrorAlert> : null}
           {draft ? (
-            <Panel title="Kết quả dự kiến" className="preview">
-              <p className="result-category">{riskLabel(draft.category)}</p>
+            <Panel title="Kết quả dự kiến" tone="preview">
+              <p className="mb-1 text-[1.9rem] leading-tight font-bold">{riskLabel(draft.category)}</p>
               <p>Điểm: {draft.score}</p>
               <AllocationSummary maxProductRisk={draft.maxProductRisk} allocation={draft.allocation} />
-              <p className="badge wait">Bản nháp, chưa có hiệu lực</p>
-              <p className="hint">Bản xem trước dùng được đến {formatDateTime(draft.expiresAt)}.</p>
-              <button type="button" onClick={() => void sendOtp()} disabled={busy}>Gửi mã OTP</button>
+              <p><Badge variant="wait">Bản nháp, chưa có hiệu lực</Badge></p>
+              <p className="text-muted-foreground">Bản xem trước dùng được đến {formatDateTime(draft.expiresAt)}.</p>
+              <Button type="button" onClick={() => void sendOtp()} disabled={busy}>Gửi mã OTP</Button>
               {challenge ? (
-                <div className="otp-step">
+                <div className="mt-4 border-t pt-4">
                   <OtpInbox key={`inbox-${challenge.challengeId}`} challengeId={challenge.challengeId} />
                   <OtpCodeInput key={challenge.challengeId} onChange={setCode} disabled={busy} />
                   <ResendCode key={`resend-${challenge.challengeId}`} onResend={() => void sendOtp()} busy={busy} />
-                  <button type="button" onClick={() => void confirm()} disabled={busy || code.length < 6}>Xác nhận hồ sơ rủi ro</button>
+                  <Button type="button" onClick={() => void confirm()} disabled={busy || code.length < 6}>Xác nhận hồ sơ rủi ro</Button>
                 </div>
               ) : null}
             </Panel>

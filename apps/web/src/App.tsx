@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { FormEvent, ReactNode } from 'react';
+import type { FormEvent } from 'react';
+import { ArrowLeftRight, ClipboardCheck, Mail, ShieldCheck, UserPlus, Users } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { api, describe, setToken } from './api';
 import { Assignments } from './pages/Assignments';
 import { CustomerDetail, CustomerList } from './pages/Customers';
@@ -8,6 +10,10 @@ import { Onboarding } from './pages/Onboarding';
 import { RiskProfile } from './pages/RiskProfile';
 import { RiskSurvey } from './pages/RiskSurvey';
 import { ErrorAlert } from './ui';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { cn } from '@/lib/utils';
 
 type Role = 'RM' | 'LEADER' | 'CUSTOMER';
 interface Session { actorId: string; role: Role; serial: number }
@@ -28,13 +34,13 @@ const roleCards = [
   { actorId: 'leader-alpha', title: 'Trưởng nhóm', body: 'Xem tải của từng chuyên viên và chuyển khách giữa các chuyên viên trong nhóm.' },
 ];
 
-const icons: Record<string, ReactNode> = {
-  '#/onboarding': <path d="M15 19a6 6 0 0 0-12 0M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm10-3v6m3-3h-6" />,
-  '#/rm/customers': <path d="M17 20a5 5 0 0 0-10 0M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a4 4 0 0 0-3-3.9M17 4.1a4 4 0 0 1 0 7.8M5 20a4 4 0 0 1 3-3.9M7 4.1a4 4 0 0 0 0 7.8" />,
-  '#/invitations': <path d="M4 6h16v12H4zM4 7l8 6 8-6" />,
-  '#/risk-survey': <path d="M9 4h6v3H9zM7 5H5v16h14V5h-2M8 12l2 2 4-4M8 17h8" />,
-  '#/risk-profile': <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Zm-3 9 2 2 4-4" />,
-  '#/assignments': <path d="M7 7h12l-3-3M17 17H5l3 3M19 7v4M5 17v-4" />,
+const icons: Record<string, LucideIcon> = {
+  '#/onboarding': UserPlus,
+  '#/rm/customers': Users,
+  '#/invitations': Mail,
+  '#/risk-survey': ClipboardCheck,
+  '#/risk-profile': ShieldCheck,
+  '#/assignments': ArrowLeftRight,
 };
 
 const navigation: Record<Role, Array<{ path: string; label: string }>> = {
@@ -51,28 +57,20 @@ function useHash(): string {
   );
 }
 
-function Icon({ path }: { path: string }) {
-  return (
-    <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      {icons[path]}
-    </svg>
-  );
-}
-
 function RoleSwitch({ session, choice, onChoice, busy, failure, onSubmit }: {
   session: Session | null; choice: string; onChoice: (actorId: string) => void; busy: boolean; failure: unknown; onSubmit: () => void;
 }) {
   const submit = (event: FormEvent) => { event.preventDefault(); onSubmit(); };
   return (
-    <form className="role-switch" onSubmit={submit}>
-      <label htmlFor="demo-role">Vai trò demo</label>
-      <div className="role-row">
-        <select id="demo-role" value={choice} onChange={event => onChoice(event.target.value)}>
-          {demoActors.map(actor => <option key={actor.id} value={actor.id}>{actor.label}</option>)}
-        </select>
-        <button type="submit" disabled={busy}>Chuyển vai</button>
+    <form className="flex flex-col gap-1.5 rounded-lg bg-white/6 p-2.5" onSubmit={submit}>
+      <label htmlFor="demo-role" className="text-[0.78rem] font-medium text-sidebar-foreground">Vai trò demo</label>
+      <div className="flex flex-wrap gap-2 lg:flex-col">
+        <NativeSelect id="demo-role" className="flex-[1_1_160px] lg:flex-none" value={choice} onChange={event => onChoice(event.target.value)}>
+          {demoActors.map(actor => <NativeSelectOption key={actor.id} value={actor.id}>{actor.label}</NativeSelectOption>)}
+        </NativeSelect>
+        <Button type="submit" variant="gold" disabled={busy} className="flex-none whitespace-nowrap lg:w-full">Chuyển vai</Button>
       </div>
-      <p className="current-role" aria-live="polite">{session ? `Đang dùng vai: ${session.actorId}` : 'Chưa chọn vai'}</p>
+      <p className="m-0 text-[0.8rem] text-[#f0d39a]" aria-live="polite">{session ? `Đang dùng vai: ${session.actorId}` : 'Chưa chọn vai'}</p>
       {failure ? <ErrorAlert>{describe(failure)}</ErrorAlert> : null}
     </form>
   );
@@ -98,8 +96,8 @@ function Screen({ session, hash }: { session: Session; hash: string }) {
   }
   const first = navigation[session.role][0]!;
   return (
-    <section className="welcome">
-      <h2>Chọn một mục để bắt đầu</h2>
+    <section className="max-w-[920px]">
+      <h2 className="mt-2 mb-2 text-[1.9rem] leading-tight font-bold lg:text-[2.2rem]">Chọn một mục để bắt đầu</h2>
       <p>Mục này không dành cho vai hiện tại. Dùng thanh điều hướng, hoặc mở <a href={first.path}>{first.label}</a>.</p>
     </section>
   );
@@ -133,43 +131,51 @@ export function App() {
   };
 
   return (
-    <div className="app">
-      <header className="masthead">
-        <div className="masthead-row">
-          <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+    <div className="min-h-screen lg:grid lg:grid-cols-[264px_minmax(0,1fr)] lg:bg-[linear-gradient(to_right,var(--sidebar)_264px,var(--background)_264px)]">
+      <header className="flex flex-col gap-3 bg-sidebar px-4 pt-3.5 pb-3 text-white lg:sticky lg:top-0 lg:h-screen lg:gap-[22px] lg:px-4 lg:py-[22px] [&_:focus-visible]:outline-[#ffd877]">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
+          <svg className="size-[30px] flex-none text-gold" viewBox="0 0 32 32" aria-hidden="true">
             <rect width="32" height="32" rx="9" fill="currentColor" />
             <path d="M7 21c3-1 4-9 7-9s3 6 6 6 3-7 5-9" fill="none" stroke="#102a4c" strokeWidth="2.6" strokeLinecap="round" />
           </svg>
-          <h1>WealthFlow</h1>
-          <span className="demo-flag">Môi trường demo</span>
+          <h1 className="m-0 text-[1.3rem] leading-tight font-bold">WealthFlow</h1>
+          <span className="rounded-full bg-gold/15 px-2.5 py-0.5 text-xs font-medium text-[#f0d39a]">Môi trường demo</span>
         </div>
         {session ? (
-          <nav aria-label="Điều hướng chính">
-            <ul>
-              {navigation[session.role].map(item => (
-                <li key={item.path}>
-                  <a href={item.path} aria-current={hash === item.path || (item.path === '#/rm/customers' && hash.startsWith('#/rm/customers/')) ? 'page' : undefined}>
-                    <Icon path={item.path} />{item.label}
-                  </a>
-                </li>
-              ))}
+          <nav aria-label="Điều hướng chính" className="lg:flex-1">
+            <ul className="m-0 flex list-none flex-wrap gap-1 p-0 lg:flex-col">
+              {navigation[session.role].map(item => {
+                const Icon = icons[item.path]!;
+                const current = hash === item.path || (item.path === '#/rm/customers' && hash.startsWith('#/rm/customers/'));
+                return (
+                  <li key={item.path} className="flex-none">
+                    <a href={item.path} aria-current={current ? 'page' : undefined}
+                      className={cn('flex items-center gap-2.5 rounded-lg px-3 py-2.5 font-medium whitespace-nowrap no-underline transition-colors',
+                        current ? 'bg-white font-semibold text-sidebar' : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-white')}>
+                      <Icon className={cn('size-5 flex-none', current && 'text-primary')} strokeWidth={1.8} aria-hidden="true" />{item.label}
+                    </a>
+                  </li>
+                );
+              })}
             </ul>
           </nav>
         ) : null}
         <RoleSwitch session={session} choice={choice} onChoice={setChoice} busy={busy} failure={failure} onSubmit={() => void become(choice)} />
       </header>
-      <main ref={main} tabIndex={-1}>
+      <main ref={main} tabIndex={-1} className="mx-auto w-full max-w-[1080px] px-4 pt-6 pb-16 md:px-8 md:pt-8 md:pb-[72px] lg:m-0 lg:max-w-[1120px] lg:px-12 lg:pt-10 lg:pb-20">
         {session ? <Screen key={`${session.serial}:${hash.startsWith('#/rm/customers/') ? 'detail' : hash}`} session={session} hash={hash} />
           : (
-            <section className="welcome">
-              <h2>Chọn vai demo để bắt đầu</h2>
-              <p className="hint">Đây là môi trường demo với dữ liệu tổng hợp. Chọn một vai bên dưới, hoặc dùng bộ chọn vai rồi bấm Chuyển vai.</p>
-              <ul className="role-cards">
+            <section className="max-w-[920px]">
+              <h2 className="mt-2 mb-2 text-[1.9rem] leading-tight font-bold lg:text-[2.2rem]">Chọn vai demo để bắt đầu</h2>
+              <p className="mb-6 max-w-[60ch] text-muted-foreground">Đây là môi trường demo với dữ liệu tổng hợp. Chọn một vai bên dưới, hoặc dùng bộ chọn vai rồi bấm Chuyển vai.</p>
+              <ul className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-3.5 p-0">
                 {roleCards.map(card => (
-                  <li key={card.actorId}>
-                    <h3>{card.title}</h3>
-                    <p>{card.body}</p>
-                    <button type="button" className="secondary" disabled={busy} onClick={() => void become(card.actorId)}>Dùng vai {card.actorId}</button>
+                  <li key={card.actorId} className="flex">
+                    <Card className="w-full gap-2 p-5 shadow-sm [--card-spacing:--spacing(0)]">
+                      <h3 className="m-0 text-[1.05rem] font-semibold">{card.title}</h3>
+                      <p className="m-0 mb-1.5 flex-1 text-muted-foreground">{card.body}</p>
+                      <Button type="button" variant="outline" className="self-start" disabled={busy} onClick={() => void become(card.actorId)}>Dùng vai {card.actorId}</Button>
+                    </Card>
                   </li>
                 ))}
               </ul>
