@@ -68,7 +68,7 @@ function RoleSwitch({ session, choice, onChoice, busy, failure, onSubmit }: {
         <NativeSelect id="demo-role" className="flex-[1_1_160px] lg:flex-none" value={choice} onChange={event => onChoice(event.target.value)}>
           {demoActors.map(actor => <NativeSelectOption key={actor.id} value={actor.id}>{actor.label}</NativeSelectOption>)}
         </NativeSelect>
-        <Button type="submit" variant="gold" disabled={busy} className="flex-none whitespace-nowrap lg:w-full">Chuyển vai</Button>
+        <Button type="submit" variant="outline" disabled={busy} className="flex-none border-white/45 bg-transparent whitespace-nowrap text-sidebar-foreground hover:border-white/80 hover:bg-white/10 hover:text-sidebar-foreground disabled:border-white/25 disabled:bg-transparent disabled:text-sidebar-foreground/70 lg:w-full">Chuyển vai</Button>
       </div>
       <p className="m-0 text-[0.8rem] text-[#f0d39a]" aria-live="polite">{session ? `Đang dùng vai: ${session.actorId}` : 'Chưa chọn vai'}</p>
       {failure ? <ErrorAlert>{describe(failure)}</ErrorAlert> : null}

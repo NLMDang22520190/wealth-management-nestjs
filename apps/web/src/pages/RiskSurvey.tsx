@@ -125,7 +125,10 @@ export function RiskSurvey() {
           {draft ? (
             <Panel title="Kết quả dự kiến" tone="preview">
               <p className="mb-1 text-[1.9rem] leading-tight font-bold">{riskLabel(draft.category)}</p>
-              <p>Điểm: {draft.score}</p>
+              <p className="mb-2 flex items-baseline text-[0.9rem] font-medium text-muted-foreground">
+                <span>Điểm: </span>
+                <strong data-testid="risk-score" className="ml-1.5 text-[1.6rem] leading-none font-bold text-foreground tabular-nums">{draft.score}</strong>
+              </p>
               <AllocationSummary maxProductRisk={draft.maxProductRisk} allocation={draft.allocation} />
               <p><Badge variant="wait">Bản nháp, chưa có hiệu lực</Badge></p>
               <p className="text-muted-foreground">Bản xem trước dùng được đến {formatDateTime(draft.expiresAt)}.</p>

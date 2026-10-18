@@ -1,9 +1,10 @@
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api, describe, intentDone, intentKey } from '../api';
 import { riskLabel } from '../format';
-import { AlertAction, Empty, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, useLoad } from '../ui';
+import { AlertAction, BusyButton, Empty, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, useLoad } from '../ui';
+import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -187,7 +188,7 @@ export function Assignments() {
             <Button type="button" variant="outline" className="self-start" onClick={() => setRosterPage(rosterPage + 1)} disabled={rosterBusy}>Tải thêm khách hàng</Button>
           ) : null}
         </Field>
-        <Button type="submit" disabled={busy} className="mb-3.5">Tải thông tin khách hàng</Button>
+        <BusyButton type="submit" busy={busy} className="mb-3.5">Tải thông tin khách hàng</BusyButton>
       </form>
       {rosterError ? <ErrorAlert>{describe(rosterError)} <AlertAction onClick={() => setRosterTick(value => value + 1)}>Thử lại</AlertAction></ErrorAlert> : null}
       {busy ? <Loading label="Đang xử lý…" /> : null}
@@ -233,11 +234,9 @@ export function Assignments() {
               <code>{customer.currentAssignment.rmId}</code><ArrowRight aria-hidden="true" className="size-4 text-primary" /><code>{target}</code>
             </p>
             <p className="m-0 text-muted-foreground">Lý do: {reason.trim()}</p>
-            <p className={cn('m-0', customer.pendingProposals.count > 0 ? 'rounded-lg bg-wait-soft px-3.5 py-2.5 font-semibold text-wait' : 'text-muted-foreground')}>
-              {customer.pendingProposals.count > 0
-                ? `${customer.pendingProposals.count} đề xuất đang chờ duyệt sẽ bị hủy`
-                : 'Khách hàng không có đề xuất đang chờ duyệt.'}
-            </p>
+            {customer.pendingProposals.count > 0
+              ? <Alert className="border-wait/30 bg-wait-soft px-3.5 py-2.5 font-semibold text-wait"><TriangleAlert aria-hidden="true" />{`${customer.pendingProposals.count} đề xuất đang chờ duyệt sẽ bị hủy`}</Alert>
+              : <p className="m-0 text-muted-foreground">Khách hàng không có đề xuất đang chờ duyệt.</p>}
             <DialogFooter className="-mx-6 -mb-6 mt-2 p-4">
               <Button type="button" variant="outline" onClick={closeDialog}>Hủy</Button>
               <Button type="button" onClick={() => { closeDialog(); void transfer(); }}>Chuyển khách hàng</Button>

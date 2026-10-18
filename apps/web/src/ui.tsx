@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ClipboardEvent, KeyboardEvent, ReactNode } from 'react';
+import type { ClipboardEvent, ComponentProps, KeyboardEvent, ReactNode } from 'react';
 import { CircleAlert, Loader2 } from 'lucide-react';
 import { api, describe, isAbort } from './api';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -96,7 +96,7 @@ export function Field({ label, htmlFor, children, className }: { label: string; 
 /** A whole-row choice around a native radio/checkbox, so keyboard and screen readers behave natively. */
 export function Choice({ children }: { children: ReactNode }) {
   return (
-    <label className="mb-2 flex cursor-pointer items-start gap-3 rounded-lg border bg-card px-3.5 py-3 transition-colors hover:border-input has-checked:border-primary has-checked:bg-accent has-checked:ring-1 has-checked:ring-primary has-focus-visible:ring-3 has-focus-visible:ring-ring/50">
+    <label className="mb-2 flex scroll-mt-24 cursor-pointer items-start gap-3 rounded-lg border bg-card px-3.5 py-3 transition-colors hover:border-input has-checked:border-primary has-checked:bg-accent has-checked:ring-1 has-checked:ring-primary has-focus-visible:ring-3 has-focus-visible:ring-ring/50">
       {children}
     </label>
   );
@@ -197,21 +197,24 @@ export function ResendCode({ onResend, busy }: { onResend: () => void; busy: boo
 export interface Allocation { cash: number; deposit: number; bond: number; fund: number }
 
 const allocationRows: Array<[keyof Allocation, string]> = [['cash', 'Tiền mặt'], ['deposit', 'Tiền gửi'], ['bond', 'Trái phiếu'], ['fund', 'Chứng chỉ quỹ']];
-const segment: Record<keyof Allocation, string> = { cash: 'bg-slate-400', deposit: 'bg-risk-conservative', bond: 'bg-risk-balanced', fund: 'bg-gold' };
+const segment: Record<keyof Allocation, string> = { cash: 'bg-slate-400', deposit: 'bg-risk-conservative', bond: 'bg-risk-balanced', fund: 'bg-risk-growth' };
 
 /** Server-owned risk result details: maximum product risk and the target asset allocation. */
 export function AllocationSummary({ maxProductRisk, allocation }: { maxProductRisk: number; allocation: Allocation }) {
   return (
     <>
-      <p className="font-medium">Rủi ro sản phẩm tối đa: {maxProductRisk}</p>
-      <div className="my-1.5 mb-3 flex h-3 overflow-hidden rounded-full bg-border" aria-hidden="true">
+      <p className="mb-2 flex items-baseline text-[0.9rem] font-medium text-muted-foreground">
+        <span>Rủi ro sản phẩm tối đa: </span>
+        <strong data-testid="risk-max-product" className="ml-1.5 text-[1.6rem] leading-none font-bold text-foreground tabular-nums">{maxProductRisk}</strong>
+      </p>
+      <div data-testid="allocation-bar" className="my-1.5 mb-3 flex h-3 gap-0.5 overflow-hidden rounded-full bg-card" aria-hidden="true">
         {allocationRows.map(([key]) => <span key={key} className={cn('block h-full', segment[key])} style={{ width: `${allocation[key]}%` }} />)}
       </div>
-      <ul className="m-0 mb-2.5 grid list-none grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-x-3 gap-y-2 p-0" aria-label="Phân bổ tài sản">
+      <ul className="m-0 mb-2.5 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2" aria-label="Phân bổ tài sản">
         {allocationRows.map(([key, label]) => (
           <li key={key} className="flex items-center justify-between gap-2 rounded-lg border bg-muted px-3 py-2">
-            <span><i className={cn('mr-2 inline-block size-[9px] rounded-full align-middle', segment[key])} aria-hidden="true" />{label}</span>
-            <strong>{allocation[key]}%</strong>
+            <span className="whitespace-nowrap"><i data-testid="allocation-swatch" className={cn('mr-2 inline-block size-[9px] rounded-full align-middle', segment[key])} aria-hidden="true" />{label}</span>
+            <strong className="whitespace-nowrap">{allocation[key]}%</strong>
           </li>
         ))}
       </ul>
@@ -231,4 +234,13 @@ export function Facts({ children }: { children: ReactNode }) {
 }
 export function Fact({ label, children }: { label: string; children: ReactNode }) {
   return <div className="min-w-0"><dt className="mb-0.5 text-[0.8rem] text-muted-foreground">{label}</dt><dd className="m-0 font-semibold">{children}</dd></div>;
+}
+
+/** Submit/action button that shows a spinner and "Đang gửi…" while its request is in flight; disabled meanwhile. */
+export function BusyButton({ busy, disabled, children, ...props }: ComponentProps<typeof Button> & { busy: boolean }) {
+  return (
+    <Button {...props} disabled={disabled || busy} aria-busy={busy || undefined}>
+      {busy ? <><Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" data-icon="inline-start" />Đang gửi…</> : children}
+    </Button>
+  );
 }
