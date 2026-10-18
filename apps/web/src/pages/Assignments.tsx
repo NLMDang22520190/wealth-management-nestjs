@@ -73,12 +73,18 @@ export function Assignments() {
     wasConfirming.current = confirming;
   }, [confirming]);
   const closeDialog = () => setConfirming(false);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (notice) noticeRef.current?.focus(); }, [notice]);
+  useEffect(() => {
+    // A selection that the narrowed list no longer offers must not linger as hidden state.
+    if (customerId && !options.some(item => item.customerId === customerId)) setCustomerId('');
+  }, [options, customerId]);
 
   const load = async (event: FormEvent) => {
     event.preventDefault();
     const id = customerId;
     setNotice(null); setFailure(null); setStale(false);
-    if (!id) { setCustomer(null); setFailure('Vui lòng chọn khách hàng.'); return; }
+    if (!id || !options.some(item => item.customerId === id)) { setCustomer(null); setFailure('Vui lòng chọn khách hàng.'); return; }
     setBusy(true);
     try { setCustomer(await fetchCustomer(id)); setTarget(''); setReason(''); }
     catch (error) { setCustomer(null); setFailure(error); }
@@ -150,14 +156,14 @@ export function Assignments() {
                   const ratio = used / rm.capacityLimit;
                   return (
                     <TableRow key={rm.rmId}>
-                      <TableHead scope="row" className="h-auto px-4 py-3 font-semibold"><code>{rm.rmId}</code></TableHead>
-                      <TableCell className="px-4 py-3">
-                        <span className="mr-2.5 inline-block h-2 w-24 overflow-hidden rounded-full bg-border align-middle" aria-hidden="true">
+                      <TableHead scope="row" className="h-auto px-2 py-3 font-semibold sm:px-4"><code title={rm.rmId} className="block max-w-[12ch] truncate sm:max-w-none">{rm.rmId}</code></TableHead>
+                      <TableCell className="px-2 py-3 sm:px-4">
+                        <span className="mr-2.5 hidden h-2 w-24 overflow-hidden rounded-full bg-border align-middle sm:inline-block" aria-hidden="true">
                           <span className={cn('block h-full rounded-full', ratio >= 0.9 ? 'bg-destructive' : ratio >= 0.7 ? 'bg-gold' : 'bg-primary')} style={{ width: `${Math.min(100, ratio * 100)}%` }} />
                         </span>
                         <span className="font-semibold tabular-nums">{used}/{rm.capacityLimit}</span>
                       </TableCell>
-                      <TableCell className="px-4 py-3">{rm.active ? 'Đang hoạt động' : 'Ngừng hoạt động'}</TableCell>
+                      <TableCell className="px-2 py-3 sm:px-4">{rm.active ? 'Đang hoạt động' : 'Ngừng hoạt động'}</TableCell>
                     </TableRow>
                   );
                 })}
@@ -191,7 +197,7 @@ export function Assignments() {
           {stale ? <> <AlertAction onClick={() => void reloadCurrent()}>Tải lại</AlertAction></> : null}
         </ErrorAlert>
       ) : null}
-      {notice ? <p role="status" className="mb-2 font-semibold text-ok">{notice}</p> : null}
+      {notice ? <p role="status" ref={noticeRef} tabIndex={-1} className="mb-2 font-semibold text-ok outline-none">{notice}</p> : null}
 
       {customer ? (
         <Panel title="Khách hàng cần chuyển">

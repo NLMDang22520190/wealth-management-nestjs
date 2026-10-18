@@ -43,7 +43,7 @@ export function Onboarding() {
         body: { cifRef: lookup.cifRef, selectedAccountId: account } });
       intentDone(name);
       setInvitation(created);
-    } catch (error) { setFailure(error); }
+    } catch (error) { setFailure({ validation: describe(error, { RATE_LIMITED: 'Bạn đã tạo quá nhiều lời mời trong một phút. Vui lòng thử lại sau.' }) }); }
     finally { setBusy(null); }
   };
 
@@ -72,7 +72,7 @@ export function Onboarding() {
                 current && 'border-primary bg-primary text-primary-foreground ring-4 ring-accent', done && 'border-primary bg-accent text-accent-foreground')}>
                 {done ? <Check className="size-4" strokeWidth={2.5} /> : index + 1}
               </span>
-              <span className="min-w-0">{label}</span>
+              <span className="min-w-0">{label}{done ? <span className="sr-only"> đã xong</span> : null}</span>
             </li>
           );
         })}
