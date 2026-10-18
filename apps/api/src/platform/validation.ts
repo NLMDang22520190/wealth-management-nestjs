@@ -24,7 +24,8 @@ export class StrictBodyPipe implements PipeTransform {
     if (metadata.type !== 'body') return value;
     const schema = metadata.metatype as unknown as ValidatedBody | undefined;
     if (!schema?.fields) return value;
-    const body = value as Record<string, unknown>;
+    // A missing body is an empty object so all-optional bodies (e.g. reminders) may be omitted; required fields still reject it.
+    const body = (value ?? {}) as Record<string, unknown>;
     if (!body || typeof body !== 'object' || Array.isArray(body)
       || Object.keys(body).some(key => !Object.hasOwn(schema.fields, key))
       || Object.entries(schema.fields).some(([key, rule]) => !rule(body[key]))) {

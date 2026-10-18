@@ -40,11 +40,14 @@ export class RmAssignmentService {
       LEFT JOIN mock_actors m ON m.role='RM' AND m.rm_id=a.rm_id
       WHERE a.team_id=$1${filter}`;
     const [count] = await this.database.query(`SELECT count(*)::integer AS total ${from}`, params);
-    const rows = await this.database.query(`SELECT c.id,c.name,a.rm_id,m.actor_id AS rm_name,a.version ${from} ORDER BY c.name,c.id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, paging.pageSize, (paging.page - 1) * paging.pageSize]);
+    const rows = await this.database.query(`SELECT c.id,c.name,a.rm_id,m.actor_id AS rm_name,a.version,
+      EXISTS(SELECT 1 FROM wealth_services w JOIN risk_profiles r ON r.id=w.current_risk_profile_id WHERE w.customer_id=c.id AND r.expires_at>$${params.length + 3}) AS risk_valid,
+      (SELECT max(n.created_at) FROM customer_notifications n WHERE n.customer_id=c.id AND n.kind='RISK_SURVEY_REMINDER') AS last_reminder_at ${from} ORDER BY c.name,c.id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, paging.pageSize, (paging.page - 1) * paging.pageSize, this.options.clock.now()]);
     return { page: paging.page, pageSize: paging.pageSize, total: count.total,
-      items: rows.map((row: { id: string; name: string; rm_id: string; rm_name: string | null; version: number }) =>
-        ({ customerId: row.id, name: row.name, rmId: row.rm_id, rmName: row.rm_name ?? null, assignmentVersion: row.version })) };
+      items: rows.map((row: { id: string; name: string; rm_id: string; rm_name: string | null; version: number; risk_valid: boolean; last_reminder_at: Date | null }) =>
+        ({ customerId: row.id, name: row.name, rmId: row.rm_id, rmName: row.rm_name ?? null, assignmentVersion: row.version,
+          riskProfileValid: row.risk_valid, lastReminderAt: row.last_reminder_at ? row.last_reminder_at.toISOString() : null })) };
   }
 
   async assign(actor: Actor, customerId: string, body: RmAssignmentBody, key: string | undefined, context: AuditContext) {
@@ -58,6 +61,10 @@ export class RmAssignmentService {
         if (!destination.active) throw new ApiError(422, 'RM_INACTIVE', 'Relationship manager is inactive');
         const [service] = await manager.query('SELECT status FROM wealth_services WHERE customer_id=$1', [customerId]);
         if (service?.status !== 'ACTIVE') throw new ApiError(422, 'SERVICE_INACTIVE', 'Wealth service is inactive');
+        // DECISION[D-R4b]: transfer needs a current, unexpired risk profile (survey answered and OTP-confirmed).
+        const [profile] = await manager.query(`SELECT 1 FROM wealth_services w JOIN risk_profiles r ON r.id=w.current_risk_profile_id
+          WHERE w.customer_id=$1 AND r.expires_at>$2`, [customerId, this.options.clock.now()]);
+        if (!profile) throw new ApiError(422, 'RISK_PROFILE_REQUIRED', 'Customer must complete the risk survey before transfer');
         if (current.version !== body.expectedAssignmentVersion) throw new ApiError(409, 'RM_ASSIGNMENT_STALE', 'Assignment changed; refresh before transferring');
         if (current.rm_id === body.targetRmId) return assignmentProjection(current, false);
         const now = this.options.clock.now();
