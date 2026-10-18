@@ -15,9 +15,11 @@ const SELECT = `
   SELECT s.id AS customer_id, s.name, s.status AS service_status, s.rm_id, s.team_id, s.version AS assignment_version,
     s.provisional, s.valid_from AS assigned_from, rp.id AS risk_id, rp.category AS risk_category, rp.version AS risk_version,
     rp.expires_at AS risk_expires_at, aum.value::text AS aum_value, aum.as_of AS aum_as_of, aum.provenance AS aum_provenance,
+    round(ia.balance,2)::text AS cash_value, ia.created_at AS cash_as_of,
     COALESCE(dr.count,0)::integer AS drift_count, COALESCE(pp.count,0)::integer AS pending_count
   FROM scope s
   LEFT JOIN risk_profiles rp ON rp.id=s.current_risk_profile_id
+  LEFT JOIN investment_accounts ia ON ia.customer_id=s.id
   LEFT JOIN (SELECT customer_id, sum(market_value) AS value, min(as_of) AS as_of,
       CASE WHEN count(DISTINCT provenance)=1 THEN min(provenance) END AS provenance
     FROM (SELECT DISTINCT ON (customer_id,product_id) customer_id,product_id,market_value,as_of,provenance
