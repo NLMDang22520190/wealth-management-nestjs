@@ -79,7 +79,7 @@ function RoleSwitch({ session, choice, onChoice, busy, failure, onSubmit }: {
 interface Notification { id: string; kind: string; message: string; createdAt: string; readAt: string | null }
 
 /** Unread leader reminders for the signed-in customer, shown above every screen until dismissed. */
-function NotificationBanner() {
+function NotificationBanner({ onDismissed }: { onDismissed: () => void }) {
   const list = useLoad(signal => api<{ items: Notification[] }>('/notifications', { signal }), []);
   const [read, setRead] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -88,18 +88,22 @@ function NotificationBanner() {
   if (unread.length === 0) return null;
   const markRead = async (id: string) => {
     setBusy(id); setFailure(null);
-    try { await api(`/notifications/${id}/read`, { method: 'POST', body: {} }); setRead(previous => [...previous, id]); }
+    try { await api(`/notifications/${id}/read`, { method: 'POST', body: {} }); setRead(previous => [...previous, id]); onDismissed(); }
     catch (error) { setFailure(error); }
     finally { setBusy(null); }
   };
   return (
     <section role="region" aria-label="Thông báo" className="mb-5 grid gap-2">
       {unread.map(item => (
-        <div key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-wait/30 bg-wait-soft px-4 py-3 text-wait">
-          <Bell aria-hidden="true" className="size-4 flex-none" />
-          <p className="m-0 min-w-0 flex-1 font-semibold">Trưởng nhóm nhắc bạn hoàn thành khảo sát rủi ro (10 câu hỏi)</p>
-          <a href="#/risk-survey" className="font-semibold underline underline-offset-4">Làm khảo sát</a>
-          <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void markRead(item.id)}>Đã xem</Button>
+        <div key={item.id} className="grid gap-2.5 rounded-xl border border-wait/30 bg-wait-soft px-4 py-3 text-wait">
+          <div className="flex items-start gap-3">
+            <Bell aria-hidden="true" className="mt-1 size-4 flex-none" />
+            <p className="m-0 min-w-0 flex-1 font-semibold">Trưởng nhóm nhắc bạn hoàn thành khảo sát rủi ro (10 câu hỏi)</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-7">
+            <a href="#/risk-survey" className="font-semibold underline underline-offset-4">Làm khảo sát</a>
+            <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void markRead(item.id)}>Đã xem</Button>
+          </div>
         </div>
       ))}
       {failure ? <ErrorAlert>{describe(failure)}</ErrorAlert> : null}
@@ -196,7 +200,7 @@ export function App() {
       <main ref={main} tabIndex={-1} className="mx-auto w-full max-w-[1080px] px-4 pt-6 pb-16 md:px-8 md:pt-8 md:pb-[72px] lg:m-0 lg:max-w-[1120px] lg:px-12 lg:pt-10 lg:pb-20">
         {session ? (
           <>
-            {session.role === 'CUSTOMER' ? <NotificationBanner key={session.serial} /> : null}
+            {session.role === 'CUSTOMER' ? <NotificationBanner key={session.serial} onDismissed={() => main.current?.focus({ preventScroll: true })} /> : null}
             <Screen key={`${session.serial}:${hash.startsWith('#/rm/customers/') ? 'detail' : hash}`} session={session} hash={hash} />
           </>
         ) : (

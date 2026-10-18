@@ -26,6 +26,7 @@ interface Transfer { rmId: string; version: number; changed: boolean; cancelledP
 interface TeamCustomers { items: Array<{ customerId: string; name: string; rmName: string | null; riskProfileValid: boolean; lastReminderAt: string | null }>; total: number }
 
 const ROSTER_PAGE_SIZE = 50;
+const SURVEY_LIST_LIMIT = 5;
 type LoadLevel = 'ok' | 'warn' | 'high';
 const levelColour: Record<LoadLevel, string> = { ok: '[&>*]:bg-ok', warn: '[&>*]:bg-wait', high: '[&>*]:bg-destructive' };
 /** ok below 70%, warn from 70% to 90% inclusive, high above 90% (integer maths, so 56/80 and 72/80 are exact). */
@@ -74,6 +75,7 @@ export function Assignments() {
     );
     return () => controller.abort();
   }, [term, rosterPage, rosterTick]);
+  const [showAllSurvey, setShowAllSurvey] = useState(false);
   const [reminding, setReminding] = useState<string | null>(null);
   const [reminderNote, setReminderNote] = useState<string | null>(null);
   const [reminderFailure, setReminderFailure] = useState<unknown>(null);
@@ -161,6 +163,9 @@ export function Assignments() {
     } catch (error) { setReminderFailure(error); }
     finally { setReminding(null); }
   };
+  // Customers still owing a survey come first so the capped list shows the ones a leader can act on.
+  const surveyRows = [...options.filter(item => !item.riskProfileValid), ...options.filter(item => item.riskProfileValid)];
+  const surveyShown = showAllSurvey ? surveyRows : surveyRows.slice(0, SURVEY_LIST_LIMIT);
   const pendingCount = options.filter(item => !item.riskProfileValid).length;
   const surveyMissing = customer ? options.find(item => item.customerId === customer.customerId)?.riskProfileValid === false : false;
 
@@ -194,7 +199,7 @@ export function Assignments() {
                       <TableHead scope="row" className="h-auto px-2 py-3 font-semibold sm:px-4"><span className="block truncate sm:max-w-none"><RmName id={rm.rmId} name={rm.rmName} /></span></TableHead>
                       <TableCell className="px-2 py-3 sm:px-4">
                         <div className="flex items-center gap-2.5">
-                          <Progress value={Math.min(used, rm.capacityLimit)} max={rm.capacityLimit} data-level={loadLevel(used, rm.capacityLimit)} aria-label={`Tải của ${rmText(rm.rmId, rm.rmName)}`}
+                          <Progress value={Math.min(used, rm.capacityLimit)} max={rm.capacityLimit} data-level={loadLevel(used, rm.capacityLimit)} aria-label={`Tải của ${rmText(rm.rmId, rm.rmName)}`} aria-valuetext={`${used}/${rm.capacityLimit} khách`}
                             className={cn('hidden w-24 flex-none sm:flex', levelColour[loadLevel(used, rm.capacityLimit)])} />
                           <span className="font-semibold tabular-nums">{used}/{rm.capacityLimit} khách</span>
                         </div>
@@ -216,10 +221,10 @@ export function Assignments() {
             onClick={() => void remind('all')}>Nhắc tất cả khách chưa hoàn thành</BusyButton>
         </div>
         {reminderFailure ? <ErrorAlert>{describe(reminderFailure)}</ErrorAlert> : null}
-        {reminderNote ? <p role="status" className="mb-3 font-semibold text-ok">{reminderNote}</p> : null}
+        <p role="status" className="mb-3 font-semibold text-ok empty:mb-0">{reminderNote}</p>
         {options.length === 0 ? <Empty>Chưa có khách hàng nào để hiển thị.</Empty> : (
           <ul className="m-0 grid list-none gap-2 p-0">
-            {options.map(item => (
+            {surveyShown.map(item => (
               <li key={item.customerId} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card px-3.5 py-2.5">
                 <span className="min-w-0 flex-1 font-semibold">{item.name}</span>
                 <Badge variant={item.riskProfileValid ? 'ok' : 'wait'}>{item.riskProfileValid ? 'Đã hoàn thành khảo sát' : 'Chưa hoàn thành khảo sát'}</Badge>
@@ -231,6 +236,10 @@ export function Assignments() {
             ))}
           </ul>
         )}
+        {surveyRows.length > SURVEY_LIST_LIMIT ? (
+          <Button type="button" variant="outline" size="sm" className="mt-3" aria-expanded={showAllSurvey}
+            onClick={() => setShowAllSurvey(value => !value)}>{showAllSurvey ? 'Thu gọn danh sách' : 'Xem tất cả'}</Button>
+        ) : null}
       </Panel>
 
       <form className="mt-2 mb-3 flex flex-wrap items-end gap-x-3" onSubmit={event => void load(event)}>
@@ -270,9 +279,9 @@ export function Assignments() {
             <Fact label="Hồ sơ rủi ro">{customer.currentRisk ? riskLabel(customer.currentRisk.category) : 'Chưa có'}</Fact>
             <Fact label="Đề xuất chờ duyệt">{customer.pendingProposals.count}</Fact>
           </Facts>
-          {surveyMissing ? <p className="mb-3 font-semibold text-wait">Khách chưa hoàn thành khảo sát rủi ro. Chỉ chuyển RM được khi khách có hồ sơ rủi ro còn hiệu lực.</p> : null}
+          {surveyMissing ? <p id="transfer-blocked-reason" className="mb-3 font-semibold text-wait">Khách chưa hoàn thành khảo sát rủi ro. Chỉ chuyển RM được khi khách có hồ sơ rủi ro còn hiệu lực.</p> : null}
           <Field label="RM nhận" htmlFor="target-rm">
-            <NativeSelect id="target-rm" disabled={surveyMissing} value={target} onChange={event => setTarget(event.target.value)}>
+            <NativeSelect id="target-rm" disabled={surveyMissing} aria-describedby={surveyMissing ? 'transfer-blocked-reason' : undefined} value={target} onChange={event => setTarget(event.target.value)}>
               <NativeSelectOption value="">Chọn RM nhận</NativeSelectOption>
               {rms.filter(rm => rm.active).map(rm => <NativeSelectOption key={rm.rmId} value={rm.rmId}>{rmText(rm.rmId, rm.rmName)} ({rm.assigned + rm.reserved}/{rm.capacityLimit})</NativeSelectOption>)}
             </NativeSelect>
@@ -281,7 +290,7 @@ export function Assignments() {
             <Textarea id="reason" value={reason} onChange={event => setReason(event.target.value)} rows={3} />
           </Field>
           <p className="mb-3 text-muted-foreground">Khi chuyển, các đề xuất đang chờ duyệt của khách do RM cũ lập sẽ bị hủy.</p>
-          <Button type="button" ref={opener} onClick={requestTransfer} disabled={busy || surveyMissing}>Xác nhận chuyển</Button>
+          <Button type="button" ref={opener} onClick={requestTransfer} disabled={busy || surveyMissing} aria-describedby={surveyMissing ? 'transfer-blocked-reason' : undefined}>Xác nhận chuyển</Button>
         </Panel>
       ) : null}
 

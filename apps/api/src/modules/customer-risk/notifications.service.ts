@@ -60,8 +60,12 @@ export class NotificationsService {
     // A CIF that has not registered yet simply has no notifications.
     const [customer] = await this.database.query('SELECT id FROM customers WHERE cif_id=$1', [actor.cifId]);
     if (!customer) return { items: [] };
-    const rows = await this.database.query(`SELECT id,kind,message,created_at,read_at FROM customer_notifications
-      WHERE customer_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100`, [customer.id]);
+    // An unread survey reminder is moot once the customer's current risk profile is valid.
+    const rows = await this.database.query(`SELECT n.id,n.kind,n.message,n.created_at,n.read_at FROM customer_notifications n
+      WHERE n.customer_id=$1 AND NOT (n.kind='RISK_SURVEY_REMINDER' AND n.read_at IS NULL AND EXISTS(
+        SELECT 1 FROM wealth_services w JOIN risk_profiles r ON r.id=w.current_risk_profile_id
+        WHERE w.customer_id=n.customer_id AND r.expires_at>$2))
+      ORDER BY n.created_at DESC,n.id DESC LIMIT 100`, [customer.id, this.options.clock.now()]);
     return { items: rows.map((row: { id: string; kind: string; message: string; created_at: Date; read_at: Date | null }) => ({
       id: row.id, kind: row.kind, message: row.message, createdAt: row.created_at.toISOString(),
       readAt: row.read_at ? row.read_at.toISOString() : null })) };
