@@ -20,12 +20,13 @@ export class RmAssignmentService {
 
   async team(actor: Actor) {
     if (actor.role !== 'LEADER' || !actor.teamId) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
-    const rows = await this.database.query(`SELECT a.rm_id,a.team_id,a.active,
+    // DECISION[D-R4-defaults a]: rmName is the RM's mock_actors.actor_id (no separate display name exists).
+    const rows = await this.database.query(`SELECT a.rm_id,a.actor_id,a.team_id,a.active,
       (SELECT count(*)::integer FROM rm_assignment_history h WHERE h.rm_id=a.rm_id AND h.valid_to IS NULL) AS assigned,
       (SELECT count(*)::integer FROM rm_capacity_reservations r WHERE r.rm_id=a.rm_id AND r.status='ACTIVE' AND r.expires_at>$2) AS reserved
       FROM mock_actors a WHERE a.role='RM' AND a.team_id=$1 ORDER BY a.rm_id`, [actor.teamId, this.options.clock.now()]);
-    return { items: rows.map((row: { rm_id: string; team_id: string; active: boolean; assigned: number; reserved: number }) => ({
-      rmId: row.rm_id, teamId: row.team_id, active: row.active, assigned: row.assigned, reserved: row.reserved,
+    return { items: rows.map((row: { rm_id: string; actor_id: string | null; team_id: string; active: boolean; assigned: number; reserved: number }) => ({
+      rmId: row.rm_id, rmName: row.actor_id ?? null, teamId: row.team_id, active: row.active, assigned: row.assigned, reserved: row.reserved,
       available: Math.max(0, 80 - row.assigned - row.reserved), capacityLimit: 80 })) };
   }
 
@@ -34,14 +35,16 @@ export class RmAssignmentService {
     const params: unknown[] = [actor.teamId];
     let filter = '';
     if (name) { params.push(`%${name.replace(/[\\%_]/g, '\\$&')}%`); filter = ' AND c.name ILIKE $2'; }
+    // DECISION[D-R4-defaults a]: rmName = mock_actors.actor_id of the assigned RM, null when no actor row.
     const from = `FROM customers c JOIN rm_assignment_history a ON a.customer_id=c.id AND a.valid_to IS NULL
+      LEFT JOIN mock_actors m ON m.role='RM' AND m.rm_id=a.rm_id
       WHERE a.team_id=$1${filter}`;
     const [count] = await this.database.query(`SELECT count(*)::integer AS total ${from}`, params);
-    const rows = await this.database.query(`SELECT c.id,c.name,a.rm_id,a.version ${from} ORDER BY c.name,c.id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    const rows = await this.database.query(`SELECT c.id,c.name,a.rm_id,m.actor_id AS rm_name,a.version ${from} ORDER BY c.name,c.id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, paging.pageSize, (paging.page - 1) * paging.pageSize]);
     return { page: paging.page, pageSize: paging.pageSize, total: count.total,
-      items: rows.map((row: { id: string; name: string; rm_id: string; version: number }) =>
-        ({ customerId: row.id, name: row.name, rmId: row.rm_id, assignmentVersion: row.version })) };
+      items: rows.map((row: { id: string; name: string; rm_id: string; rm_name: string | null; version: number }) =>
+        ({ customerId: row.id, name: row.name, rmId: row.rm_id, rmName: row.rm_name ?? null, assignmentVersion: row.version })) };
   }
 
   async assign(actor: Actor, customerId: string, body: RmAssignmentBody, key: string | undefined, context: AuditContext) {
