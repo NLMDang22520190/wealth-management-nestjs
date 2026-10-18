@@ -82,7 +82,7 @@ class RmController {
   @Roles('RM', 'LEADER', 'CUSTOMER') @Get('customers/:id')
   @ApiOperation({ summary: 'Customer summary for the current RM, the current RM team leader, or the customer themself' })
   detail(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string) {
-    return this.customers.detail(request.actor!, id);
+    return this.customers.detail(request.actor!, id, auditContext(request));
   }
 }
 

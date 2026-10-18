@@ -66,6 +66,7 @@ class OnboardingController {
   @Roles('RM') @Post('onboarding/requests')
   @ApiOperation({ summary: 'Reserve RM capacity for 72 hours and snapshot server-owned terms' })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiResponse({ status: 429, description: 'RATE_LIMITED: 10 invitations per RM per minute (demo default)' })
   @ApiResponse({ status: 201, type: PendingRequestResult }) @errors()
   create(@Req() request: ApiRequest, @Body() body: OnboardingRequestBody) {
     return this.onboarding.create(request.actor!, body, key(request), auditContext(request));

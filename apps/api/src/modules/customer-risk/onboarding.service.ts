@@ -8,7 +8,7 @@ import { ApiError } from '../../platform/http.js';
 import type { AuditContext } from '../../platform/http.js';
 import { OtpService } from '../../platform/otp.service.js';
 import { RUNTIME_OPTIONS } from '../../platform/runtime.module.js';
-import { appendAudit, appendSuccess, idempotencyReplay, idempotent, lockCustomer } from '../../platform/transactions.js';
+import { apiErrorCode, appendAudit, appendSuccess, idempotencyReplay, idempotent, lockCustomer, recordOutcome } from '../../platform/transactions.js';
 import { CustomerAccess } from './customer-access.service.js';
 import { AccountBootstrap } from '../accounts-ledger/account-bootstrap.js';
 import { consentPayloadHash, eligibleAccounts, isEligible, ownRequest, requireUnexpired, requestProjection } from './onboarding.domain.js';
@@ -163,6 +163,18 @@ export class OnboardingService {
     if (replay) return replay.response;
     const customer = await this.core(request.cif_id);
     const now = this.options.clock.now();
+    try {
+      return await this.confirmTransaction(actor, id, body, key, context, request, customer, payload, now);
+    } catch (error) {
+      if (apiErrorCode(error) === 'OTP_INVALID') {
+        await recordOutcome(this.database, 'FAILURE', actor.actorId, id, 'SERVICE_CONSENT_CONFIRM', 'OTP_INVALID', this.options.clock.now(), context);
+      }
+      throw error;
+    }
+  }
+
+  private confirmTransaction(actor: Actor, id: string, body: ConsentBody, key: string | undefined, context: AuditContext,
+    request: OnboardingRequest, customer: CoreCustomer, payload: unknown, now: Date) {
     return this.database.transaction(manager => idempotent(manager, actor.actorId, 'SERVICE_CONSENT', id, key,
       payload, now, async () => {
         await lockCustomer(manager, request.cif_id, [request.rm_id]);

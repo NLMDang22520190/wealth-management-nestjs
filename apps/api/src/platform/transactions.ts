@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { EntityManager } from 'typeorm';
+import type { DataSource, EntityManager } from 'typeorm';
 import { ApiError } from './http.js';
 import type { AuditContext } from './http.js';
 
@@ -49,6 +49,21 @@ export async function appendAudit(manager: EntityManager, actorId: string, resou
   await manager.query(`INSERT INTO audit_events(id,action,outcome,actor_id,resource_id,payload,created_at,metadata)
     VALUES($1,$2,'SUCCESS',$3,$4,$5,$6,$7)`,
     [randomUUID(), action, actorId, resourceId, JSON.stringify(payload), now, JSON.stringify(metadata)]);
+}
+
+/** Failure and denial rows go in their own short transaction, after the business transaction has rolled back. */
+export async function recordOutcome(database: DataSource, outcome: 'FAILURE' | 'DENIED', actorId: string, resourceId: string,
+  action: string, errorCode: string, now: Date, context: AuditContext): Promise<void> {
+  await database.transaction(async manager => {
+    await manager.query(`INSERT INTO audit_events(id,action,outcome,actor_id,resource_id,payload,created_at,metadata)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [randomUUID(), action, outcome, actorId, resourceId, JSON.stringify({ errorCode }), now,
+        JSON.stringify({ ...context, errorCode, before: null, after: null })]);
+  });
+}
+
+export function apiErrorCode(error: unknown): string | undefined {
+  return error instanceof ApiError ? (error.getResponse() as { code?: string }).code : undefined;
 }
 
 export async function appendSuccess(manager: EntityManager, actorId: string, resourceId: string,
