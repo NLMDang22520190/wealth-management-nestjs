@@ -10,6 +10,8 @@ const foreignRm = { actorId: 'rm-s17-foreign', rmId: '44444444-4444-4444-8444-44
 const foreignLeader = 'leader-s17-foreign';
 const gamma = { actorId: 'customer-gamma', cifId: '00000103' };
 const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+const PAST_PROFILE_EXPIRY = 367 * DAY; // risk profile is valid ~12 months from confirmation
 
 /**
  * S17 (spec R4b): transfer precondition (ACTIVE service + valid risk profile) and in-app risk-survey reminders.
@@ -108,7 +110,7 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
   test('AC-P2 transfer with an EXPIRED risk profile is 422 RISK_PROFILE_REQUIRED, unchanged', async () => {
     const customerId = await alpha();
     await seedPendingProposal(customerId);
-    api.state.now = new Date(api.state.now.getTime() + 25 * HOUR); // profile is valid for 24h
+    api.state.now = new Date(api.state.now.getTime() + PAST_PROFILE_EXPIRY);
     const before = await assignmentEffects(customerId);
     expectApiError(await transfer(customerId), 422, 'RISK_PROFILE_REQUIRED');
     expect(await assignmentEffects(customerId)).toEqual(before);
@@ -137,7 +139,7 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
     const item = await teamItem(b);
     expect(item.lastReminderAt).toBe(api.state.now.toISOString());
     expect((await teamItem(a)).lastReminderAt).toBeNull();
-    api.state.now = new Date(api.state.now.getTime() + 25 * HOUR); // alpha's profile expires
+    api.state.now = new Date(api.state.now.getTime() + PAST_PROFILE_EXPIRY); // alpha's profile expires
     expect((await teamItem(a)).riskProfileValid).toBe(false);
   });
 
