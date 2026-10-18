@@ -234,11 +234,15 @@ test.describe('UC07 S16b data display polish', () => {
     test('AC9 Tải thông tin khách hàng aligns with the search input and the customer select (bottom edges within 4px)', async ({ page }, testInfo) => {
       desktopOnly(testInfo);
       await openAssignments(page);
-      const button = (await page.getByRole('button', { name: 'Tải thông tin khách hàng' }).boundingBox())!;
-      const input = (await page.getByLabel('Tìm khách hàng').boundingBox())!;
-      const select = (await page.getByLabel('Chọn khách hàng').boundingBox())!;
-      expect(Math.abs(button.y + button.height - (input.y + input.height)), 'button vs search input bottom').toBeLessThanOrEqual(4);
-      expect(Math.abs(button.y + button.height - (select.y + select.height)), 'button vs select bottom').toBeLessThanOrEqual(4);
+      // The survey region above the form loads asynchronously and shifts the form: wait for it, then measure all three boxes in one read until the layout is stable.
+      await expect(page.getByRole('region', { name: 'Khảo sát rủi ro của khách hàng' })).toBeVisible();
+      await expect(page.getByText(/Hiển thị \d+\/\d+ khách hàng/)).toBeVisible();
+      const button = page.getByRole('button', { name: 'Tải thông tin khách hàng' });
+      const input = page.getByLabel('Tìm khách hàng');
+      const select = page.getByLabel('Chọn khách hàng');
+      const bottoms = () => Promise.all([button, input, select].map((l) => l.evaluate((el) => el.getBoundingClientRect().bottom)));
+      await expect.poll(async () => { const [b, i] = await bottoms(); return Math.abs(b - i); }, { message: 'button vs search input bottom' }).toBeLessThanOrEqual(4);
+      await expect.poll(async () => { const [b, , s] = await bottoms(); return Math.abs(b - s); }, { message: 'button vs select bottom' }).toBeLessThanOrEqual(4);
       await expectNoHorizontalOverflow(page);
     });
   });
