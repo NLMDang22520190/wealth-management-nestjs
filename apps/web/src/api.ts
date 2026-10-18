@@ -70,6 +70,7 @@ const messages: Record<string, string> = {
   SERVICE_EXISTS: 'Khách hàng đã đăng ký dịch vụ',
   RM_CAPACITY_EXCEEDED: 'RM đã đủ 80 khách hàng, không thể nhận thêm',
   RM_ASSIGNMENT_STALE: 'Phân công đã thay đổi. Tải lại để xem phân công hiện tại trước khi chuyển.',
+  RISK_PROFILE_REQUIRED: 'Khách chưa hoàn thành khảo sát rủi ro',
   RM_INACTIVE: 'RM nhận không còn hoạt động',
   SERVICE_INACTIVE: 'Dịch vụ của khách hàng chưa hoạt động nên chưa thể chuyển RM',
   CUSTOMER_INELIGIBLE: 'Khách hàng chưa đủ điều kiện đăng ký dịch vụ',
