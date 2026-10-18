@@ -3,9 +3,8 @@ import type { FormEvent } from 'react';
 import { api, describe, intentDone, intentKey } from '../api';
 import { formatDateTime } from '../format';
 import { Check } from 'lucide-react';
-import { Choice, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, choiceInput } from '../ui';
+import { BusyButton, Choice, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, choiceInput } from '../ui';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
@@ -81,7 +80,7 @@ export function Onboarding() {
         <Field label="Mã CIF hoặc định danh" htmlFor="cif" className="flex-[1_1_240px]">
           <Input id="cif" value={cif} onChange={event => setCif(event.target.value)} autoComplete="off" inputMode="text" />
         </Field>
-        <Button type="submit" disabled={busy !== null} className="mb-3.5">Tra cứu</Button>
+        <BusyButton type="submit" busy={busy === 'lookup'} disabled={busy !== null} className="mb-3.5">Tra cứu</BusyButton>
       </form>
       {busy === 'lookup' ? <Loading label="Đang tra cứu…" /> : null}
       {message ? <ErrorAlert>{message}</ErrorAlert> : null}
@@ -105,7 +104,7 @@ export function Onboarding() {
               ))}
             </fieldset>
           ) : <p className="text-muted-foreground">Khách hàng chưa có tài khoản VND hợp lệ hoặc chưa đủ điều kiện nên chưa thể tạo lời mời.</p>}
-          <Button type="button" onClick={() => void create()} disabled={!lookup.eligible || !account || busy !== null}>Tạo lời mời</Button>
+          <BusyButton type="button" onClick={() => void create()} busy={busy === 'create'} disabled={!lookup.eligible || !account || busy !== null}>Tạo lời mời</BusyButton>
         </Panel>
       ) : null}
 
