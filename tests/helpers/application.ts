@@ -8,6 +8,8 @@ import { startTestDatabase } from './postgres.js';
 export const TEST_NOW = '2026-01-15T05:00:00.000Z';
 export type CoreCustomer = {
   cifId: string; name: string; dateOfBirth: string; active: boolean; kycVerified: boolean;
+  /** S12 W2: BR-02 inputs. Optional so earlier slices keep compiling; absent means not blacklisted, group 1. */
+  blacklisted?: boolean; creditGroup?: number;
   accounts: Array<{ id: string; ownerCifId: string; currency: string; active: boolean }>;
 };
 export type OtpDelivery = { challengeId: string; actorId: string; purpose: string; operationId: string; code: string; expiresAt: string };
