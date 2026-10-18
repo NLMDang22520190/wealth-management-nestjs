@@ -221,4 +221,36 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
 
     for (const actorId of [actors.rm.actorId, actors.leader.actorId]) expectApiError(await notifications(actorId), 403, 'FORBIDDEN');
   });
+
+  // ---- R4-fix (review R4 findings 1, 3, 4) ----
+  test('R4fix-1 once the reminded customer has a valid risk profile, GET /notifications no longer lists the unread reminder', async () => {
+    const b = await beta();
+    expect((await remind({ customerIds: [b] })).body.sent).toBe(1);
+    const before = (await notifications(actors.otherCustomer.actorId)).body.items;
+    expect(before.filter((n: any) => n.kind === 'RISK_SURVEY_REMINDER' && n.readAt === null)).toHaveLength(1);
+    await confirmRisk(actors.otherCustomer.actorId, 'beta-after-reminder');
+    const after = await notifications(actors.otherCustomer.actorId);
+    expect(after.status).toBe(200);
+    expect(after.body.items.filter((n: any) => n.kind === 'RISK_SURVEY_REMINDER' && n.readAt === null)).toEqual([]);
+  });
+
+  test('R4fix-3 bulk reminder never lists or notifies a valid-profile customer (no PROFILE_VALID skip entry, no row)', async () => {
+    const a = await alpha();
+    const b = await beta();
+    const response = await remind();
+    expect(response.status).toBe(200);
+    expect(response.body.sent).toBe(1);
+    expect(response.body.skipped.filter((s: any) => s.reason === 'PROFILE_VALID')).toEqual([]);
+    expect(response.body.skipped.map((s: any) => s.customerId)).not.toContain(a);
+    const rows = await api.dataSource.query("SELECT customer_id FROM customer_notifications WHERE kind='RISK_SURVEY_REMINDER'");
+    expect(rows.map((r: any) => r.customer_id)).toEqual([b]);
+  });
+
+  test('R4fix-4 check order: ACTIVE service, no profile and a wrong expectedAssignmentVersion is 422 RISK_PROFILE_REQUIRED, not 409', async () => {
+    const customerId = await beta();
+    await api.dataSource.query("UPDATE wealth_services SET status='ACTIVE' WHERE customer_id=$1", [customerId]);
+    const response = await api.request(`/customers/${customerId}/rm-assignment`, { method: 'POST', token: await leaderToken(), key: randomUUID(),
+      body: { targetRmId: replacementRm, reason: 'S17 order', expectedAssignmentVersion: 99 } });
+    expectApiError(response, 422, 'RISK_PROFILE_REQUIRED');
+  });
 });
