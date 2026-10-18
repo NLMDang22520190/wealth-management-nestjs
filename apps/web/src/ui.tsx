@@ -142,6 +142,7 @@ export function OtpCodeInput({ onChange, disabled }: { onChange: (code: string) 
 
   const type = (position: number, raw: string) => {
     const typed = raw.replace(/\D/g, '');
+    if (typed.length > 1) { spread(position, typed); return; }
     const next = [...digits];
     next[position] = typed.slice(-1);
     update(next);
@@ -152,16 +153,19 @@ export function OtpCodeInput({ onChange, disabled }: { onChange: (code: string) 
     else if (event.key === 'ArrowLeft') { event.preventDefault(); focusBox(position - 1); }
     else if (event.key === 'ArrowRight') { event.preventDefault(); focusBox(position + 1); }
   };
+  const spread = (position: number, pasted: string) => {
+    const next = [...digits];
+    const start = pasted.length >= OTP_LENGTH ? 0 : position;
+    Array.from(pasted.slice(0, OTP_LENGTH - start)).forEach((digit, offset) => { next[start + offset] = digit; });
+    update(next);
+    focusBox(Math.min(start + pasted.length, OTP_LENGTH) - 1);
+  };
   const paste = (position: number, event: ClipboardEvent<HTMLInputElement>) => {
     const text = event.clipboardData.getData('text') || event.clipboardData.getData('text/plain');
     const pasted = text.replace(/\D/g, '');
     if (!pasted) return;
     event.preventDefault();
-    const next = [...digits];
-    const start = pasted.length >= OTP_LENGTH ? 0 : position;
-    [...pasted.slice(0, OTP_LENGTH - start)].forEach((digit, offset) => { next[start + offset] = digit; });
-    update(next);
-    focusBox(Math.min(start + pasted.length, OTP_LENGTH) - 1);
+    spread(position, pasted);
   };
 
   return (
