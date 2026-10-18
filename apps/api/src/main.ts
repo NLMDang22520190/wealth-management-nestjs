@@ -20,6 +20,7 @@ async function bootstrap(): Promise<void> {
   };
   const lookupRateLimitPerMinute = limit('LOOKUP_RATE_LIMIT_PER_MINUTE');
   const inviteRateLimitPerMinute = limit('INVITE_RATE_LIMIT_PER_MINUTE');
+  const otpTtlSeconds = limit('OTP_TTL_SECONDS');
   const { app } = await createApplication({
     databaseUrl: process.env.DATABASE_URL ?? '',
     environment: environment as ApplicationOptions['environment'],
@@ -27,6 +28,7 @@ async function bootstrap(): Promise<void> {
     jwtSecret: process.env.JWT_SECRET ?? '',
     clock: { now: () => new Date() }, logger,
     ...(lookupRateLimitPerMinute !== undefined ? { lookupRateLimitPerMinute } : {}),
+    ...(otpTtlSeconds !== undefined ? { otpTtlSeconds } : {}),
     ...(inviteRateLimitPerMinute !== undefined ? { inviteRateLimitPerMinute } : {}),
     ...(environment !== 'production' && mockSetting === 'true' ? { coreBanking: demoCoreBanking } : {}),
   });

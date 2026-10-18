@@ -10,11 +10,16 @@ export interface ApiRequest {
   socket?: { remoteAddress?: string };
   actor?: Actor;
 }
-export interface AuditContext { requestId: string; ip: string; device: string; }
+export interface AuditContext { requestId: string; ip: string; device: string; deviceId: string | null; }
 
 export function auditContext(request: ApiRequest): AuditContext {
   const device = request.headers['user-agent'];
-  return { requestId: request.requestId,
+  const supplied = request.headers['x-device-id'];
+  // Reject before any write: one printable value of at most 128 characters, no control characters.
+  if (supplied !== undefined && (typeof supplied !== 'string' || supplied.length === 0 || supplied.length > 128 || /\p{Cc}/u.test(supplied))) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed');
+  }
+  return { requestId: request.requestId, deviceId: supplied ?? null,
     ip: (request.ip ?? request.socket?.remoteAddress ?? '').replace(/^::ffff:/, ''),
     device: typeof device === 'string' ? device.slice(0, 512) : '' };
 }

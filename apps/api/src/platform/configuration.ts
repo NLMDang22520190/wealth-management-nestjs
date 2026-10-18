@@ -18,6 +18,7 @@ export function validateConfiguration(options: ApplicationOptions): void {
     || /^(change[-_ ]?me|default|secret|password)/i.test(options.jwtSecret)
     || [options.lookupRateLimitPerMinute, options.inviteRateLimitPerMinute]
       .some(limit => limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1))
+    || (options.otpTtlSeconds !== undefined && (!Number.isSafeInteger(options.otpTtlSeconds) || options.otpTtlSeconds < 1 || options.otpTtlSeconds > 900))
     || typeof options.clock?.now !== 'function' || typeof options.logger?.error !== 'function') {
     throw new ConfigurationError();
   }

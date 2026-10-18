@@ -7,6 +7,10 @@ import { text, uuid } from '../../platform/validation.js';
 export interface CoreCustomer {
   cifId: string; name: string; dateOfBirth: string; active: boolean; kycVerified: boolean;
   accounts: Array<{ id: string; ownerCifId: string; currency: string; active: boolean }>;
+  /** BR-02: a blacklisted customer is ineligible. */
+  blacklisted?: boolean;
+  /** BR-02: credit group 3 or worse is ineligible. */
+  creditGroup?: number;
 }
 export interface CoreBanking { lookup(reference: string): Promise<CoreCustomer | null>; }
 
@@ -34,6 +38,7 @@ export function eligibleAccounts(customer: CoreCustomer) {
 }
 
 export function isEligible(customer: CoreCustomer, now: Date): boolean {
+  if (customer.blacklisted === true || (customer.creditGroup !== undefined && customer.creditGroup >= 3)) return false;
   const birth = /^(\d{4})-(\d{2})-(\d{2})$/.exec(customer.dateOfBirth);
   if (!birth) return false;
   const calendar = new Date(Date.UTC(Number(birth[1]), Number(birth[2]) - 1, Number(birth[3])));

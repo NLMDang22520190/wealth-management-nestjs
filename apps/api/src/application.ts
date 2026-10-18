@@ -34,6 +34,8 @@ export interface ApplicationOptions {
   lookupRateLimitPerMinute?: number;
   /** Per-RM onboarding invitations allowed per minute (default 10). */
   inviteRateLimitPerMinute?: number;
+  /** OTP lifetime in seconds, integer 1..900 (default 120). */
+  otpTtlSeconds?: number;
   coreBanking?: CoreBanking;
   otpDelivery?: (delivery: OtpDelivery) => void | Promise<void>;
 }

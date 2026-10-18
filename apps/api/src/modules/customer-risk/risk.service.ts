@@ -8,7 +8,7 @@ import { ApiError } from '../../platform/http.js';
 import type { AuditContext } from '../../platform/http.js';
 import { OtpService } from '../../platform/otp.service.js';
 import { RUNTIME_OPTIONS } from '../../platform/runtime.module.js';
-import { appendAudit, appendSuccess, hash, idempotent, lockCustomer } from '../../platform/transactions.js';
+import { apiErrorCode, appendAudit, appendSuccess, hash, idempotent, lockCustomer, recordOutcome } from '../../platform/transactions.js';
 import { RiskHoldingsRead } from '../portfolio-valuation/risk-holdings-read.js';
 import { CustomerAccess } from './customer-access.service.js';
 import { draftProjection, profileExpiry, profileProjection, riskDraftUnexpired, scoreAnswers } from './risk.domain.js';
@@ -102,6 +102,18 @@ export class RiskService {
 
   async confirm(actor: Actor, id: string, body: RiskConfirmBody, key: string | undefined, context: AuditContext) {
     const initialDraft = await this.ownDraft(this.database.manager, actor, id);
+    try {
+      return await this.confirmTransaction(actor, id, body, key, context, initialDraft);
+    } catch (error) {
+      if (apiErrorCode(error) === 'OTP_INVALID') {
+        await recordOutcome(this.database, 'FAILURE', actor.actorId, id, 'RISK_PROFILE_CONFIRM', 'OTP_INVALID', this.options.clock.now(), context);
+      }
+      throw error;
+    }
+  }
+
+  private confirmTransaction(actor: Actor, id: string, body: RiskConfirmBody, key: string | undefined, context: AuditContext,
+    initialDraft: { cif_id: string }) {
     return this.database.transaction(manager => idempotent(manager, actor.actorId, CONFIRM_PURPOSE, id, key, body,
       this.options.clock.now(), async () => {
         await lockCustomer(manager, initialDraft.cif_id, []);

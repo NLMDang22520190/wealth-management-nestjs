@@ -8,7 +8,8 @@ type Fixture = Awaited<ReturnType<typeof startApiFixture>>;
 type Questionnaire = { version: string; questions: Array<{ id: string; text: string; options: Array<{ id: string; text: string }> }> };
 
 const V1 = 'demo-risk-v1';
-const VIETNAMESE = /[ăâđêôơưàáạảãèéẹẻẽìíịỉĩòóọỏõùúụủũỳýỵỷỹ]/i;
+/** Any Vietnamese letter: precomposed Latin letters with marks (U+00C0-U+1EF9, incl. đ/Đ and every tone) or a combining mark (NFD form). Plain ASCII English must not match. */
+const VIETNAMESE = /[̀-ͯ]|[đĐ]|[À-ỹ]/;
 /** The original English v1 content exactly as migration 1791763200003 seeded it (ids q1..q10, o1..o5, points 1..5). */
 const V1_ENGLISH: Array<[string, string[]]> = [
   ['Investment objective', ['Preserve capital', 'Earn steady income', 'Balance income and growth', 'Seek long-term growth', 'Maximize long-term growth']],

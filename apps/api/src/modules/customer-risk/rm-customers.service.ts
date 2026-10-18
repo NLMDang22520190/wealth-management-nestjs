@@ -3,6 +3,8 @@ import { DataSource } from 'typeorm';
 import type { ApplicationOptions } from '../../application.js';
 import type { Actor } from '../../auth/actor.js';
 import { ApiError } from '../../platform/http.js';
+import type { AuditContext } from '../../platform/http.js';
+import { apiErrorCode, recordOutcome } from '../../platform/transactions.js';
 import { RUNTIME_OPTIONS } from '../../platform/runtime.module.js';
 import { CustomerAccess } from './customer-access.service.js';
 import { customerSummary } from './rm-customers.domain.js';
@@ -66,8 +68,15 @@ export class RmCustomersService {
     return { items: rows.map(row => customerSummary(row, now)), total: count.total, page: query.page, pageSize: query.pageSize };
   }
 
-  async detail(actor: Actor, customerId: string) {
-    const customer = await this.access.authorize(actor, customerId, this.database.manager);
+  async detail(actor: Actor, customerId: string, context: AuditContext) {
+    let customer;
+    try { customer = await this.access.authorize(actor, customerId, this.database.manager); }
+    catch (error) {
+      if (apiErrorCode(error) === 'FORBIDDEN') {
+        await recordOutcome(this.database, 'DENIED', actor.actorId, customerId, 'CUSTOMER_DETAIL_READ', 'FORBIDDEN', this.options.clock.now(), context);
+      }
+      throw error;
+    }
     const [row]: CustomerSummaryRow[] = await this.database.query(`${this.scope('c.id=$1')} ${SELECT}`, [customer.id]);
     if (!row) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
     return customerSummary(row, this.options.clock.now());

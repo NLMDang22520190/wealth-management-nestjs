@@ -19,7 +19,7 @@ export class OtpService {
     const challengeId = randomUUID();
     const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
     const salt = randomBytes(32).toString('hex');
-    const expiresAt = new Date(this.options.clock.now().getTime() + 5 * 60_000).toISOString();
+    const expiresAt = new Date(this.options.clock.now().getTime() + (this.options.otpTtlSeconds ?? 120) * 1000).toISOString();
     await manager.query(`INSERT INTO otp_challenges(id,actor_id,purpose,operation_id,payload_hash,code_hash,salt,expires_at)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [challengeId, actorId, purpose, operationId, payloadHash, hash(`${salt}:${code}`), salt, expiresAt]);
     return { challengeId, actorId, purpose, operationId, code, expiresAt };
