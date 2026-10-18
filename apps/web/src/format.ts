@@ -16,3 +16,20 @@ export function formatVnd(value: string): string {
 
 export const riskLabels: Record<string, string> = { CONSERVATIVE: 'Thận trọng', BALANCED: 'Cân bằng', GROWTH: 'Tăng trưởng' };
 export function riskLabel(category: string): string { return riskLabels[category] ?? category; }
+
+const compactFormat = new Intl.NumberFormat('vi-VN', { notation: 'compact', compactDisplay: 'long', maximumFractionDigits: 2 });
+/** Display-only short form ("1,73 tỷ"); never used for arithmetic. Pair it with a title holding formatVnd. */
+export function formatCompactVnd(value: string): string {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? compactFormat.format(amount) : value;
+}
+
+const timeFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+export function formatTime(date: Date): string { return timeFormat.format(date); }
+
+const provenanceLabels: Record<string, string> = { SYNTHETIC_P3_READ_BRIDGE: 'Dữ liệu tổng hợp (demo)' };
+export function provenanceLabel(code: string): string { return provenanceLabels[code] ?? code; }
+
+/** First 8 characters of an id: enough to tell RMs apart without printing a whole UUID. */
+export function shortId(id: string): string { return id.slice(0, 8); }
+export function rmText(id: string, name?: string | null): string { return name ? `${name} · ${shortId(id)}` : shortId(id); }

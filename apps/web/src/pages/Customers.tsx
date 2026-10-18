@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, describe } from '../api';
-import { formatDate, formatVnd, riskLabel } from '../format';
+import { formatCompactVnd, formatDate, formatTime, formatVnd, provenanceLabel, riskLabel } from '../format';
 import { AlertAction, Empty, ErrorAlert, Field, Loading, PageTitle, Panel, RiskChip, useLoad } from '../ui';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,7 @@ function Muted({ children }: { children: string }) {
 }
 
 function AumCell({ aum }: { aum: Aum }) {
-  return aum.value === null ? <Muted>Chưa có dữ liệu</Muted> : <>{formatVnd(aum.value)}</>;
+  return aum.value === null ? <Muted>Chưa có dữ liệu</Muted> : <span title={formatVnd(aum.value)}>{formatCompactVnd(aum.value)}</span>;
 }
 
 /** UC04 list: server-side paging, filtering and sorting over the RM's own customers only. */
@@ -58,7 +58,7 @@ export function CustomerList() {
   return (
     <>
       <PageTitle title="Khách phụ trách" hint="Chỉ gồm khách hàng đang được phân công cho bạn." />
-      <div className="mb-1 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-x-3 rounded-xl border bg-card px-4 pt-4 pb-0.5">
+      <div data-testid="customer-filters" className="mb-1 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-x-3 border-b pb-0.5">
         <Field label="Tìm theo tên" htmlFor="filter-name">
           <Input id="filter-name" type="search" value={name} onChange={event => change(() => setName(event.target.value))} autoComplete="off" />
         </Field>
@@ -97,6 +97,7 @@ export function CustomerList() {
                     <TableHead scope="col" role="columnheader" className={headCell}>Rủi ro</TableHead>
                     <TableHead scope="col" role="columnheader" className={headCell}>Hết hạn hồ sơ</TableHead>
                     <TableHead scope="col" role="columnheader" className={cn(headCell, 'text-right')}>AUM</TableHead>
+                    <TableHead scope="col" role="columnheader" className={cn(headCell, 'text-right')}>Tiền mặt</TableHead>
                     <TableHead scope="col" role="columnheader" className={cn(headCell, 'text-right')}>Đề xuất</TableHead>
                     <TableHead scope="col" role="columnheader" className={cn(headCell, 'text-right whitespace-normal w-36')}>Kiểm tra chờ</TableHead>
                   </TableRow>
@@ -110,8 +111,14 @@ export function CustomerList() {
                       <TableCell role="cell" className={cn(cell, labelled)} data-label="Rủi ro">{row.currentRisk ? <RiskChip category={row.currentRisk.category} label={riskLabel(row.currentRisk.category)} /> : <Muted>Chưa có</Muted>}</TableCell>
                       <TableCell role="cell" className={cn(cell, labelled)} data-label="Hết hạn hồ sơ">{row.currentRisk ? <>{formatDate(row.currentRisk.expiresAt)}{row.currentRisk.valid ? '' : ' (quá hạn)'}</> : <Muted>Chưa có</Muted>}</TableCell>
                       <TableCell role="cell" className={cn(cell, labelled, 'text-right tabular-nums max-md:text-left')} data-label="AUM"><AumCell aum={row.aum} /></TableCell>
+                      <TableCell role="cell" className={cn(cell, labelled, 'text-right tabular-nums max-md:text-left')} data-label="Tiền mặt"><AumCell aum={row.cash} /></TableCell>
                       <TableCell role="cell" className={cn(cell, labelled, 'text-right tabular-nums max-md:text-left')} data-label="Đề xuất">{row.pendingProposals.count}</TableCell>
-                      <TableCell role="cell" className={cn(cell, 'text-right tabular-nums whitespace-normal w-36 max-md:w-auto max-md:text-left', row.driftAlerts.count > 0 ? 'font-semibold text-wait' : 'text-muted-foreground')}>Kiểm tra danh mục chờ: {row.driftAlerts.count}</TableCell>
+                      <TableCell role="cell" className={cn(cell, labelled, 'relative text-right tabular-nums whitespace-normal w-36 max-md:w-auto max-md:text-left')} data-label="Kiểm tra chờ">
+                        {row.driftAlerts.count > 0
+                          ? <Badge variant="wait" data-testid="drift-badge">{row.driftAlerts.count}</Badge>
+                          : <span data-testid="drift-zero" className="text-muted-foreground">0</span>}
+                        <span className="sr-only">Kiểm tra danh mục chờ: {row.driftAlerts.count}</span>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -133,20 +140,27 @@ export function CustomerList() {
 export function CustomerDetail({ customerId }: { customerId: string }) {
   const detail = useLoad(signal => api<CustomerRow>(`/customers/${customerId}`, { signal }), [customerId]);
   const customer = detail.data;
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  useEffect(() => { if (detail.data) setUpdatedAt(new Date()); }, [detail.data]);
+  const refresh = <Button type="button" variant="outline" onClick={detail.reload} disabled={detail.loading}>Làm mới</Button>;
   return (
     <>
       <p className="mb-3 text-[0.9rem]"><a href="#/rm/customers">Quay lại danh sách</a></p>
+      {customer ? null : <p>{refresh}</p>}
       {detail.loading && !customer ? <Loading skeleton /> : null}
       {detail.error ? (
         <ErrorAlert>{describe(detail.error, { '403': 'Bạn không có quyền truy cập khách hàng này', '404': 'Không tìm thấy khách hàng này' })}</ErrorAlert>
       ) : null}
       {customer ? (
         <>
-          <PageTitle title={customer.name} />
+          <PageTitle title={customer.name} actions={<>
+            {updatedAt ? <span className="text-[0.85rem] text-muted-foreground tabular-nums">Cập nhật lúc {formatTime(updatedAt)}</span> : null}
+            {refresh}
+          </>} />
           <Panel title="Hồ sơ rủi ro">
             {customer.currentRisk ? (
               <>
-                <p>Hồ sơ rủi ro: {riskLabel(customer.currentRisk.category)}</p>
+                <p>Hồ sơ rủi ro: <RiskChip testId="risk-badge" category={customer.currentRisk.category} label={riskLabel(customer.currentRisk.category)} /></p>
                 <p>Hết hạn: {formatDate(customer.currentRisk.expiresAt)}</p>
                 {customer.currentRisk.valid ? null : <p><Badge variant="bad">Hồ sơ đã quá hạn</Badge></p>}
               </>
@@ -157,7 +171,7 @@ export function CustomerDetail({ customerId }: { customerId: string }) {
               <>
                 <p className="mb-2 text-[2.1rem] leading-tight font-bold tracking-tight text-white! tabular-nums">{formatVnd(customer.aum.value)}</p>
                 {customer.aum.asOf ? <p>Tại thời điểm: {formatDate(customer.aum.asOf)}</p> : null}
-                <p>Nguồn: {customer.aum.provenance ?? 'Nhiều nguồn'}</p>
+                <p>Nguồn: {customer.aum.provenance ? <span title={customer.aum.provenance}>{provenanceLabel(customer.aum.provenance)}</span> : 'Nhiều nguồn'}</p>
               </>
             )}
           </Panel>
@@ -170,7 +184,6 @@ export function CustomerDetail({ customerId }: { customerId: string }) {
           </Panel>
         </>
       ) : null}
-      <p><Button type="button" variant="outline" onClick={detail.reload} disabled={detail.loading}>Làm mới</Button></p>
     </>
   );
 }
