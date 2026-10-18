@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { FormEvent } from 'react';
-import { ArrowLeftRight, ClipboardCheck, Mail, ShieldCheck, UserPlus, Users } from 'lucide-react';
+import { ArrowLeftRight, Bell, ClipboardCheck, Mail, ShieldCheck, UserPlus, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api, describe, setToken } from './api';
 import { Assignments } from './pages/Assignments';
@@ -9,7 +9,7 @@ import { Invitations } from './pages/Invitations';
 import { Onboarding } from './pages/Onboarding';
 import { RiskProfile } from './pages/RiskProfile';
 import { RiskSurvey } from './pages/RiskSurvey';
-import { ErrorAlert } from './ui';
+import { ErrorAlert, useLoad } from './ui';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -73,6 +73,37 @@ function RoleSwitch({ session, choice, onChoice, busy, failure, onSubmit }: {
       <p className="m-0 text-[0.8rem] text-[#f0d39a]" aria-live="polite">{session ? `Đang dùng vai: ${session.actorId}` : 'Chưa chọn vai'}</p>
       {failure ? <ErrorAlert>{describe(failure)}</ErrorAlert> : null}
     </form>
+  );
+}
+
+interface Notification { id: string; kind: string; message: string; createdAt: string; readAt: string | null }
+
+/** Unread leader reminders for the signed-in customer, shown above every screen until dismissed. */
+function NotificationBanner() {
+  const list = useLoad(signal => api<{ items: Notification[] }>('/notifications', { signal }), []);
+  const [read, setRead] = useState<string[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [failure, setFailure] = useState<unknown>(null);
+  const unread = (list.data?.items ?? []).filter(item => !item.readAt && !read.includes(item.id));
+  if (unread.length === 0) return null;
+  const markRead = async (id: string) => {
+    setBusy(id); setFailure(null);
+    try { await api(`/notifications/${id}/read`, { method: 'POST', body: {} }); setRead(previous => [...previous, id]); }
+    catch (error) { setFailure(error); }
+    finally { setBusy(null); }
+  };
+  return (
+    <section role="region" aria-label="Thông báo" className="mb-5 grid gap-2">
+      {unread.map(item => (
+        <div key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-wait/30 bg-wait-soft px-4 py-3 text-wait">
+          <Bell aria-hidden="true" className="size-4 flex-none" />
+          <p className="m-0 min-w-0 flex-1 font-semibold">Trưởng nhóm nhắc bạn hoàn thành khảo sát rủi ro (10 câu hỏi)</p>
+          <a href="#/risk-survey" className="font-semibold underline underline-offset-4">Làm khảo sát</a>
+          <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void markRead(item.id)}>Đã xem</Button>
+        </div>
+      ))}
+      {failure ? <ErrorAlert>{describe(failure)}</ErrorAlert> : null}
+    </section>
   );
 }
 
@@ -163,8 +194,12 @@ export function App() {
         <RoleSwitch session={session} choice={choice} onChoice={setChoice} busy={busy} failure={failure} onSubmit={() => void become(choice)} />
       </header>
       <main ref={main} tabIndex={-1} className="mx-auto w-full max-w-[1080px] px-4 pt-6 pb-16 md:px-8 md:pt-8 md:pb-[72px] lg:m-0 lg:max-w-[1120px] lg:px-12 lg:pt-10 lg:pb-20">
-        {session ? <Screen key={`${session.serial}:${hash.startsWith('#/rm/customers/') ? 'detail' : hash}`} session={session} hash={hash} />
-          : (
+        {session ? (
+          <>
+            {session.role === 'CUSTOMER' ? <NotificationBanner key={session.serial} /> : null}
+            <Screen key={`${session.serial}:${hash.startsWith('#/rm/customers/') ? 'detail' : hash}`} session={session} hash={hash} />
+          </>
+        ) : (
             <section className="max-w-[920px]">
               <h2 className="mt-2 mb-2 text-[1.9rem] leading-tight font-bold lg:text-[2.2rem]">Chọn vai demo để bắt đầu</h2>
               <p className="mb-6 max-w-[60ch] text-muted-foreground">Đây là môi trường demo với dữ liệu tổng hợp. Chọn một vai bên dưới, hoặc dùng bộ chọn vai rồi bấm Chuyển vai.</p>

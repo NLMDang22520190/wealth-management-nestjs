@@ -5,6 +5,7 @@ import { ApiFailure, api, describe, intentDone, intentKey } from '../api';
 import { riskLabel, rmText } from '../format';
 import { AlertAction, BusyButton, Empty, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, useLoad } from '../ui';
 import { Alert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -22,7 +23,7 @@ interface Customer {
   pendingProposals: { count: number };
 }
 interface Transfer { rmId: string; version: number; changed: boolean; cancelledProposals?: number }
-interface TeamCustomers { items: Array<{ customerId: string; name: string; rmName: string | null }>; total: number }
+interface TeamCustomers { items: Array<{ customerId: string; name: string; rmName: string | null; riskProfileValid: boolean; lastReminderAt: string | null }>; total: number }
 
 const ROSTER_PAGE_SIZE = 50;
 type LoadLevel = 'ok' | 'warn' | 'high';
@@ -37,6 +38,8 @@ function loadLevel(used: number, capacity: number): LoadLevel {
 function RmName({ id, name }: { id: string; name?: string | null }) {
   return <span title={id}>{rmText(id, name)}</span>;
 }
+
+interface ReminderResult { sent: number; skipped: Array<{ customerId: string; reason: string }> }
 
 const fetchCustomer = (id: string) => api<Customer>(`/customers/${id}`);
 
@@ -71,6 +74,9 @@ export function Assignments() {
     );
     return () => controller.abort();
   }, [term, rosterPage, rosterTick]);
+  const [reminding, setReminding] = useState<string | null>(null);
+  const [reminderNote, setReminderNote] = useState<string | null>(null);
+  const [reminderFailure, setReminderFailure] = useState<unknown>(null);
   const [customerId, setCustomerId] = useState('');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [target, setTarget] = useState('');
@@ -144,6 +150,20 @@ export function Assignments() {
     } finally { setBusy(false); }
   };
 
+  const remind = async (scope: string, customerIds?: string[]) => {
+    setReminding(scope); setReminderNote(null); setReminderFailure(null);
+    try {
+      const result = await api<ReminderResult>('/team/risk-survey-reminders', { body: customerIds ? { customerIds } : {} });
+      if (result.sent > 0) setReminderNote(`Đã gửi ${result.sent} lời nhắc`);
+      else if (result.skipped.some(item => item.reason === 'RECENTLY_REMINDED')) setReminderNote('Khách đã được nhắc trong 24 giờ qua');
+      else setReminderNote('Không có lời nhắc nào được gửi');
+      setRosterTick(value => value + 1);
+    } catch (error) { setReminderFailure(error); }
+    finally { setReminding(null); }
+  };
+  const pendingCount = options.filter(item => !item.riskProfileValid).length;
+  const surveyMissing = customer ? options.find(item => item.customerId === customer.customerId)?.riskProfileValid === false : false;
+
   const message = typeof failure === 'string' ? failure : failure ? describe(failure) : null;
   const rms = team.data?.items ?? [];
   const nameOf = (id: string) => rmText(id, rms.find(rm => rm.rmId === id)?.rmName);
@@ -189,6 +209,30 @@ export function Assignments() {
         ) : null}
       </Panel>
 
+      <Panel title="Khảo sát rủi ro của khách hàng">
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <p className="m-0 flex-1 text-muted-foreground">Nhắc khách chưa có hồ sơ rủi ro còn hiệu lực làm khảo sát 10 câu hỏi.</p>
+          <BusyButton type="button" variant="outline" busy={reminding === 'all'} disabled={reminding !== null || pendingCount === 0}
+            onClick={() => void remind('all')}>Nhắc tất cả khách chưa hoàn thành</BusyButton>
+        </div>
+        {reminderFailure ? <ErrorAlert>{describe(reminderFailure)}</ErrorAlert> : null}
+        {reminderNote ? <p role="status" className="mb-3 font-semibold text-ok">{reminderNote}</p> : null}
+        {options.length === 0 ? <Empty>Chưa có khách hàng nào để hiển thị.</Empty> : (
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {options.map(item => (
+              <li key={item.customerId} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card px-3.5 py-2.5">
+                <span className="min-w-0 flex-1 font-semibold">{item.name}</span>
+                <Badge variant={item.riskProfileValid ? 'ok' : 'wait'}>{item.riskProfileValid ? 'Đã hoàn thành khảo sát' : 'Chưa hoàn thành khảo sát'}</Badge>
+                {item.riskProfileValid ? null : (
+                  <BusyButton type="button" variant="outline" size="sm" busy={reminding === item.customerId} disabled={reminding !== null}
+                    onClick={() => void remind(item.customerId, [item.customerId])}>Nhắc làm khảo sát</BusyButton>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
       <form className="mt-2 mb-3 flex flex-wrap items-end gap-x-3" onSubmit={event => void load(event)}>
         <Field label="Tìm khách hàng" htmlFor="customer-search" className="flex-[1_1_240px]">
           <Input id="customer-search" type="search" value={search} onChange={event => setSearch(event.target.value)} autoComplete="off" />
@@ -226,8 +270,9 @@ export function Assignments() {
             <Fact label="Hồ sơ rủi ro">{customer.currentRisk ? riskLabel(customer.currentRisk.category) : 'Chưa có'}</Fact>
             <Fact label="Đề xuất chờ duyệt">{customer.pendingProposals.count}</Fact>
           </Facts>
+          {surveyMissing ? <p className="mb-3 font-semibold text-wait">Khách chưa hoàn thành khảo sát rủi ro. Chỉ chuyển RM được khi khách có hồ sơ rủi ro còn hiệu lực.</p> : null}
           <Field label="RM nhận" htmlFor="target-rm">
-            <NativeSelect id="target-rm" value={target} onChange={event => setTarget(event.target.value)}>
+            <NativeSelect id="target-rm" disabled={surveyMissing} value={target} onChange={event => setTarget(event.target.value)}>
               <NativeSelectOption value="">Chọn RM nhận</NativeSelectOption>
               {rms.filter(rm => rm.active).map(rm => <NativeSelectOption key={rm.rmId} value={rm.rmId}>{rmText(rm.rmId, rm.rmName)} ({rm.assigned + rm.reserved}/{rm.capacityLimit})</NativeSelectOption>)}
             </NativeSelect>
@@ -236,7 +281,7 @@ export function Assignments() {
             <Textarea id="reason" value={reason} onChange={event => setReason(event.target.value)} rows={3} />
           </Field>
           <p className="mb-3 text-muted-foreground">Khi chuyển, các đề xuất đang chờ duyệt của khách do RM cũ lập sẽ bị hủy.</p>
-          <Button type="button" ref={opener} onClick={requestTransfer} disabled={busy}>Xác nhận chuyển</Button>
+          <Button type="button" ref={opener} onClick={requestTransfer} disabled={busy || surveyMissing}>Xác nhận chuyển</Button>
         </Panel>
       ) : null}
 
