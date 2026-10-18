@@ -111,7 +111,8 @@ test.describe('UC07 S16b data display polish', () => {
     await expect(header).toContainText(/Cập nhật lúc\s+\d/);
     const [t, b] = [(await title.boundingBox())!, (await refresh.boundingBox())!];
     expect(Math.abs((t.y + t.height / 2) - (b.y + b.height / 2)), 'button vertically near the title').toBeLessThan(40);
-    expect(b.y, 'button is in the header, above the first panel').toBeLessThan(220);
+    const aumBox = (await page.getByRole('region', { name: 'Tài sản quản lý (AUM)' }).boundingBox())!;
+    expect(b.y + b.height, 'button is in the header, above the first content panel (AUM)').toBeLessThanOrEqual(aumBox.y);
   });
 
   test('AC8 provenance SYNTHETIC_P3_READ_BRIDGE is shown as a readable label with the raw code only in a title', async ({ page }) => {
