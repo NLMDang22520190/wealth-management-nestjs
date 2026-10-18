@@ -1,11 +1,13 @@
 import { Body, Controller, Get, HttpCode, Module, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
-import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../auth/guards.js';
 import { ApiError, auditContext } from '../platform/http.js';
 import type { ApiRequest } from '../platform/http.js';
 import { CustomerRiskModule } from '../modules/customer-risk/onboarding.module.js';
 import { RiskConfirmBody, RiskDraftBody, riskPaging } from '../modules/customer-risk/risk.domain.js';
 import { RiskService } from '../modules/customer-risk/risk.service.js';
+import { RiskSurveyReminderBody } from '../modules/customer-risk/notifications.domain.js';
+import { NotificationsService } from '../modules/customer-risk/notifications.service.js';
 import { RmAssignmentBody } from '../modules/customer-risk/rm-assignment.domain.js';
 import { RmAssignmentService } from '../modules/customer-risk/rm-assignment.service.js';
 import { parseCustomerListQuery } from '../modules/customer-risk/rm-customers.domain.js';
@@ -86,5 +88,27 @@ class RmController {
   }
 }
 
-@Module({ imports: [CustomerRiskModule], controllers: [RiskController, RmController] })
+@ApiBearerAuth('bearer')
+@ApiTags('Notifications')
+@Controller()
+class NotificationsController {
+  constructor(private readonly notifications: NotificationsService) {}
+  @Roles('LEADER') @Post('team/risk-survey-reminders') @HttpCode(200)
+  @ApiOperation({ summary: 'Send in-app risk-survey reminders to team customers without a valid profile (max 1 per customer per 24h)' })
+  @ApiResponse({ status: 200, description: '{ sent, skipped: [{ customerId, reason: PROFILE_VALID | RECENTLY_REMINDED }] }' })
+  @ApiResponse({ status: 403, description: 'FORBIDDEN: not a leader, or a listed customer is outside the leader team (nothing is sent)' })
+  remind(@Req() request: ApiRequest, @Body() body: RiskSurveyReminderBody) {
+    return this.notifications.remind(request.actor!, body, auditContext(request));
+  }
+  @Roles('CUSTOMER') @Get('notifications')
+  @ApiOperation({ summary: 'List own notifications, newest first' })
+  list(@Req() request: ApiRequest) { return this.notifications.list(request.actor!); }
+  @Roles('CUSTOMER') @Post('notifications/:id/read') @HttpCode(200)
+  @ApiOperation({ summary: 'Mark an own notification as read; another customer notification is 404 NOT_FOUND' })
+  read(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string) {
+    return this.notifications.markRead(request.actor!, id);
+  }
+}
+
+@Module({ imports: [CustomerRiskModule], controllers: [RiskController, RmController, NotificationsController] })
 export class BusinessRoutesModule {}
