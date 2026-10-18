@@ -4,6 +4,8 @@ Ngày lập: 12/10/2026. Thời gian dự kiến: 6 tuần. Người đọc chí
 
 **Trạng thái: kế hoạch đã duyệt ngày 12/10/2026; Phần 1 đã được triển khai trong repo này.** Tài liệu giữ nguyên nội dung kế hoạch ban đầu. Tên bảng, API và quyết định thực tế có thể khác chi tiết; mô tả hệ thống đang chạy, lệnh chạy và kết quả kiểm tra xem tại [README](../../README.md).
 
+> Ghi chú đánh số (18/10/2026): mã quy tắc nghiệp vụ trong kế hoạch này đã được đổi theo "Danh mục 25 quy tắc nghiệp vụ" của Tài liệu đặc tả WMS bản 18/10: BR-07 = hạn mức 80 khách/RM, BR-08 = phạm vi dữ liệu; các quy tắc riêng Phần 1 dùng BR-P1-01 (một dịch vụ/lời mời mỗi CIF), BR-P1-02 (lời mời 72 giờ), BR-P1-03 (bộ câu hỏi có phiên bản), BR-P1-04 (chuyển RM hủy đề xuất chờ). Các mã BR khác giữ nguyên nghĩa đã duyệt.
+
 ## 1. Kết quả cần đạt và các lựa chọn đã chốt
 
 Theo các câu trả lời của bạn trong phiên này, phạm vi được chốt:
@@ -55,7 +57,7 @@ Các nội dung “xây dựng”, “thiết kế”, “triển khai” trong 
 | RM tạm thời | UC-01 gắn RM tạo hồ sơ khi chờ khảo sát; UC-03 yêu cầu dịch vụ Hoạt động | RM tạm vẫn là chủ sở hữu hiện hành của hồ sơ onboarding, tính vào hạn mức; chuyển RM qua UC-03 sau kích hoạt. Không tạo hai RM hiện hành |
 | 10 câu khảo sát | Có số lượng và thang điểm, chưa có nội dung đủ 10 câu/đáp án chính thức | Chuẩn bị bộ demo có version, ghi rõ “khảo sát mô phỏng”; nhóm duyệt nội dung trước seed. Không gọi đây là công cụ đánh giá được ngân hàng chứng nhận |
 | Hết hạn hồ sơ rủi ro | “12 tháng” nhưng chưa định nghĩa mốc giờ/cuối tháng | Đề xuất 12 tháng lịch tính từ lúc OTP xác nhận; ngày không tồn tại chuyển về ngày cuối tháng; hết hiệu lực tại expiresAt. Test năm nhuận/cuối tháng |
-| Đăng ký lại sau yêu cầu bị hủy | BR-03 một dịch vụ/CIF, UC-01 hủy yêu cầu sau 72h | Một khách/một dịch vụ lâu dài; cho tạo yêu cầu đăng ký mới khi yêu cầu trước hết hạn, không tạo tài khoản đầu tư thứ hai |
+| Đăng ký lại sau yêu cầu bị hủy | BR-P1-01 một dịch vụ/CIF, UC-01 hủy yêu cầu sau 72h | Một khách/một dịch vụ lâu dài; cho tạo yêu cầu đăng ký mới khi yêu cầu trước hết hạn, không tạo tài khoản đầu tư thứ hai |
 
 Đây là các mặc định thiết kế để duyệt, chưa phải quy tắc đã được nhóm/giảng viên xác nhận. Chi tiết cách đảo quyết định nằm ở mục 17.
 
@@ -333,7 +335,7 @@ Tiêu chí nghiệm thu:
 
 ### 9.3. UC-03 — Phân công và chuyển RM
 
-**[VERIFIED — S1 UC-03, BR-06/07/08]** Chỉ trưởng nhóm thực hiện; service/RM đích hoạt động; RM trong nhóm; tối đa 80 khách; RM cũ mất quyền; pending proposal của RM cũ bị hủy.
+**[VERIFIED — S1 UC-03, BR-07/BR-08/BR-P1-04]** Chỉ trưởng nhóm thực hiện; service/RM đích hoạt động; RM trong nhóm; tối đa 80 khách; RM cũ mất quyền; pending proposal của RM cũ bị hủy.
 
 Luồng đề xuất:
 
@@ -437,7 +439,7 @@ Kịch bản trong mục này là test cần viết, **chưa được chạy**. 
 | ID | UC/BR | Ca cần chứng minh |
 |---|---|---|
 | T01 | UC01/BR02 | CIF active + KYC + đúng 18 + own VND; không đủ điều kiện bị chặn |
-| T02 | UC01/BR03 | Duplicate CIF/confirm retry/concurrent requests không thêm service/account |
+| T02 | UC01/BR-P1-01 | Duplicate CIF/confirm retry/concurrent requests không thêm service/account |
 | T03 | UC01 | Consent 72h boundary, sai purpose/hash/OTP/replay không tạo account |
 | T04 | UC01/BR01 | Core timeout/bootstrap lỗi rollback; audit success/outbox không tồn tại khi rollback |
 | T05 | UC02/BR05 | 10/20/21/35/36/50; input thiếu/trùng/giả; allocation tổng 100 |
@@ -445,8 +447,8 @@ Kịch bản trong mục này là test cần viết, **chưa được chạy**. 
 | T07 | UC02 | Hai drafts cạnh tranh, tampered answers/version, receipt dùng chéo purpose |
 | T08 | UC02/BR04 | Hết hạn 12 tháng, cuối tháng/năm nhuận, validAt ngay trước/tại expiry |
 | T09 | UC02 | Downgrade phát event/check, không tự bán, vẫn giữ lịch sử |
-| T10 | UC03/BR06 | 79→80; 80→81 bị chặn; hai request đồng thời chỉ một lấy slot |
-| T11 | UC03/BR07 | Transfer hủy pending cũ, không đổi terminal; cancellation lỗi rollback assignment |
+| T10 | UC03/BR-07 | 79→80; 80→81 bị chặn; hai request đồng thời chỉ một lấy slot |
+| T11 | UC03/BR-P1-04 | Transfer hủy pending cũ, không đổi terminal; cancellation lỗi rollback assignment |
 | T12 | UC03/BR25 | Approval-vs-transfer dưới DB lock; một kết quả terminal hợp lệ |
 | T13 | UC04/BR08 | List/detail/direct URL chỉ đúng owner; RM cũ bị từ chối sau transfer |
 | T14 | UC03/04 | Team scope, inactive RM, forged CIF/role/token, assignment version stale |
