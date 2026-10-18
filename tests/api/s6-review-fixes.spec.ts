@@ -138,7 +138,7 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     expect(ids(list.body).sort(byId)).toEqual([first.customerId, second.customerId].sort(byId));
     expect(ids(list.body)).not.toContain(foreign.customerId);
     expect(list.body.items.find((item: any) => item.customerId === first.customerId))
-      .toEqual({ customerId: first.customerId, name: 'Alpha Leader Test', rmId: actors.rm.rmId, assignmentVersion: 1 });
+      .toEqual({ customerId: first.customerId, name: 'Alpha Leader Test', rmId: actors.rm.rmId, assignmentVersion: 1, rmName: actors.rm.actorId });
 
     const filtered = await api.request('/team/customers?name=beta', { token: leaderToken });
     expect(filtered.status).toBe(200);
@@ -167,7 +167,7 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     expect((await transfer(first.customerId, replacementRm, 1, 's6-f3-move')).status).toBe(200);
     const list = await api.request('/team/customers', { token: await api.tokenFor(actors.leader.actorId) });
     expect(list.status).toBe(200);
-    expect(list.body.items).toEqual([{ customerId: first.customerId, name: expect.any(String), rmId: replacementRm, assignmentVersion: 2 }]);
+    expect(list.body.items).toEqual([{ customerId: first.customerId, name: expect.any(String), rmId: replacementRm, assignmentVersion: 2, rmName: 'rm-s6-replacement' }]);
   });
 
   // F4
