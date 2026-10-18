@@ -99,7 +99,7 @@ export function Onboarding() {
               {lookup.accounts.map(item => (
                 <Choice key={item.id}>
                   <input type="radio" className={choiceInput} name="account" value={item.id} checked={account === item.id} onChange={() => setAccount(item.id)} />
-                  <span>Tài khoản {item.currency} <code>{item.id}</code></span>
+                  <span>Tài khoản {item.currency} <span className="font-medium tabular-nums">{item.id}</span></span>
                 </Choice>
               ))}
             </fieldset>

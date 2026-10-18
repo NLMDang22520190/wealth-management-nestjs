@@ -69,13 +69,13 @@ test.describe('UC04 RM customers journey (AC07 + AC02)', () => {
     await expectNoHorizontalOverflow(page);
   });
 
-  test('B6 every th of the customers table head has role=columnheader (6 on desktop)', async ({ page }, testInfo) => {
+  test('B6 every th of the customers table head has role=columnheader (7 on desktop)', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'column headers are asserted on the desktop table layout');
     await openList(page);
     await expect(row(page, 'Khách hàng demo Alpha')).toBeVisible();
     const roles = await page.locator('table.customers thead th').evaluateAll(cells => cells.map(cell => cell.getAttribute('role')));
-    expect(roles).toEqual(Array(6).fill('columnheader'));
-    await expect(page.getByRole('columnheader')).toHaveCount(6);
+    expect(roles).toEqual(Array(7).fill('columnheader'));
+    await expect(page.getByRole('columnheader')).toHaveCount(7);
   });
 
   test('F6 mobile list keeps name, risk label, AUM and drift fully inside the 375px viewport without inner scrolling and without breaking the risk label', async ({ page }, testInfo) => {
@@ -90,8 +90,9 @@ test.describe('UC04 RM customers journey (AC07 + AC02)', () => {
       const parts = {
         name: current.getByRole('link', { name }),
         risk: current.getByText(label, { exact: true }),
-        ...(name.endsWith('Alpha') ? { aum: current.getByText(/900\.000,00/) } : {}),
-        drift: current.getByText(/Kiểm tra danh mục chờ: \d+/), // last, so layout failures of the other parts are reported first
+        ...(name.endsWith('Alpha') ? { aum: current.getByText(/900 nghìn/) } : {}), // S16b: compact AUM, exact value in the title
+        ...(name.endsWith('Alpha') ? { aumExact: current.locator('[title*="900.000,00"]') } : {}),
+        drift: current.getByTestId(/^drift-(badge|zero)$/), // S16b: visible badge/zero; the long label is sr-only. Last, so layout failures of the other parts are reported first
       };
       for (const [part, locator] of Object.entries(parts)) {
         await expect(locator, `${name}: ${part}`).toBeVisible();
@@ -128,7 +129,9 @@ test.describe('UC04 RM customers journey (AC07 + AC02)', () => {
     const aum = page.getByRole('region', { name: 'Tài sản quản lý (AUM)' });
     await expect(aum).toContainText('1.250.000,50');
     await expect(aum).toContainText('Tại thời điểm: 15/01/2026');
-    await expect(aum).toContainText('Nguồn: SYNTHETIC_P3_READ_BRIDGE');
+    await expect(aum).toContainText('Nguồn: Dữ liệu tổng hợp (demo)'); // S16b: readable label, raw code only in title
+    await expect(aum).not.toContainText('SYNTHETIC_P3_READ_BRIDGE');
+    await expect(aum.locator('[title="SYNTHETIC_P3_READ_BRIDGE"]')).toHaveCount(1);
     await expect(page.getByText('Đề xuất chờ duyệt: 1')).toBeVisible();
 
     // Unavailable valuation is labelled, never rendered as zero.

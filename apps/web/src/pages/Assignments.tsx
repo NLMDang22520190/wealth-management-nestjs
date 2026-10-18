@@ -2,18 +2,19 @@ import { ArrowRight, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api, describe, intentDone, intentKey } from '../api';
-import { riskLabel } from '../format';
+import { riskLabel, rmText } from '../format';
 import { AlertAction, BusyButton, Empty, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, useLoad } from '../ui';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
-interface Rm { rmId: string; active: boolean; assigned: number; reserved: number; available: number; capacityLimit: number }
+interface Rm { rmId: string; rmName: string | null; active: boolean; assigned: number; reserved: number; available: number; capacityLimit: number }
 interface Customer {
   customerId: string; name: string;
   currentAssignment: { rmId: string; version: number };
@@ -21,9 +22,22 @@ interface Customer {
   pendingProposals: { count: number };
 }
 interface Transfer { rmId: string; version: number; changed: boolean; cancelledProposals?: number }
-interface TeamCustomers { items: Array<{ customerId: string; name: string }>; total: number }
+interface TeamCustomers { items: Array<{ customerId: string; name: string; rmName: string | null }>; total: number }
 
 const ROSTER_PAGE_SIZE = 50;
+type LoadLevel = 'ok' | 'warn' | 'high';
+const levelColour: Record<LoadLevel, string> = { ok: '[&>*]:bg-ok', warn: '[&>*]:bg-wait', high: '[&>*]:bg-destructive' };
+/** ok below 70%, warn from 70% to 90% inclusive, high above 90% (integer maths, so 56/80 and 72/80 are exact). */
+function loadLevel(used: number, capacity: number): LoadLevel {
+  if (used * 10 > capacity * 9) return 'high';
+  return used * 10 >= capacity * 7 ? 'warn' : 'ok';
+}
+
+/** RM as "name · short id"; the full id stays reachable as a tooltip. */
+function RmName({ id, name }: { id: string; name?: string | null }) {
+  return <span title={id}>{rmText(id, name)}</span>;
+}
+
 const fetchCustomer = (id: string) => api<Customer>(`/customers/${id}`);
 
 /** UC03 (leader): team capacity directory and a versioned, reasoned transfer of one customer. */
@@ -122,7 +136,7 @@ export function Assignments() {
       const cancelled = typeof result.cancelledProposals === 'number'
         ? ` ${result.cancelledProposals} đề xuất đang chờ duyệt của khách đã bị hủy.` : '';
       setNotice(result.changed
-        ? `Đã chuyển khách hàng sang RM ${result.rmId}.${cancelled}`
+        ? `Đã chuyển khách hàng sang RM ${nameOf(result.rmId)}.${cancelled}`
         : 'Khách hàng đã thuộc RM này, không có thay đổi.');
     } catch (error) {
       if (error instanceof ApiFailure && error.code === 'RM_ASSIGNMENT_STALE') setStale(true);
@@ -132,6 +146,7 @@ export function Assignments() {
 
   const message = typeof failure === 'string' ? failure : failure ? describe(failure) : null;
   const rms = team.data?.items ?? [];
+  const nameOf = (id: string) => rmText(id, rms.find(rm => rm.rmId === id)?.rmName);
   const headClass = 'h-auto px-4 py-3 text-[0.78rem] text-muted-foreground';
 
   return (
@@ -143,10 +158,10 @@ export function Assignments() {
         {team.data && rms.length === 0 ? <Empty>Nhóm chưa có RM nào.</Empty> : null}
         {rms.length > 0 ? (
           <div className="overflow-x-auto rounded-xl border bg-card">
-            <Table className="rm-table text-[0.93rem]">
+            <Table className="rm-table text-[0.93rem] max-sm:text-[0.82rem]">
               <TableHeader className="bg-muted">
                 <TableRow>
-                  <TableHead scope="col" className={headClass}>Mã RM</TableHead>
+                  <TableHead scope="col" className={headClass}>RM</TableHead>
                   <TableHead scope="col" className={headClass}>Tải</TableHead>
                   <TableHead scope="col" className={headClass}>Trạng thái</TableHead>
                 </TableRow>
@@ -154,17 +169,17 @@ export function Assignments() {
               <TableBody>
                 {rms.map(rm => {
                   const used = rm.assigned + rm.reserved;
-                  const ratio = used / rm.capacityLimit;
                   return (
                     <TableRow key={rm.rmId}>
-                      <TableHead scope="row" className="h-auto px-2 py-3 font-semibold sm:px-4"><code title={rm.rmId} className="block max-w-[12ch] truncate sm:max-w-none">{rm.rmId}</code></TableHead>
+                      <TableHead scope="row" className="h-auto px-2 py-3 font-semibold sm:px-4"><span className="block truncate sm:max-w-none"><RmName id={rm.rmId} name={rm.rmName} /></span></TableHead>
                       <TableCell className="px-2 py-3 sm:px-4">
-                        <span className="mr-2.5 hidden h-2 w-24 overflow-hidden rounded-full bg-border align-middle sm:inline-block" aria-hidden="true">
-                          <span className={cn('block h-full rounded-full', ratio >= 0.9 ? 'bg-destructive' : ratio >= 0.7 ? 'bg-gold' : 'bg-primary')} style={{ width: `${Math.min(100, ratio * 100)}%` }} />
-                        </span>
-                        <span className="font-semibold tabular-nums">{used}/{rm.capacityLimit}</span>
+                        <div className="flex items-center gap-2.5">
+                          <Progress value={Math.min(used, rm.capacityLimit)} max={rm.capacityLimit} data-level={loadLevel(used, rm.capacityLimit)} aria-label={`Tải của ${rmText(rm.rmId, rm.rmName)}`}
+                            className={cn('hidden w-24 flex-none sm:flex', levelColour[loadLevel(used, rm.capacityLimit)])} />
+                          <span className="font-semibold tabular-nums">{used}/{rm.capacityLimit} khách</span>
+                        </div>
                       </TableCell>
-                      <TableCell className="px-2 py-3 sm:px-4">{rm.active ? 'Đang hoạt động' : 'Ngừng hoạt động'}</TableCell>
+                      <TableCell className="px-2 py-3 max-sm:whitespace-normal sm:px-4">{rm.active ? 'Đang hoạt động' : 'Ngừng hoạt động'}</TableCell>
                     </TableRow>
                   );
                 })}
@@ -183,13 +198,15 @@ export function Assignments() {
             <NativeSelectOption value="">Chọn khách hàng</NativeSelectOption>
             {options.map(item => <NativeSelectOption key={item.customerId} value={item.customerId}>{item.name}</NativeSelectOption>)}
           </NativeSelect>
-          <p className="m-0 text-muted-foreground">Hiển thị {options.length}/{rosterTotal} khách hàng</p>
-          {options.length < rosterTotal ? (
-            <Button type="button" variant="outline" className="self-start" onClick={() => setRosterPage(rosterPage + 1)} disabled={rosterBusy}>Tải thêm khách hàng</Button>
-          ) : null}
         </Field>
         <BusyButton type="submit" busy={busy} className="mb-3.5">Tải thông tin khách hàng</BusyButton>
       </form>
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <p className="m-0 text-muted-foreground">Hiển thị {options.length}/{rosterTotal} khách hàng</p>
+        {options.length < rosterTotal ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => setRosterPage(rosterPage + 1)} disabled={rosterBusy}>Tải thêm khách hàng</Button>
+        ) : null}
+      </div>
       {rosterError ? <ErrorAlert>{describe(rosterError)} <AlertAction onClick={() => setRosterTick(value => value + 1)}>Thử lại</AlertAction></ErrorAlert> : null}
       {busy ? <Loading label="Đang xử lý…" /> : null}
       {message ? (
@@ -204,7 +221,7 @@ export function Assignments() {
         <Panel title="Khách hàng cần chuyển">
           <Facts>
             <Fact label="Họ tên">{customer.name}</Fact>
-            <Fact label="RM hiện tại"><code>{customer.currentAssignment.rmId}</code></Fact>
+            <Fact label="RM hiện tại"><RmName id={customer.currentAssignment.rmId} name={rms.find(rm => rm.rmId === customer.currentAssignment.rmId)?.rmName} /></Fact>
             <Fact label="Phân công">Phiên bản phân công: {customer.currentAssignment.version}</Fact>
             <Fact label="Hồ sơ rủi ro">{customer.currentRisk ? riskLabel(customer.currentRisk.category) : 'Chưa có'}</Fact>
             <Fact label="Đề xuất chờ duyệt">{customer.pendingProposals.count}</Fact>
@@ -212,7 +229,7 @@ export function Assignments() {
           <Field label="RM nhận" htmlFor="target-rm">
             <NativeSelect id="target-rm" value={target} onChange={event => setTarget(event.target.value)}>
               <NativeSelectOption value="">Chọn RM nhận</NativeSelectOption>
-              {rms.filter(rm => rm.active).map(rm => <NativeSelectOption key={rm.rmId} value={rm.rmId}>{rm.rmId} ({rm.assigned + rm.reserved}/{rm.capacityLimit})</NativeSelectOption>)}
+              {rms.filter(rm => rm.active).map(rm => <NativeSelectOption key={rm.rmId} value={rm.rmId}>{rmText(rm.rmId, rm.rmName)} ({rm.assigned + rm.reserved}/{rm.capacityLimit})</NativeSelectOption>)}
             </NativeSelect>
           </Field>
           <Field label="Lý do chuyển" htmlFor="reason">
@@ -231,7 +248,7 @@ export function Assignments() {
               <DialogDescription className="text-[15px] text-foreground">Chuyển <strong>{customer.name}</strong> sang RM mới.</DialogDescription>
             </DialogHeader>
             <p className="m-0 flex flex-wrap items-center gap-2.5">
-              <code>{customer.currentAssignment.rmId}</code><ArrowRight aria-hidden="true" className="size-4 text-primary" /><code>{target}</code>
+              <code><RmName id={customer.currentAssignment.rmId} name={rms.find(rm => rm.rmId === customer.currentAssignment.rmId)?.rmName} /></code><ArrowRight aria-hidden="true" className="size-4 text-primary" /><code><RmName id={target} name={rms.find(rm => rm.rmId === target)?.rmName} /></code>
             </p>
             <p className="m-0 text-muted-foreground">Lý do: {reason.trim()}</p>
             {customer.pendingProposals.count > 0

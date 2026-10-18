@@ -74,11 +74,14 @@ export function Panel({ title, children, tone = 'plain' }: { title: string; chil
   );
 }
 
-export function PageTitle({ title, hint }: { title: string; hint?: string }) {
+export function PageTitle({ title, hint, actions }: { title: string; hint?: string; actions?: ReactNode }) {
   return (
-    <header className="mb-5">
-      <h2 className="m-0 mb-1.5 text-[1.65rem] leading-tight font-bold">{title}</h2>
-      {hint ? <p className="m-0 max-w-[64ch] text-muted-foreground">{hint}</p> : null}
+    <header className="mb-5 flex items-center justify-between gap-x-4">
+      <div className="min-w-0">
+        <h2 className="m-0 mb-1.5 text-[1.65rem] leading-tight font-bold">{title}</h2>
+        {hint ? <p className="m-0 max-w-[64ch] text-muted-foreground">{hint}</p> : null}
+      </div>
+      {actions ? <div className="flex flex-none flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">{actions}</div> : null}
     </header>
   );
 }
@@ -223,9 +226,9 @@ export function AllocationSummary({ maxProductRisk, allocation }: { maxProductRi
 }
 
 /** Risk category as a colour-coded badge; the visible text stays the plain Vietnamese label. */
-export function RiskChip({ category, label }: { category: string; label: string }) {
+export function RiskChip({ category, label, testId }: { category: string; label: string; testId?: string }) {
   const variant = category.toLowerCase();
-  return <Badge variant={variant === 'conservative' || variant === 'balanced' || variant === 'growth' ? variant : 'secondary'}>{label}</Badge>;
+  return <Badge data-testid={testId} variant={variant === 'conservative' || variant === 'balanced' || variant === 'growth' ? variant : 'secondary'}>{label}</Badge>;
 }
 
 /** Term/value grid used for key facts on panels. */
