@@ -14,6 +14,7 @@ interface CustomerRow {
   customerId: string; name: string; serviceStatus: string;
   currentRisk: { category: string; expiresAt: string; valid: boolean } | null;
   aum: Aum;
+  cash: Aum;
   driftAlerts: { count: number };
   pendingProposals: { count: number };
 }
@@ -159,6 +160,9 @@ export function CustomerDetail({ customerId }: { customerId: string }) {
                 <p>Nguồn: {customer.aum.provenance ?? 'Nhiều nguồn'}</p>
               </>
             )}
+          </Panel>
+          <Panel title="Tiền mặt">
+            <p>Tiền mặt: {customer.cash.value === null ? 'Chưa có dữ liệu' : formatVnd(customer.cash.value)}</p>
           </Panel>
           <Panel title="Công việc cần theo dõi">
             <p>Đề xuất chờ duyệt: {customer.pendingProposals.count}</p>
