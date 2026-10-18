@@ -42,3 +42,7 @@ Seed và ảnh demo phải là dữ liệu tổng hợp. Không đưa CIF thật
 | `holdings_read_snapshots` | id, customer_id, product_id, product_risk, asset_class, quantity, market_value, as_of, provenance | Bridge Phần 3 đọc snapshot thực đã lưu; chọn bản mới nhất từng sản phẩm. Chưa phải engine định giá |
 
 Nhóm risk là CONSERVATIVE/BALANCED/GROWTH. Allocation lưu phần trăm theo cash/deposit/bond/fund. Profile hết hạn tại mốc 12 tháng lịch UTC, không xóa lịch sử và không tự đổi service ACTIVE. Khi hạ risk, sự kiện `RiskHoldingsCheckRequested` được ghi vào outbox; trạng thái PENDING cho biết tác vụ holdings/drift chưa được xử lý, dù bridge có thể chỉ ra holdings vượt mức ngay khi đọc.
+
+## Ghi chú migration bộ câu hỏi tiếng Việt
+
+Migration `1791763200006-vietnamese-questionnaire` thêm phiên bản `demo-risk-v2-vi` (ACTIVE) và chuyển `demo-risk-v1` sang RETIRED, không sửa nội dung v1. `effective_from` của v2 là 2026-01-10 (ngày lùi) để khớp đồng hồ cố định của bộ test; ở môi trường thật, phiên bản mới nên ghi đúng thời điểm phát hành. `down()` chỉ dùng được trên database chưa có bản nháp/hồ sơ dùng v2, vì trigger bất biến chặn xóa phiên bản đã dùng và chặn chuyển v1 từ RETIRED về ACTIVE; trên database đã có dữ liệu, việc rollback sẽ thất bại an toàn (không mất dữ liệu).

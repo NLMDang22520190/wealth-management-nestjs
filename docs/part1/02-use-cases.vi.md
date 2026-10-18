@@ -2,6 +2,8 @@
 
 Baseline: mô hìnhA trong [kế hoạch đã duyệt](../planning/implementation-plan.vi.md). Bản đặc tả mô tả yêu cầu; kết quả hiện thực/kiểm thử nằm ở tài liệu verification của repo, không suy ra từ bảng dưới.
 
+> Đánh số quy tắc nghiệp vụ (BR) trong tài liệu này theo "Danh mục 25 quy tắc nghiệp vụ" của Tài liệu đặc tả WMS bản 18/10/2026. Quy tắc riêng của Phần 1 dùng mã BR-P1-xx. Bản đặc tả chi tiết kèm sơ đồ nằm trong báo cáo Phân hệ 1 của nhóm.
+
 ## Tác nhân và tiền điều kiện chung
 
 Customer, RM và LEADER (trưởng nhóm) là vai trò của IAM demo hiện tại; Back-office thuộc các phân hệ tiếp theo. Actor lấy từ IAM đã xác thực; client không tự cấp role/CIF/team. Core Banking mock cung cấp CIF, KYC, trạng thái và tài khoản thanh toán. OTP mock cung cấp challenge/receipt được gắn với tác nhân, thao tác và nội dung bất biến. Mọi mutation có audit; truy cập sai quyền bị từ chối và ghi nhận phù hợp.
@@ -20,7 +22,7 @@ Luồng: RM lookup CIF/ID → server kiểm tra eligibility → RM chọn accoun
 
 Ngoại lệ: CIF không có/phong tỏa/chưa KYC, dưới18, thiếu VND, chọn account người khác; CIF có service/request mở; Core timeout; OTP sai/hết hạn/replay; đúng mốc72h; bootstrap account lỗi. Retry cùng idempotency key/nội dung trả cùng kết quả; cùng key khác nội dung bị conflict. Request quá hạn có thể được thay bằng request mới, không tạo account thứ hai.
 
-BR:01 audit,02 eligibility,03 uniqueness; capacity kết hợp BR06 để onboarding không làm vượt80. Tuổi theo ngày sinh/ngày nghiệp vụ; không xấp xỉ bằng số ngày365.
+BR (đánh số theo đặc tả WMS 18/10): BR-01 audit, BR-02 điều kiện đăng ký, BR-03 ký Smart OTP; BR-P1-01 mỗi CIF một dịch vụ/lời mời, BR-P1-02 lời mời 72 giờ; hạn mức BR-07 tính cả chỗ giữ để onboarding không làm vượt 80. Tuổi theo ngày sinh/ngày nghiệp vụ; không xấp xỉ bằng số ngày365.
 
 ## UC02 — Đánh giá khẩu vị rủi ro
 
@@ -44,7 +46,7 @@ Mỗi câu có5 mức điểm1–5. Server tra điểm từ option của questio
 
 Hồ sơ có hiệu lực12 tháng lịch từ confirmation; mốc hết hạn loại trừ (now>=expiresAt là expired). Policy ngày cuối tháng/năm nhuận bám quyết định trong plan. Khi giảm risk: giữ nguyên holdings, thông báo RM các holdings vượt mức mới và kích hoạt đánh giá drift qua outbox; không tự bán hoặc sửa ledger.
 
-BR:01 audit,04 expiry,05 scoring; consumerP4 dùng risk snapshot/version/validAt, không chỉ một label.
+BR (đánh số 18/10): BR-01 audit, BR-03 ký Smart OTP, BR-04 đủ 10 câu, BR-05 chấm điểm, BR-06 hiệu lực 12 tháng, BR-P1-03 bộ câu hỏi có phiên bản; consumerP4 dùng risk snapshot/version/validAt, không chỉ một label.
 
 ## UC03 — Phân công/chuyển RM
 
@@ -61,7 +63,7 @@ Capacity gồm assignment hiện hành và reservation onboarding còn hiệu l�
 
 Race với approval: consumerP4 dùng cùng customer lock và recheck currentRM. Nếu transfer commit trước, proposal cũ cancelled và không thể execute. Nếu proposal đã terminal trước, transfer không đổi terminal. P1 không tạo engine giao dịch tài chính thayP4.
 
-BR:01,06 capacity,07 cancellation,08 ownership; terminal-preservation contract theo BR25.
+BR (đánh số 18/10): BR-01 audit, BR-07 hạn mức 80, BR-08 phạm vi dữ liệu, BR-P1-04 chuyển RM hủy đề xuất chờ của RM cũ; terminal-preservation contract theo BR-25.
 
 ## UC04 — Danh sách khách phụ trách
 
