@@ -38,13 +38,18 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-gold: var(--gold);
   --color-gold-foreground: var(--gold-foreground);
+  --color-gold-soft: var(--gold-soft);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
+  --color-ok-surface: var(--ok-surface);
+  --color-ok-border: var(--ok-border);
   --color-wait: var(--wait);
   --color-wait-soft: var(--wait-soft);
+  --color-wait-border: var(--wait-border);
   --color-risk-conservative: var(--risk-conservative);
   --color-risk-balanced: var(--risk-balanced);
   --color-risk-growth: var(--risk-growth);
+  --color-risk-cash: var(--risk-cash);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -84,13 +89,18 @@
   --sidebar-ring: #ffd877;
   --gold: #d4a64a;
   --gold-foreground: #1d1500;
+  --gold-soft: #f0d39a;
   --ok: #17663f;
   --ok-soft: #e3f3ea;
+  --ok-surface: #f5fbf7;
+  --ok-border: #a9d6bd;
   --wait: #8a5a00;
   --wait-soft: #fdf3dc;
+  --wait-border: #efd9a3;
   --risk-conservative: #2563a8;
   --risk-balanced: #0f766e;
   --risk-growth: #b4530b;
+  --risk-cash: #94a3b8;
   color-scheme: light;
 }
 
@@ -107,5 +117,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }

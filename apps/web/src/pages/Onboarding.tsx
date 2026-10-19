@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { api, describe, intentDone, intentKey } from '../api';
 import { formatDateTime } from '../format';
 import { Check } from 'lucide-react';
-import { BusyButton, Choice, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, choiceInput } from '../ui';
+import { BusyButton, Choice, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, choiceInput, invalidProps } from '../ui';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -22,11 +22,18 @@ export function Onboarding() {
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
   const [busy, setBusy] = useState<'lookup' | 'create' | null>(null);
+  const [cifError, setCifError] = useState<string | null>(null);
+  const cifInput = useRef<HTMLInputElement>(null);
 
   const search = async (event: FormEvent) => {
     event.preventDefault();
     const reference = cif.trim();
-    if (!reference) { setFailure({ validation: 'Nhập mã CIF hoặc định danh của khách hàng.' }); return; }
+    if (!reference) {
+      const text = 'Nhập mã CIF hoặc định danh của khách hàng.';
+      setFailure({ validation: text }); setCifError(text); cifInput.current?.focus();
+      return;
+    }
+    setCifError(null);
     setBusy('lookup'); setFailure(null); setLookup(null); setInvitation(null); setAccount('');
     try { setLookup(await api<Lookup>('/onboarding/customer-lookup', { body: { cifRef: reference } })); }
     catch (error) { setFailure(error); }
@@ -77,8 +84,8 @@ export function Onboarding() {
         })}
       </ol>
       <form className="mt-2 mb-3 flex flex-wrap items-end gap-x-3" onSubmit={event => void search(event)}>
-        <Field label="Mã CIF hoặc định danh" htmlFor="cif" className="flex-[1_1_240px]">
-          <Input id="cif" value={cif} onChange={event => setCif(event.target.value)} autoComplete="off" inputMode="text" />
+        <Field label="Mã CIF hoặc định danh" htmlFor="cif" className="flex-[1_1_240px]" error={cifError}>
+          <Input id="cif" ref={cifInput} value={cif} onChange={event => { setCif(event.target.value); setCifError(null); }} autoComplete="off" inputMode="text" {...invalidProps('cif-error', cifError)} />
         </Field>
         <BusyButton type="submit" busy={busy === 'lookup'} disabled={busy !== null} className="mb-3.5">Tra cứu</BusyButton>
       </form>
@@ -109,7 +116,7 @@ export function Onboarding() {
       ) : null}
 
       {invitation ? (
-        <Panel title="Lời mời đã gửi" tone="success">
+        <Panel title="Lời mời đã gửi" tone="success" focusOnMount>
           <p className="font-semibold text-ok">Đã tạo lời mời</p>
           <Facts>
             <Fact label="Trạng thái"><Badge variant="wait">Chờ khách hàng đồng ý</Badge></Fact>

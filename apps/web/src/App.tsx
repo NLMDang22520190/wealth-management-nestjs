@@ -70,7 +70,7 @@ function RoleSwitch({ session, choice, onChoice, busy, failure, onSubmit }: {
         </NativeSelect>
         <Button type="submit" variant="outline" disabled={busy} className="flex-none border-white/45 bg-transparent whitespace-nowrap text-sidebar-foreground hover:border-white/80 hover:bg-white/10 hover:text-sidebar-foreground disabled:border-white/25 disabled:bg-transparent disabled:text-sidebar-foreground/70 lg:w-full">Chuyển vai</Button>
       </div>
-      <p className="m-0 text-[0.8rem] text-[#f0d39a]" aria-live="polite">{session ? `Đang dùng vai: ${session.actorId}` : 'Chưa chọn vai'}</p>
+      <p className="m-0 text-[0.8rem] text-gold-soft" aria-live="polite">{session ? `Đang dùng vai: ${session.actorId}` : 'Chưa chọn vai'}</p>
       {failure ? <ErrorAlert>{describe(failure)}</ErrorAlert> : null}
     </form>
   );
@@ -167,14 +167,14 @@ export function App() {
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[264px_minmax(0,1fr)] lg:bg-[linear-gradient(to_right,var(--sidebar)_264px,var(--background)_264px)]">
-      <header className="flex flex-col gap-3 bg-sidebar px-4 pt-3.5 pb-3 text-white lg:sticky lg:top-0 lg:h-screen lg:gap-[22px] lg:px-4 lg:py-[22px] [&_:focus-visible]:outline-[#ffd877]">
+      <header className="flex flex-col gap-3 bg-sidebar px-4 pt-3.5 pb-3 text-white lg:sticky lg:top-0 lg:h-screen lg:gap-[22px] lg:px-4 lg:py-[22px] [&_:focus-visible]:border-sidebar-ring [&_:focus-visible]:outline-sidebar-ring [&_:focus-visible]:ring-sidebar-ring!">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
           <svg className="size-[30px] flex-none text-gold" viewBox="0 0 32 32" aria-hidden="true">
             <rect width="32" height="32" rx="9" fill="currentColor" />
-            <path d="M7 21c3-1 4-9 7-9s3 6 6 6 3-7 5-9" fill="none" stroke="#102a4c" strokeWidth="2.6" strokeLinecap="round" />
+            <path d="M7 21c3-1 4-9 7-9s3 6 6 6 3-7 5-9" fill="none" className="stroke-sidebar" strokeWidth="2.6" strokeLinecap="round" />
           </svg>
           <h1 className="m-0 text-[1.3rem] leading-tight font-bold">WealthFlow</h1>
-          <span className="rounded-full bg-gold/15 px-2.5 py-0.5 text-xs font-medium text-[#f0d39a]">Môi trường demo</span>
+          <span className="rounded-full bg-gold/15 px-2.5 py-0.5 text-xs font-medium text-gold-soft">Môi trường demo</span>
         </div>
         {session ? (
           <nav aria-label="Điều hướng chính" className="lg:flex-1">
