@@ -27,11 +27,11 @@ Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một �
 
 ## Luồng Phần 1
 
-1. **RM tra cứu khách (UC01):** Core mô phỏng trả CIF, điều kiện đăng ký và tài khoản VND chính chủ. Giao diện đi theo 3 bước (Tra cứu → Chọn tài khoản → Gửi lời mời); lời mời có hạn 72 giờ. Tra cứu có kiểm tra quyền theo phân công hiện tại; mỗi RM tra cứu tối đa 30 lần/phút và tạo tối đa 10 lời mời/phút.
-2. **Khách đồng ý điều khoản (UC01):** khách đọc điều khoản, nhận OTP và tự nhập vào 6 ô (dán được cả mã, có đếm ngược gửi lại mã). Consent, dịch vụ, tài khoản số dư 0 và phân công RM được ghi trong cùng một transaction.
-3. **Khách khảo sát rủi ro (UC02):** 10 câu hỏi tiếng Việt, hiện từng câu với nút Câu trước/Câu tiếp; server tính điểm và trả kết quả dự kiến kèm **mức rủi ro sản phẩm tối đa** và **phân bổ tài sản**. Chỉ khi xác nhận OTP mới tạo hồ sơ có hiệu lực 12 tháng và kích hoạt dịch vụ.
-4. **Trưởng nhóm phân công (UC03):** chọn khách trong nhóm, xem tải từng RM (giới hạn 80 khách), chuyển RM kèm lý do sau hộp xác nhận nêu rõ tác động. Đề xuất đang chờ của RM cũ bị hủy trong cùng transaction và số lượng hủy do server trả về.
-5. **RM theo dõi khách (UC04):** chỉ thấy khách đang phụ trách; lọc, sắp xếp, phân trang phía server. AUM, số lượt kiểm tra danh mục chờ và đề xuất chờ duyệt đều có `asOf`/nguồn; AUM chưa có dữ liệu hiển thị "Chưa có dữ liệu", không bao giờ là 0.
+1. **RM tra cứu khách (UC01):** Core mô phỏng trả CIF, điều kiện đăng ký (đủ 18 tuổi, eKYC, không thuộc danh sách đen, nhóm nợ dưới 3) và tài khoản VND chính chủ. Giao diện đi theo 3 bước (Tra cứu → Chọn tài khoản → Gửi lời mời); lời mời có hạn 72 giờ. Tra cứu có kiểm tra quyền theo phân công hiện tại; mỗi RM tra cứu tối đa 30 lần/phút và tạo tối đa 10 lời mời/phút.
+2. **Khách đồng ý điều khoản (UC01):** khách đọc điều khoản, nhận OTP (hiệu lực 120 giây, chỉnh bằng `OTP_TTL_SECONDS`) và tự nhập vào 6 ô (dán được cả mã, có đếm ngược gửi lại mã). Consent, dịch vụ, tài khoản số dư 0 và phân công RM được ghi trong cùng một transaction.
+3. **Khách khảo sát rủi ro (UC02):** 10 câu hỏi tiếng Việt, hiện từng câu với nút Câu trước/Câu tiếp; server tính điểm và trả kết quả dự kiến kèm **mức rủi ro sản phẩm tối đa** và **phân bổ tài sản**. Chỉ khi xác nhận OTP mới tạo hồ sơ có hiệu lực 12 tháng và kích hoạt dịch vụ. Khi trưởng nhóm gửi lời nhắc, khách thấy banner **Thông báo** dẫn tới trang khảo sát; banner tự ẩn khi hồ sơ đã còn hiệu lực.
+4. **Trưởng nhóm phân công (UC03):** chọn khách trong nhóm, xem tải từng RM theo tên (giới hạn 80 khách), chuyển RM kèm lý do sau hộp xác nhận nêu rõ tác động. Chỉ chuyển được khách có dịch vụ đang hoạt động **và hồ sơ rủi ro còn hiệu lực** (nếu không: `RISK_PROFILE_REQUIRED`). Khách chưa hoàn thành khảo sát có nút **Nhắc làm khảo sát** (từng khách hoặc tất cả), mỗi khách tối đa 1 lời nhắc trong 24 giờ. Đề xuất đang chờ của RM cũ bị hủy trong cùng transaction và số lượng hủy do server trả về.
+5. **RM theo dõi khách (UC04):** chỉ thấy khách đang phụ trách; lọc, sắp xếp, phân trang phía server. AUM (rút gọn trong danh sách, số chính xác ở trang chi tiết), tiền mặt, số lượt kiểm tra danh mục chờ và đề xuất chờ duyệt đều có `asOf`/nguồn; AUM chưa có dữ liệu hiển thị "Chưa có dữ liệu", không bao giờ là 0.
 
 ## Giao diện
 
@@ -147,15 +147,15 @@ Kết quả dự kiến không thay hồ sơ hiện hành. Lịch sử đã xác
 - Mọi API kiểm tra quyền phía server, không dựa vào việc ẩn nút trên giao diện. Chuyển RM có hiệu lực ngay ở lần truy cập tiếp theo.
 - OTP dùng một lần, có thời hạn, gắn actor/mục đích/thao tác; database chỉ lưu hash có salt.
 - `Idempotency-Key` gắn actor, mục đích, resource và payload: retry đúng trả lại kết quả cũ, đổi payload với cùng key bị từ chối.
-- Audit lưu metadata và before/after đã lọc, không lưu token hay mã OTP. Token phía trình duyệt chỉ giữ trong bộ nhớ.
+- Audit lưu metadata (kèm `X-Device-Id` nếu client gửi) và before/after đã lọc, không lưu token hay mã OTP; OTP sai và truy cập bị từ chối cũng được ghi (FAILURE / DENIED). Token phía trình duyệt chỉ giữ trong bộ nhớ.
 - Tiền luôn là chuỗi thập phân từ database tới giao diện, không tính toán bằng số thực JavaScript.
 
 ## Kiểm tra
 
 | Lệnh | Nội dung | Kết quả gần nhất |
 |---|---|---|
-| `npm run test:api` | 77 integration test (11 file) trên PostgreSQL thật: rollback, ràng buộc unique, OTP, cạnh tranh đồng thời, phân quyền, giới hạn tần suất, log | 77/77 pass |
-| `npm run test:e2e` | 14 hành trình × desktop + mobile trên Edge, với seed CLI, API và Vite thật | 26 pass, 2 skip (test bố cục chỉ chạy ở một kích thước màn hình) |
+| `npm run test:api` | 121 integration test (15 file) trên PostgreSQL thật: rollback, ràng buộc unique, OTP, cạnh tranh đồng thời, phân quyền, giới hạn tần suất, điều kiện chuyển RM, lời nhắc khảo sát, audit, log | 121/121 pass |
+| `npm run test:e2e` | 10 file hành trình × desktop + mobile trên Edge, với seed CLI, API và Vite thật (gồm cả kiểm tra bố cục 375px và trợ năng) | 152 pass, 10 skip (test chỉ chạy ở một kích thước màn hình) |
 | `npm run lint` · `npm run typecheck` · `npm run build` | oxlint, TypeScript, build API + web | sạch |
 
 Test cần biến môi trường `WMS_TEST_POSTGRES_ADMIN_URL` trỏ tới một PostgreSQL có quyền tạo database; mỗi lần chạy tạo database riêng rồi xóa. Ví dụ với PostgreSQL cục bộ:
@@ -172,7 +172,8 @@ GitHub Actions (`.github/workflows/ci.yml`) chạy build, lint, typecheck và te
 
 - Bộ câu hỏi khảo sát được lưu theo phiên bản: phiên bản tiếng Việt `demo-risk-v2-vi` đang dùng, phiên bản đầu `demo-risk-v1` (tiếng Anh) được giữ nguyên ở trạng thái ngừng dùng cho lịch sử. Bản nháp làm trên phiên bản đã ngừng không xác nhận được.
 - "Kiểm tra danh mục chờ" là số yêu cầu kiểm tra holdings đang mở do hạ mức rủi ro; engine định giá và drift đầy đủ thuộc Phần 3.
-- Danh sách RM hiển thị mã RM vì registry demo không có tên hiển thị.
+- Tên RM là mã actor trong registry demo (ví dụ `rm-alpha`) kèm 8 ký tự đầu của mã RM; chưa có tên hiển thị thật.
+- Lời nhắc khảo sát là thông báo trong ứng dụng; chưa gửi email/SMS và chưa có nhắc tự động khi hồ sơ sắp hết hạn.
 - Giới hạn tần suất (cấu hình bằng `LOOKUP_RATE_LIMIT_PER_MINUTE`, `INVITE_RATE_LIMIT_PER_MINUTE`, mặc định 30 và 10) được giữ trong bộ nhớ của một tiến trình API.
 - Mock IAM/OTP chỉ phục vụ demo, chưa phải cơ chế đủ điều kiện triển khai ngân hàng thật.
 
@@ -183,6 +184,7 @@ GitHub Actions (`.github/workflows/ci.yml`) chạy build, lint, typecheck và te
 - [Đặc tả UC01–04 và sơ đồ UC tổng thể](docs/part1/02-use-cases.vi.md)
 - [Trình tự xác nhận rủi ro](docs/part1/03-risk-sequence.vi.md)
 - [Từ điển dữ liệu](docs/part1/04-data-dictionary.vi.md)
+- [Hướng dẫn cho coding agent](AGENTS.md) (lệnh, quy tắc, chuỗi giao diện mà test E2E dựa vào)
 
 Tài liệu gốc DOCX/HTML của môn học và thông tin cá nhân không được đưa vào repo.
 
