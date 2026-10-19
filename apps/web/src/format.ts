@@ -18,10 +18,10 @@ export const riskLabels: Record<string, string> = { CONSERVATIVE: 'Thận trọn
 export function riskLabel(category: string): string { return riskLabels[category] ?? category; }
 
 const compactFormat = new Intl.NumberFormat('vi-VN', { notation: 'compact', compactDisplay: 'long', maximumFractionDigits: 2 });
-/** Display-only short form ("1,73 tỷ"); never used for arithmetic. Pair it with a title holding formatVnd. */
+/** Display-only short form ("1,73 tỷ ₫"); never used for arithmetic. Pair it with a title holding formatVnd. */
 export function formatCompactVnd(value: string): string {
   const amount = Number(value);
-  return Number.isFinite(amount) ? compactFormat.format(amount) : value;
+  return Number.isFinite(amount) ? `${compactFormat.format(amount)} ₫` : value;
 }
 
 const timeFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });

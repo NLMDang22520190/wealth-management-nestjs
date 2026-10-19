@@ -75,7 +75,7 @@ export function RiskSurvey() {
     return (
       <>
         <PageTitle title="Khảo sát rủi ro" />
-        <Panel title="Hoàn tất" tone="success">
+        <Panel title="Hoàn tất" tone="success" focusOnMount>
           <p className="font-semibold text-ok">Đã xác nhận hồ sơ rủi ro</p>
           <p>Hồ sơ mới có hiệu lực ngay. Mở mục Hồ sơ rủi ro để xem điểm, ngày hết hạn và lịch sử.</p>
         </Panel>
@@ -123,7 +123,7 @@ export function RiskSurvey() {
           {busy ? <Loading label="Đang xử lý…" /> : null}
           {failure ? <ErrorAlert>{failure}</ErrorAlert> : null}
           {draft ? (
-            <Panel title="Kết quả dự kiến" tone="preview">
+            <Panel title="Kết quả dự kiến" tone="preview" focusOnMount>
               <p className="mb-1 text-[1.9rem] leading-tight font-bold">{riskLabel(draft.category)}</p>
               <p className="mb-2 flex items-baseline text-[0.9rem] font-medium text-muted-foreground">
                 <span>Điểm: </span>

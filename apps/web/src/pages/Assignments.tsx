@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ApiFailure, api, describe, intentDone, intentKey } from '../api';
 import { riskLabel, rmText } from '../format';
-import { AlertAction, BusyButton, Empty, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, useLoad } from '../ui';
+import { AlertAction, BusyButton, Empty, ErrorAlert, Fact, Facts, Field, Loading, PageTitle, Panel, invalidProps, useLoad } from '../ui';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -85,6 +85,13 @@ export function Assignments() {
   const [reason, setReason] = useState('');
   const [failure, setFailure] = useState<unknown>(null);
   const [stale, setStale] = useState(false);
+  // Inline validation: which control is invalid and why. Cleared as soon as that control changes.
+  const [fieldError, setFieldError] = useState<{ id: 'customer-id' | 'target-rm' | 'reason'; text: string } | null>(null);
+  const errorFor = (id: 'customer-id' | 'target-rm' | 'reason') => (fieldError?.id === id ? fieldError.text : null);
+  const invalidate = (id: 'customer-id' | 'target-rm' | 'reason', text: string) => {
+    setFieldError({ id, text });
+    document.getElementById(id)?.focus();
+  };
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -106,8 +113,8 @@ export function Assignments() {
   const load = async (event: FormEvent) => {
     event.preventDefault();
     const id = customerId;
-    setNotice(null); setFailure(null); setStale(false);
-    if (!id || !options.some(item => item.customerId === id)) { setCustomer(null); setFailure('Vui lòng chọn khách hàng.'); return; }
+    setNotice(null); setFailure(null); setStale(false); setFieldError(null);
+    if (!id || !options.some(item => item.customerId === id)) { setCustomer(null); setFailure('Vui lòng chọn khách hàng.'); invalidate('customer-id', 'Chọn một khách hàng trong danh sách.'); return; }
     setBusy(true);
     try { setCustomer(await fetchCustomer(id)); setTarget(''); setReason(''); }
     catch (error) { setCustomer(null); setFailure(error); }
@@ -124,9 +131,9 @@ export function Assignments() {
 
   const requestTransfer = () => {
     if (!customer) return;
-    setNotice(null); setFailure(null); setStale(false);
-    if (!target) { setFailure('Vui lòng chọn RM nhận.'); return; }
-    if (!reason.trim()) { setFailure('Vui lòng nhập lý do chuyển.'); return; }
+    setNotice(null); setFailure(null); setStale(false); setFieldError(null);
+    if (!target) { setFailure('Vui lòng chọn RM nhận.'); invalidate('target-rm', 'Chọn RM nhận khách hàng này.'); return; }
+    if (!reason.trim()) { setFailure('Vui lòng nhập lý do chuyển.'); invalidate('reason', 'Nhập lý do chuyển.'); return; }
     setConfirming(true);
   };
 
@@ -246,8 +253,8 @@ export function Assignments() {
         <Field label="Tìm khách hàng" htmlFor="customer-search" className="flex-[1_1_240px]">
           <Input id="customer-search" type="search" value={search} onChange={event => setSearch(event.target.value)} autoComplete="off" />
         </Field>
-        <Field label="Chọn khách hàng" htmlFor="customer-id" className="flex-[1_1_240px]">
-          <NativeSelect id="customer-id" value={customerId} onChange={event => setCustomerId(event.target.value)}>
+        <Field label="Chọn khách hàng" htmlFor="customer-id" className="flex-[1_1_240px]" error={errorFor('customer-id')}>
+          <NativeSelect id="customer-id" value={customerId} onChange={event => { setCustomerId(event.target.value); setFieldError(null); }} {...invalidProps('customer-id-error', errorFor('customer-id'))}>
             <NativeSelectOption value="">Chọn khách hàng</NativeSelectOption>
             {options.map(item => <NativeSelectOption key={item.customerId} value={item.customerId}>{item.name}</NativeSelectOption>)}
           </NativeSelect>
@@ -280,14 +287,14 @@ export function Assignments() {
             <Fact label="Đề xuất chờ duyệt">{customer.pendingProposals.count}</Fact>
           </Facts>
           {surveyMissing ? <p id="transfer-blocked-reason" className="mb-3 font-semibold text-wait">Khách chưa hoàn thành khảo sát rủi ro. Chỉ chuyển RM được khi khách có hồ sơ rủi ro còn hiệu lực.</p> : null}
-          <Field label="RM nhận" htmlFor="target-rm">
-            <NativeSelect id="target-rm" disabled={surveyMissing} aria-describedby={surveyMissing ? 'transfer-blocked-reason' : undefined} value={target} onChange={event => setTarget(event.target.value)}>
+          <Field label="RM nhận" htmlFor="target-rm" error={errorFor('target-rm')}>
+            <NativeSelect id="target-rm" disabled={surveyMissing} {...invalidProps('target-rm-error', errorFor('target-rm'), surveyMissing ? 'transfer-blocked-reason' : undefined)} value={target} onChange={event => { setTarget(event.target.value); setFieldError(null); }}>
               <NativeSelectOption value="">Chọn RM nhận</NativeSelectOption>
               {rms.filter(rm => rm.active).map(rm => <NativeSelectOption key={rm.rmId} value={rm.rmId}>{rmText(rm.rmId, rm.rmName)} ({rm.assigned + rm.reserved}/{rm.capacityLimit})</NativeSelectOption>)}
             </NativeSelect>
           </Field>
-          <Field label="Lý do chuyển" htmlFor="reason">
-            <Textarea id="reason" value={reason} onChange={event => setReason(event.target.value)} rows={3} />
+          <Field label="Lý do chuyển" htmlFor="reason" error={errorFor('reason')}>
+            <Textarea id="reason" value={reason} onChange={event => { setReason(event.target.value); setFieldError(null); }} rows={3} {...invalidProps('reason-error', errorFor('reason'))} />
           </Field>
           <p className="mb-3 text-muted-foreground">Khi chuyển, các đề xuất đang chờ duyệt của khách do RM cũ lập sẽ bị hủy.</p>
           <Button type="button" ref={opener} onClick={requestTransfer} disabled={busy || surveyMissing} aria-describedby={surveyMissing ? 'transfer-blocked-reason' : undefined}>Xác nhận chuyển</Button>
@@ -306,7 +313,7 @@ export function Assignments() {
             </p>
             <p className="m-0 text-muted-foreground">Lý do: {reason.trim()}</p>
             {customer.pendingProposals.count > 0
-              ? <Alert className="border-wait/30 bg-wait-soft px-3.5 py-2.5 font-semibold text-wait"><TriangleAlert aria-hidden="true" />{`${customer.pendingProposals.count} đề xuất đang chờ duyệt sẽ bị hủy`}</Alert>
+              ? <Alert variant="warning" className="px-3.5 py-2.5 font-semibold"><TriangleAlert aria-hidden="true" />{`${customer.pendingProposals.count} đề xuất đang chờ duyệt sẽ bị hủy`}</Alert>
               : <p className="m-0 text-muted-foreground">Khách hàng không có đề xuất đang chờ duyệt.</p>}
             <DialogFooter className="-mx-6 -mb-6 mt-2 p-4">
               <Button type="button" variant="outline" onClick={closeDialog}>Hủy</Button>

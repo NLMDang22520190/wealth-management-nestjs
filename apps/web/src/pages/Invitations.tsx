@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, describe, intentDone, intentKey } from '../api';
+import { ApiFailure, api, describe, intentDone, intentKey } from '../api';
 import { formatDateTime } from '../format';
 import { AlertAction, Choice, Empty, ErrorAlert, Fact, Facts, Loading, OtpCodeInput, OtpInbox, PageTitle, Panel, ResendCode, choiceInput, useLoad } from '../ui';
 import { Badge } from '@/components/ui/badge';
@@ -42,15 +42,18 @@ function InvitationCard({ item }: { item: Invitation }) {
 
   if (done) {
     return (
-      <Panel title="Đăng ký dịch vụ" tone="success">
+      <Panel key="done" title="Đăng ký dịch vụ" tone="success" focusOnMount>
         <p className="font-semibold text-ok">Đã đồng ý dịch vụ</p>
         <p>Chờ đánh giá rủi ro. Mở mục Khảo sát rủi ro để hoàn tất hồ sơ.</p>
       </Panel>
     );
   }
   const pending = item.status === 'PENDING_CONSENT';
+  // A rejected code is shown at the code boxes as well as in the page alert.
+  const otpError = failure instanceof Error && failure.message === 'otp-format' ? 'Nhập đủ 6 chữ số của mã OTP.'
+    : failure instanceof ApiFailure && failure.code.startsWith('OTP_') ? describe(failure) : null;
   return (
-    <Panel title={`Lời mời đăng ký dịch vụ, điều khoản ${item.termsVersion}`}>
+    <Panel key="open" title={`Lời mời đăng ký dịch vụ, điều khoản ${item.termsVersion}`}>
       <Facts>
         <Fact label="Trạng thái"><Badge variant={statusVariant[item.status as keyof typeof statusVariant] ?? 'wait'}>{statusText[item.status] ?? item.status}</Badge></Fact>
         <Fact label="Hiệu lực đến">{formatDateTime(item.expiresAt)}</Fact>
@@ -72,7 +75,7 @@ function InvitationCard({ item }: { item: Invitation }) {
             <div className="mt-4 border-t pt-4">
               <OtpInbox key={`inbox-${challenge.challengeId}`} challengeId={challenge.challengeId} />
               <p className="text-muted-foreground">Mã có hiệu lực đến {formatDateTime(challenge.expiresAt)}.</p>
-              <OtpCodeInput key={challenge.challengeId} onChange={setCode} disabled={busy} />
+              <OtpCodeInput key={challenge.challengeId} onChange={setCode} disabled={busy} error={otpError} focusToken={otpError ? failure : null} />
               <ResendCode key={`resend-${challenge.challengeId}`} onResend={() => void sendOtp()} busy={busy} />
               <Button type="button" onClick={() => void confirm()} disabled={busy || code.length < 6}>Xác nhận đồng ý</Button>
             </div>

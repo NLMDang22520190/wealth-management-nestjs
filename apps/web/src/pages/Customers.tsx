@@ -39,6 +39,7 @@ function AumCell({ aum }: { aum: Aum }) {
 
 /** UC04 list: server-side paging, filtering and sorting over the RM's own customers only. */
 export function CustomerList() {
+  const [nameInput, setNameInput] = useState('');
   const [name, setName] = useState('');
   const [risk, setRisk] = useState('');
   const [sort, setSort] = useState('name');
@@ -52,6 +53,12 @@ export function CustomerList() {
     return api<Page>(`/rm/customers?${query.toString()}`, { signal });
   }, [name, risk, sort, direction, page]);
 
+  useEffect(() => {
+    // One request per pause in typing, not one per keystroke.
+    const timer = setTimeout(() => { setName(nameInput); setPage(1); }, 300);
+    return () => clearTimeout(timer);
+  }, [nameInput]);
+
   const change = (apply: () => void) => { apply(); setPage(1); };
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / list.data.pageSize)) : 1;
 
@@ -60,7 +67,7 @@ export function CustomerList() {
       <PageTitle title="Khách phụ trách" hint="Chỉ gồm khách hàng đang được phân công cho bạn." />
       <div data-testid="customer-filters" className="mb-1 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-x-3 border-b pb-0.5">
         <Field label="Tìm theo tên" htmlFor="filter-name">
-          <Input id="filter-name" type="search" value={name} onChange={event => change(() => setName(event.target.value))} autoComplete="off" />
+          <Input id="filter-name" type="search" value={nameInput} onChange={event => setNameInput(event.target.value)} autoComplete="off" />
         </Field>
         <Field label="Mức rủi ro" htmlFor="filter-risk">
           <NativeSelect id="filter-risk" value={risk} onChange={event => change(() => setRisk(event.target.value))}>
@@ -115,8 +122,8 @@ export function CustomerList() {
                       <TableCell role="cell" className={cn(cell, labelled, 'text-right tabular-nums max-md:text-left')} data-label="Đề xuất">{row.pendingProposals.count}</TableCell>
                       <TableCell role="cell" className={cn(cell, labelled, 'relative text-right tabular-nums whitespace-normal w-36 max-md:w-auto max-md:text-left')} data-label="Kiểm tra chờ">
                         {row.driftAlerts.count > 0
-                          ? <Badge variant="wait" data-testid="drift-badge">{row.driftAlerts.count}</Badge>
-                          : <span data-testid="drift-zero" className="text-muted-foreground">0</span>}
+                          ? <Badge variant="wait" data-testid="drift-badge" aria-hidden="true">{row.driftAlerts.count}</Badge>
+                          : <span data-testid="drift-zero" aria-hidden="true" className="text-muted-foreground">0</span>}
                         <span className="sr-only">Kiểm tra danh mục chờ: {row.driftAlerts.count}</span>
                       </TableCell>
                     </TableRow>

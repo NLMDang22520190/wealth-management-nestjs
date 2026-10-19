@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { ClipboardEvent, ComponentProps, KeyboardEvent, ReactNode } from 'react';
 import { CircleAlert, Loader2 } from 'lucide-react';
 import { api, describe, isAbort } from './api';
@@ -47,7 +47,7 @@ export function AlertAction({ onClick, children }: { onClick: () => void; childr
 export function Loading({ label = 'Đang tải…', skeleton = false }: { label?: string; skeleton?: boolean }) {
   return (
     <div role="status" className="my-2 text-muted-foreground">
-      <p className="m-0 flex items-center gap-2.5"><Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />{label}</p>
+      <p className="m-0 flex items-center gap-2.5"><Loader2 className="size-4 animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" />{label}</p>
       {skeleton ? <Skeleton aria-hidden="true" className="mt-3 h-24 w-full rounded-xl" /> : null}
     </div>
   );
@@ -59,16 +59,19 @@ export function Empty({ children }: { children: ReactNode }) {
 
 const tones = {
   plain: { card: '', title: 'text-muted-foreground' },
-  success: { card: 'bg-[#f5fbf7] ring-[#a9d6bd]', title: 'text-muted-foreground' },
+  success: { card: 'bg-ok-surface ring-ok-border', title: 'text-muted-foreground' },
   preview: { card: 'ring-2 ring-primary shadow-lg shadow-primary/10', title: 'text-muted-foreground' },
   aum: { card: 'bg-linear-to-br from-sidebar to-sidebar-accent text-white ring-sidebar [&_p]:text-sidebar-foreground', title: 'text-sidebar-foreground' },
 } as const;
 
-export function Panel({ title, children, tone = 'plain' }: { title: string; children: ReactNode; tone?: keyof typeof tones }) {
-  const id = `panel-${title.replace(/[^\p{L}\p{N}]+/gu, '-')}`;
+/** `focusOnMount` moves focus to the title when the panel appears (a result replacing the control the user just used). */
+export function Panel({ title, children, tone = 'plain', focusOnMount = false }: { title: string; children: ReactNode; tone?: keyof typeof tones; focusOnMount?: boolean }) {
+  const id = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { if (focusOnMount) heading.current?.focus(); }, [focusOnMount]);
   return (
     <Card role="region" aria-labelledby={id} className={cn('my-4 [--card-spacing:--spacing(5)] shadow-sm', tones[tone].card)}>
-      <CardHeader><CardTitle id={id} className={tones[tone].title}>{title}</CardTitle></CardHeader>
+      <CardHeader><CardTitle id={id} ref={heading} tabIndex={focusOnMount ? -1 : undefined} className={cn(tones[tone].title, focusOnMount && 'rounded-sm outline-offset-4')}>{title}</CardTitle></CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
   );
@@ -86,12 +89,24 @@ export function PageTitle({ title, hint, actions }: { title: string; hint?: stri
   );
 }
 
-/** Label + control stack used by every form. */
-export function Field({ label, htmlFor, children, className }: { label: string; htmlFor: string; children: ReactNode; className?: string }) {
+/** Inline validation text for one control. Not role="alert": focus moves to the control, which reads it through aria-describedby. */
+export function FieldError({ id, children }: { id: string; children: ReactNode }) {
+  return <p id={id} className="m-0 text-[0.85rem] font-medium text-destructive">{children}</p>;
+}
+
+/** Attributes that tie an invalid control to its FieldError. Spread them on the control. */
+export function invalidProps(errorId: string, error: string | null | undefined, extraDescribedBy?: string) {
+  const describedBy = [error ? errorId : undefined, extraDescribedBy].filter(Boolean).join(' ') || undefined;
+  return { 'aria-invalid': error ? true : undefined, 'aria-describedby': describedBy };
+}
+
+/** Label + control stack used by every form. `error` renders inline under the control; wire the control with `invalidProps(`${htmlFor}-error`, error)`. */
+export function Field({ label, htmlFor, children, className, error }: { label: string; htmlFor: string; children: ReactNode; className?: string; error?: string | null }) {
   return (
-    <div className={cn('mb-3.5 flex min-w-0 flex-col gap-1.5', className)}>
+    <div className={cn('mb-3.5 flex min-w-0 flex-col gap-1.5', className)} data-invalid={error ? true : undefined}>
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
+      {error ? <FieldError id={`${htmlFor}-error`}>{error}</FieldError> : null}
     </div>
   );
 }
@@ -124,7 +139,7 @@ export function OtpInbox({ challengeId }: { challengeId: string }) {
       <Button type="button" variant="outline" onClick={() => void open()} disabled={busy}>Xem hộp thư OTP demo</Button>
       {failure ? <ErrorAlert>{describe(failure)}</ErrorAlert> : null}
       {opened ? (
-        <section className="my-2.5 mb-3.5 rounded-lg border border-[#efd9a3] bg-wait-soft px-4 py-3" aria-labelledby={`inbox-${challengeId}`}>
+        <section className="my-2.5 mb-3.5 rounded-lg border border-wait-border bg-wait-soft px-4 py-3" aria-labelledby={`inbox-${challengeId}`}>
           <h3 id={`inbox-${challengeId}`} className="m-0 mb-1 text-[0.9rem] font-semibold text-wait">Hộp thư OTP demo</h3>
           <p className="m-0">Mã xác thực của bạn là <strong className="font-mono text-[1.35rem] leading-tight font-bold tracking-[0.18em] tabular-nums">{opened.code}</strong>. Nhập mã này vào ô Mã OTP.</p>
         </section>
@@ -137,9 +152,12 @@ const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
 
 /** Six single-digit boxes. Owns its digits: remount it (change `key`) to clear it. Reports the digits typed so far; six means complete. */
-export function OtpCodeInput({ onChange, disabled }: { onChange: (code: string) => void; disabled?: boolean }) {
+export function OtpCodeInput({ onChange, disabled, error, focusToken }: { onChange: (code: string) => void; disabled?: boolean; error?: string | null; focusToken?: unknown }) {
+  const errorId = useId();
   const [digits, setDigits] = useState<string[]>(() => Array.from({ length: OTP_LENGTH }, () => ''));
   const boxes = useRef<Array<HTMLInputElement | null>>([]);
+  // Each new rejection (a new `focusToken`) puts the cursor back on the first box.
+  useEffect(() => { if (focusToken) boxes.current[0]?.focus(); }, [focusToken]);
   const update = (next: string[]) => { setDigits(next); onChange(next.join('')); };
   const focusBox = (position: number) => boxes.current[Math.max(0, Math.min(OTP_LENGTH - 1, position))]?.focus();
 
@@ -172,14 +190,17 @@ export function OtpCodeInput({ onChange, disabled }: { onChange: (code: string) 
   };
 
   return (
-    <div role="group" aria-label="Mã OTP" className="mt-1 mb-3 flex gap-1.5 sm:gap-2">
+    <div className="mt-1 mb-3 flex flex-col gap-1.5">
+    <div role="group" aria-label="Mã OTP" className="flex gap-1.5 sm:gap-2">
       {digits.map((digit, position) => (
         <Input key={position} ref={element => { boxes.current[position] = element; }} aria-label={`Chữ số ${position + 1}`}
           className="h-[52px] min-w-0 flex-1 p-0 text-center text-[1.45rem] leading-none font-bold tabular-nums sm:h-14 sm:w-12 sm:flex-[0_1_48px] md:text-[1.45rem]"
-          value={digit} maxLength={1} inputMode="numeric" autoComplete={position === 0 ? 'one-time-code' : 'off'} disabled={disabled}
+          value={digit} maxLength={1} inputMode="numeric" aria-invalid={error ? true : undefined} aria-describedby={error && position === 0 ? errorId : undefined} autoComplete={position === 0 ? 'one-time-code' : 'off'} disabled={disabled}
           onChange={event => type(position, event.target.value)} onKeyDown={event => press(position, event)}
           onPaste={event => paste(position, event)} onFocus={event => event.target.select()} />
       ))}
+    </div>
+    {error ? <FieldError id={errorId}>{error}</FieldError> : null}
     </div>
   );
 }
@@ -200,7 +221,7 @@ export function ResendCode({ onResend, busy }: { onResend: () => void; busy: boo
 export interface Allocation { cash: number; deposit: number; bond: number; fund: number }
 
 const allocationRows: Array<[keyof Allocation, string]> = [['cash', 'Tiền mặt'], ['deposit', 'Tiền gửi'], ['bond', 'Trái phiếu'], ['fund', 'Chứng chỉ quỹ']];
-const segment: Record<keyof Allocation, string> = { cash: 'bg-slate-400', deposit: 'bg-risk-conservative', bond: 'bg-risk-balanced', fund: 'bg-risk-growth' };
+const segment: Record<keyof Allocation, string> = { cash: 'bg-risk-cash', deposit: 'bg-risk-conservative', bond: 'bg-risk-balanced', fund: 'bg-risk-growth' };
 
 /** Server-owned risk result details: maximum product risk and the target asset allocation. */
 export function AllocationSummary({ maxProductRisk, allocation }: { maxProductRisk: number; allocation: Allocation }) {
