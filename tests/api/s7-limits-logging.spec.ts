@@ -1,12 +1,12 @@
 import pg from 'pg';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { actors } from '../helpers/actors.js';
+import { actors, insertCustomerRow, insertStaff, staff, viaDataSource, viaPg } from '../helpers/actors.js';
 import { eligibleCustomer, expectApiError, startApiFixture } from '../helpers/application.js';
 import { startTestDatabase } from '../helpers/postgres.js';
 import { reserveHttpPort, runtimeEnvironment, startRuntimeProcess } from '../helpers/runtime.js';
 
 type Fixture = Awaited<ReturnType<typeof startApiFixture>>;
-const rmBeta = { actorId: 'rm-s7-beta', subjectId: 'mock-rm-s7-beta', role: 'RM', rmId: '77777777-7777-4777-8777-777777777777', teamId: actors.rm.teamId };
+const rmBeta = staff.third;
 
 describe('S7 B5 error logging level and code', () => {
   let api: Fixture;
@@ -14,7 +14,7 @@ describe('S7 B5 error logging level and code', () => {
   afterEach(async () => { await api?.stop(); });
 
   const create = async (key: string, cif: string = actors.customer.cifId) => api.request('/onboarding/requests', {
-    method: 'POST', token: await api.tokenFor(), key, body: { cifRef: cif, selectedAccountId: eligibleCustomer(cif).accounts[0].id } });
+    method: 'POST', token: await api.tokenFor(), key, body: { cifRef: cif, selectedCasaNo: eligibleCustomer(cif).accounts[0].id } });
   const entriesFor = (requestId: string) => api.logEntries.filter(entry => entry.text.includes(requestId));
 
   test('B5 a 409 ApiError is logged at WARN with its real code, not as an ERROR/INTERNAL_ERROR', async () => {
@@ -32,6 +32,8 @@ describe('S7 B5 error logging level and code', () => {
     api.state.core = null;
     const missing = await create('s7-missing');
     expectApiError(missing, 404, 'CUSTOMER_NOT_FOUND');
+    // R9 AC4: no invitation exists here, so the customer authenticates through a wms.customers fixture row.
+    await insertCustomerRow(viaDataSource(api.dataSource), actors.customer);
     const forbidden = await api.request('/rm/customers', { token: await api.tokenFor(actors.customer.actorId) });
     expect(forbidden.status).toBe(403);
     for (const [response, code] of [[missing, 'CUSTOMER_NOT_FOUND'], [forbidden, 'FORBIDDEN']] as const) {
@@ -53,11 +55,11 @@ describe('S7 B5 error logging level and code', () => {
     expect(request.status).toBe(201);
     const customerToken = await api.tokenFor(actors.customer.actorId);
     const challenge = await api.request('/otp/challenges', { method: 'POST', token: customerToken,
-      body: { purpose: 'SERVICE_CONSENT', operationId: request.body.id } });
+      body: { purpose: 'SERVICE_CONSENT', operationId: request.body.requestId } });
     expect(challenge.status).toBe(201);
     const delivery = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
     const wrong = delivery.code === '738291' ? '738292' : '738291';
-    const rejected = await api.request(`/me/onboarding-requests/${request.body.id}/confirm`, { method: 'POST', token: customerToken,
+    const rejected = await api.request(`/me/onboarding-requests/${request.body.requestId}/confirm`, { method: 'POST', token: customerToken,
       key: 's7-confirm', body: { challengeId: delivery.challengeId, code: wrong } });
     expectApiError(rejected, 400, 'OTP_INVALID');
     const entries = entriesFor(rejected.body.requestId);
@@ -72,14 +74,13 @@ describe('S7 B11 invitation creation quota (default 10 per RM per 60s on the inj
   beforeEach(async () => {
     api = await startApiFixture();
     api.state.coreLookup = async reference => eligibleCustomer(reference);
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,true)',
-      [rmBeta.actorId, rmBeta.subjectId, rmBeta.role, rmBeta.rmId, rmBeta.teamId]);
+    await insertStaff(viaDataSource(api.dataSource), rmBeta);
   });
   afterEach(async () => { await api?.stop(); });
   const cif = (index: number) => `0000${String(2000 + index)}`;
   const create = async (index: number, key: string, actorId: string = actors.rm.actorId) => api.request('/onboarding/requests', {
     method: 'POST', token: await api.tokenFor(actorId), key,
-    body: { cifRef: cif(index), selectedAccountId: eligibleCustomer(cif(index)).accounts[0].id } });
+    body: { cifRef: cif(index), selectedCasaNo: eligibleCustomer(cif(index)).accounts[0].id } });
 
   test('B11 the 11th non-replay creation in a window is 429 RATE_LIMITED; replays do not count; other RMs are unaffected; the window resets', async () => {
     const first = await create(1, 's7-key-1');
@@ -100,7 +101,7 @@ describe('S7 B11 invitation creation quota (default 10 per RM per 60s on the inj
     // A different RM has its own quota.
     expect((await create(12, 's7-beta-1', rmBeta.actorId)).status).toBe(201);
     // Nothing was created for the rejected attempt.
-    const [{ count }] = await api.dataSource.query('SELECT count(*)::int AS count FROM onboarding_requests WHERE cif_id=$1', [cif(11)]);
+    const [{ count }] = await api.dataSource.query('SELECT count(*)::int AS count FROM wms.onboarding_requests WHERE cif_id=$1', [cif(11)]);
     expect(count).toBe(0);
     // After the 60-second window passes on the injected clock, creation works again.
     api.state.now = new Date(api.state.now.getTime() + 60_000);
@@ -137,8 +138,7 @@ describe('S7 B12 configurable limits through the real CLI', () => {
     return { status: response.status, body: await response.json() };
   }
   async function rmToken() {
-    await sql.query('INSERT INTO mock_actors(actor_id,subject_id,role,cif_id,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,$6,true)',
-      [actors.rm.actorId, actors.rm.subjectId, actors.rm.role, null, actors.rm.rmId, actors.rm.teamId]);
+    await insertStaff(viaPg(sql), actors.rm);
     const issued = await post('/mock-auth/token', '', { actorId: actors.rm.actorId });
     expect(issued.status).toBe(200);
     return issued.body.accessToken as string;
@@ -162,11 +162,11 @@ describe('S7 B12 configurable limits through the real CLI', () => {
     const token = await rmToken();
     const lookupOne = await post('/onboarding/customer-lookup', token, { cifRef: actors.customer.cifId });
     expect(lookupOne.status).toBe(200);
-    const first = await post('/onboarding/requests', token, { cifRef: actors.customer.cifId, selectedAccountId: lookupOne.body.accounts[0].id }, 's7-cli-1');
+    const first = await post('/onboarding/requests', token, { cifRef: actors.customer.cifId, selectedCasaNo: lookupOne.body.accounts[0].casaNo }, 's7-cli-1');
     expect(first.status).toBe(201);
     const lookupTwo = await post('/onboarding/customer-lookup', token, { cifRef: actors.otherCustomer.cifId });
     expect(lookupTwo.status).toBe(200);
-    const second = await post('/onboarding/requests', token, { cifRef: actors.otherCustomer.cifId, selectedAccountId: lookupTwo.body.accounts[0].id }, 's7-cli-2');
+    const second = await post('/onboarding/requests', token, { cifRef: actors.otherCustomer.cifId, selectedCasaNo: lookupTwo.body.accounts[0].casaNo }, 's7-cli-2');
     expect(second.status).toBe(429);
     expect(second.body.code).toBe('RATE_LIMITED');
   });

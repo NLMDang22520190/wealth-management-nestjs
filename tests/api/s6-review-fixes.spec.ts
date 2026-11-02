@@ -1,14 +1,13 @@
-import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { actors } from '../helpers/actors.js';
+import { actors, gamma, insertStaff, staff, viaDataSource } from '../helpers/actors.js';
 import { eligibleCustomer, expectApiError, startApiFixture } from '../helpers/application.js';
+import { insertAsset, insertHolding, insertProposal, insertSnapshot } from '../helpers/wms.js';
 
 type Fixture = Awaited<ReturnType<typeof startApiFixture>>;
 type Registered = { customerId: string; serviceId: string; accountId: string };
 
-const replacementRm = '22222222-2222-4222-8222-222222222222';
-const foreignRm = { actorId: 'rm-s6-foreign', rmId: '44444444-4444-4444-8444-444444444444', teamId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
-const gamma = { actorId: 'customer-gamma', cifId: '00000103' };
+const replacementRm = staff.replacement.rmId;
+const foreignRm = staff.foreign;
 
 /** S6 review round 1 (05-review.md F2, F3, F4, F5, F7): API contract fixes, real PostgreSQL. */
 describe('S6 review fixes over HTTP and real PostgreSQL', () => {
@@ -16,13 +15,11 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
 
   beforeEach(async () => {
     api = await startApiFixture();
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,cif_id,active) VALUES($1,$2,$3,$4,true)',
-      [gamma.actorId, `mock-${gamma.actorId}`, 'CUSTOMER', gamma.cifId]);
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,true)',
-      ['rm-s6-replacement', 'mock-rm-s6-replacement', 'RM', replacementRm, actors.rm.teamId]);
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,true)',
-      [foreignRm.actorId, `mock-${foreignRm.actorId}`, 'RM', foreignRm.rmId, foreignRm.teamId]);
-    await api.dataSource.query("INSERT INTO mock_actors(actor_id,subject_id,role,team_id,active) VALUES('leader-s6-foreign','mock-leader-s6-foreign','LEADER',$1,true)", [foreignRm.teamId]);
+    // gamma (foreign-team customer) logs in through its invitation (AC4); only staff need rows.
+    const sql = viaDataSource(api.dataSource);
+    await insertStaff(sql, staff.replacement);
+    await insertStaff(sql, foreignRm);
+    await insertStaff(sql, staff.foreignLeader);
   });
   afterEach(async () => { await api?.stop(); });
 
@@ -30,19 +27,20 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     if (cifId === gamma.cifId) api.state.core = eligibleCustomer(cifId);
     const created = await api.request('/onboarding/requests', {
       method: 'POST', token: await api.tokenFor(rmActorId), key: `s6-register-${cifId}`,
-      body: { cifRef: cifId, selectedAccountId: eligibleCustomer(cifId).accounts[0].id },
+      body: { cifRef: cifId, selectedCasaNo: eligibleCustomer(cifId).accounts[0].id },
     });
     expect(created.status).toBe(201);
     const challenge = await api.request('/otp/challenges', {
-      method: 'POST', token: await api.tokenFor(actorId), body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id },
+      method: 'POST', token: await api.tokenFor(actorId), body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId },
     });
     expect(challenge.status).toBe(201);
     const delivery = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const accepted = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, {
+    const accepted = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, {
       method: 'POST', token: await api.tokenFor(actorId), key: `s6-consent-${cifId}`,
       body: { challengeId: delivery.challengeId, code: delivery.code },
     });
     expect(accepted.status).toBe(200);
+    api.tick(); // category 4: chk_rma_period needs valid_to > valid_from for a later transfer
     return accepted.body;
   }
 
@@ -57,11 +55,11 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     });
     expect(draft.status).toBe(201);
     const challenge = await api.request('/otp/challenges', {
-      method: 'POST', token: await api.tokenFor(actorId), body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.id },
+      method: 'POST', token: await api.tokenFor(actorId), body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.draftId },
     });
     expect(challenge.status).toBe(201);
     const delivery = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const confirmed = await api.request(`/me/risk-assessments/${draft.body.id}/confirm`, {
+    const confirmed = await api.request(`/me/risk-assessments/${draft.body.draftId}/confirm`, {
       method: 'POST', token: await api.tokenFor(actorId), key: `s6-confirm-${customerId}-${expectedVersion}`,
       body: { challengeId: delivery.challengeId, code: delivery.code, expectedCurrentProfileVersion: expectedVersion },
     });
@@ -69,15 +67,15 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     return confirmed.body;
   }
 
-  async function addHolding(customerId: string, productId: string, productRisk: number, marketValue: string, asOf: string) {
-    await api.dataSource.query(`INSERT INTO holdings_read_snapshots
-      (id,customer_id,product_id,product_risk,asset_class,quantity,market_value,as_of,provenance)
-      VALUES($1,$2,$3,$4,'FUND',1,$5,$6,'SYNTHETIC_P3_READ_BRIDGE')`, [randomUUID(), customerId, productId, productRisk, marketValue, asOf]);
+  // Category 1: an OPEN portfolio_holdings row on an asset with the given risk level (as-of = updated_at).
+  async function addHolding(customerId: string, code: string, productRisk: number, asOf: string) {
+    const sql = viaDataSource(api.dataSource);
+    await insertHolding(sql, { customerId, assetId: await insertAsset(sql, { code, risk: productRisk, assetClass: 'MUTUAL_FUND' }), updatedAt: new Date(asOf) });
   }
 
+  // Category 6: team proposals need the customer's account and profile; one PENDING_APPROVAL per customer.
   async function addProposal(customerId: string, authorRmId: string, status = 'PENDING_APPROVAL') {
-    await api.dataSource.query(`INSERT INTO proposals(id,customer_id,author_rm_id,status,created_at,updated_at)
-      VALUES($1,$2,$3,$4,$5,$5)`, [randomUUID(), customerId, authorRmId, status, api.state.now]);
+    await insertProposal(viaDataSource(api.dataSource), { customerId, authorRmId, status, now: api.state.now });
   }
 
   async function transfer(customerId: string, targetRmId: string, expectedAssignmentVersion: number, key: string) {
@@ -101,7 +99,7 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     const second = await register(actors.otherCustomer.cifId, actors.otherCustomer.actorId);
     const initial = await confirmRisk(actors.customer.actorId, first.customerId, 4, 0); // GROWTH, max product risk 5
     expect(initial.category).toBe('GROWTH');
-    await addHolding(first.customerId, 's6-risk-5-fund', 5, '1000000', '2026-01-15T04:00:00.000Z');
+    await addHolding(first.customerId, 's6-risk-5-fund', 5, '2026-01-15T04:00:00.000Z');
 
     const driftOf = async (customerId: string) => {
       const detail = await api.request(`/customers/${customerId}`, { token: await api.tokenFor() });
@@ -118,7 +116,7 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     expect(await driftOf(first.customerId)).toEqual({ detail: 1, list: 1 });
     expect(await driftOf(second.customerId)).toEqual({ detail: 0, list: 0 }); // other customer unaffected
     // A check that P3 already processed is no longer open.
-    await api.dataSource.query("UPDATE outbox_events SET published_at=$1 WHERE event_type='RiskHoldingsCheckRequested' AND aggregate_id=$2", [api.state.now, first.customerId]);
+    await api.dataSource.query("UPDATE wms.outbox_events SET published_at=$1 WHERE event_type='RiskHoldingsCheckRequested' AND aggregate_id=$2", [api.state.now, first.customerId]);
     expect(await driftOf(first.customerId)).toEqual({ detail: 0, list: 0 });
   });
 
@@ -127,9 +125,9 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     const first = await register();
     const second = await register(actors.otherCustomer.cifId, actors.otherCustomer.actorId);
     const foreign = await register(gamma.cifId, gamma.actorId, foreignRm.actorId);
-    await api.dataSource.query('UPDATE customers SET name=$2 WHERE id=$1', [first.customerId, 'Alpha Leader Test']);
-    await api.dataSource.query('UPDATE customers SET name=$2 WHERE id=$1', [second.customerId, 'Beta Leader Test']);
-    await api.dataSource.query('UPDATE customers SET name=$2 WHERE id=$1', [foreign.customerId, 'Gamma Foreign Team']);
+    await api.dataSource.query('UPDATE wms.customers SET full_name=$2 WHERE customer_id=$1', [first.customerId, 'Alpha Leader Test']);
+    await api.dataSource.query('UPDATE wms.customers SET full_name=$2 WHERE customer_id=$1', [second.customerId, 'Beta Leader Test']);
+    await api.dataSource.query('UPDATE wms.customers SET full_name=$2 WHERE customer_id=$1', [foreign.customerId, 'Gamma Foreign Team']);
 
     const leaderToken = await api.tokenFor(actors.leader.actorId);
     const list = await api.request('/team/customers', { token: leaderToken });
@@ -138,7 +136,7 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     expect(ids(list.body).sort(byId)).toEqual([first.customerId, second.customerId].sort(byId));
     expect(ids(list.body)).not.toContain(foreign.customerId);
     expect(list.body.items.find((item: any) => item.customerId === first.customerId))
-      .toEqual({ customerId: first.customerId, name: 'Alpha Leader Test', rmId: actors.rm.rmId, assignmentVersion: 1, rmName: actors.rm.actorId, riskProfileValid: false, lastReminderAt: null });
+      .toEqual({ customerId: first.customerId, fullName: 'Alpha Leader Test', rmId: actors.rm.rmId, assignmentVersion: 1, rmFullName: `Synthetic RM ${actors.rm.actorId}`, riskProfileValid: false, lastReminderAt: null });
 
     const filtered = await api.request('/team/customers?name=beta', { token: leaderToken });
     expect(filtered.status).toBe(200);
@@ -153,7 +151,7 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     expectApiError(await api.request('/team/customers?page=0', { token: leaderToken }), 400, 'VALIDATION_ERROR');
 
     // The foreign leader sees only the foreign team's customer.
-    const foreignList = await api.request('/team/customers', { token: await api.tokenFor('leader-s6-foreign') });
+    const foreignList = await api.request('/team/customers', { token: await api.tokenFor(staff.foreignLeader.actorId) });
     expect(foreignList.status).toBe(200);
     expect(ids(foreignList.body)).toEqual([foreign.customerId]);
 
@@ -167,17 +165,17 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     expect((await transfer(first.customerId, replacementRm, 1, 's6-f3-move')).status).toBe(200);
     const list = await api.request('/team/customers', { token: await api.tokenFor(actors.leader.actorId) });
     expect(list.status).toBe(200);
-    expect(list.body.items).toEqual([{ customerId: first.customerId, name: expect.any(String), rmId: replacementRm, assignmentVersion: 2, rmName: 'rm-s6-replacement', riskProfileValid: true, lastReminderAt: null }]);
+    expect(list.body.items).toEqual([{ customerId: first.customerId, fullName: expect.any(String), rmId: replacementRm, assignmentVersion: 2, rmFullName: `Synthetic RM ${staff.replacement.actorId}`, riskProfileValid: true, lastReminderAt: null }]);
   });
 
   // F4
   test('F4 transfer response reports the exact number of the old RM pending proposals it cancelled; same-RM no-op reports 0', async () => {
     const first = await register();
     await confirmRisk(actors.customer.actorId, first.customerId, 2, 0);
-    await addProposal(first.customerId, actors.rm.rmId);
+    // Category 6 (ux_proposal_single_pending): one pending proposal per customer, so the reported number is 1 (was 2).
     await addProposal(first.customerId, actors.rm.rmId);
     await addProposal(first.customerId, actors.rm.rmId, 'EXECUTED'); // terminal: not counted
-    await addProposal(first.customerId, replacementRm); // other author: not cancelled by this transfer
+    await addProposal(first.customerId, actors.rm.rmId, 'REJECTED'); // terminal: not counted
 
     const noop = await transfer(first.customerId, actors.rm.rmId, 1, 's6-f4-noop');
     expect(noop.status).toBe(200);
@@ -185,26 +183,29 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
 
     const moved = await transfer(first.customerId, replacementRm, 1, 's6-f4-move');
     expect(moved.status).toBe(200);
-    expect(moved.body).toMatchObject({ customerId: first.customerId, rmId: replacementRm, version: 2, changed: true, cancelledProposals: 2 });
-    const cancelled = await api.dataSource.query("SELECT id FROM proposals WHERE customer_id=$1 AND status='CANCELLED'", [first.customerId]);
-    expect(cancelled).toHaveLength(2); // the number reported equals the rows really cancelled
+    expect(moved.body).toMatchObject({ customerId: first.customerId, rmId: replacementRm, version: 2, changed: true, cancelledProposals: 1 });
+    const cancelled = await api.dataSource.query("SELECT proposal_id FROM wms.proposals WHERE customer_id=$1 AND status='CANCELLED'", [first.customerId]);
+    expect(cancelled).toHaveLength(1); // the number reported equals the rows really cancelled
 
     // Idempotent replay returns the same stored answer, not a recount.
     const replay = await transfer(first.customerId, replacementRm, 1, 's6-f4-move');
     expect(replay.status).toBe(200);
-    expect(replay.body.cancelledProposals).toBe(2);
+    expect(replay.body.cancelledProposals).toBe(1);
   });
 
   // F5
-  test('F5 AUM asOf is the OLDEST holding snapshot as_of on list and detail', async () => {
+  // Category 1: per-product "oldest as-of" cannot be represented any more; the team model has one portfolio snapshot per
+  // customer and day, so AUM is the LATEST snapshot (value and snapshot_date as as-of), never an older one (AC11).
+  test('F5 AUM is the latest portfolio snapshot and its asOf is that snapshot date, on list and detail', async () => {
     const first = await register();
-    await addHolding(first.customerId, 's6-old', 3, '100.00', '2026-01-10T04:00:00.000Z');
-    await addHolding(first.customerId, 's6-new', 3, '200.00', '2026-01-15T04:00:00.000Z');
+    const sql = viaDataSource(api.dataSource);
+    await insertSnapshot(sql, { customerId: first.customerId, date: '2026-01-10', aum: '100.00' });
+    await insertSnapshot(sql, { customerId: first.customerId, date: '2026-01-14', aum: '300.00' });
     const detail = await api.request(`/customers/${first.customerId}`, { token: await api.tokenFor() });
     expect(detail.status).toBe(200);
-    expect(detail.body.aum).toMatchObject({ value: '300.00', asOf: '2026-01-10T04:00:00.000Z', dataStatus: 'AVAILABLE' });
+    expect(detail.body.aum).toMatchObject({ value: '300.00', asOf: expect.stringMatching(/^2026-01-14/), dataStatus: 'AVAILABLE' });
     const listed = (await rmList()).items.find((item: any) => item.customerId === first.customerId);
-    expect(listed.aum.asOf).toBe('2026-01-10T04:00:00.000Z');
+    expect(listed.aum).toMatchObject({ value: '300.00', asOf: expect.stringMatching(/^2026-01-14/) });
   });
 
   // F7 (coverage of already implemented behaviour; these pin it so mutants die)
@@ -218,9 +219,8 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
       const expired = await confirmRisk(actors.otherCustomer.actorId, b.customerId, 2, 0);
       api.state.now = new Date(new Date(expired.expiresAt).getTime() + 3_600_000);
       await confirmRisk(actors.customer.actorId, a.customerId, 2, 0);
+      // Category 6: one pending proposal per customer (was two each); a and b still tie, c has none.
       await addProposal(a.customerId, actors.rm.rmId);
-      await addProposal(a.customerId, actors.rm.rmId);
-      await addProposal(b.customerId, actors.rm.rmId);
       await addProposal(b.customerId, actors.rm.rmId);
     });
 
@@ -243,7 +243,7 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     test('F7 sort=riskExpiresAt orders by expiry (missing last) and sort=pendingProposals orders by count with customer-id tie-break', async () => {
       expect(ids(await rmList('?sort=riskExpiresAt&direction=asc'))).toEqual([b.customerId, a.customerId, c.customerId]);
       expect(ids(await rmList('?sort=riskExpiresAt&direction=desc'))).toEqual([a.customerId, b.customerId, c.customerId]);
-      const tied = [a.customerId, b.customerId].sort(byId); // both have 2 pending proposals
+      const tied = [a.customerId, b.customerId].sort(byId); // both have 1 pending proposal
       expect(ids(await rmList('?sort=pendingProposals&direction=desc'))).toEqual([...tied, c.customerId]);
       expect(ids(await rmList('?sort=pendingProposals&direction=asc'))).toEqual([c.customerId, ...tied]);
       // Sorting happens before paging: page 2 of size 1 is the second element of the full order.

@@ -26,12 +26,12 @@ export class NotificationsService {
       // Serialize reminders per team so the 24h cooldown cannot be raced into duplicates.
       await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`risk-reminder:${teamId}`]);
       const now = this.options.clock.now();
-      const rows: TeamCustomerRow[] = await manager.query(`SELECT c.id,
-          EXISTS(SELECT 1 FROM wealth_services w JOIN risk_profiles r ON r.id=w.current_risk_profile_id
-            WHERE w.customer_id=c.id AND r.expires_at>$2) AS risk_valid,
-          (SELECT max(n.created_at) FROM customer_notifications n WHERE n.customer_id=c.id AND n.kind='RISK_SURVEY_REMINDER') AS last_reminder_at
-        FROM customers c JOIN rm_assignment_history a ON a.customer_id=c.id AND a.valid_to IS NULL
-        WHERE a.team_id=$1 ORDER BY c.id`, [teamId, now]);
+      const rows: TeamCustomerRow[] = await manager.query(`SELECT c.customer_id AS id,
+          EXISTS(SELECT 1 FROM wms.wealth_services w JOIN wms.risk_profiles r ON r.risk_profile_id=w.current_risk_profile_id
+            WHERE w.customer_id=c.customer_id AND r.expires_at>$2) AS risk_valid,
+          (SELECT max(n.created_at) FROM wms.customer_notifications n WHERE n.customer_id=c.customer_id AND n.kind='RISK_SURVEY_REMINDER') AS last_reminder_at
+        FROM wms.customers c JOIN wms.rm_assignments a ON a.customer_id=c.customer_id AND a.valid_to IS NULL
+        WHERE a.team_id=$1 ORDER BY c.customer_id`, [teamId, now]);
       const byId = new Map(rows.map(row => [row.id, row]));
       const explicit = body.customerIds ? [...new Set(body.customerIds.map(id => id.toLowerCase()))] : undefined;
       // All-or-nothing: any id outside the leader's team rejects the whole request.
@@ -45,9 +45,9 @@ export class NotificationsService {
           skipped.push({ customerId: row.id, reason: 'RECENTLY_REMINDED' }); continue;
         }
         const id = randomUUID();
-        await manager.query(`INSERT INTO customer_notifications(id,customer_id,kind,message,created_by,created_at)
-          VALUES($1,$2,'RISK_SURVEY_REMINDER',$3,$4,$5)`, [id, row.id, REMINDER_MESSAGE, actor.actorId, now]);
-        await appendAudit(manager, actor.actorId, row.id, 'RISK_SURVEY_REMINDER_SENT',
+        await manager.query(`INSERT INTO wms.customer_notifications(notification_id,customer_id,kind,message,created_by,created_at)
+          VALUES($1,$2,'RISK_SURVEY_REMINDER',$3,$4,$5)`, [id, row.id, REMINDER_MESSAGE, actor.staffId, now]);
+        await appendAudit(manager, actor, { type: 'CUSTOMER', id: row.id }, 'RISK_SURVEY_REMINDER_SENT',
           { customerId: row.id, notificationId: id }, now, { ...context, before: null, after: { notificationId: id } });
         sent += 1;
       }
@@ -58,26 +58,26 @@ export class NotificationsService {
   async list(actor: Actor) {
     if (actor.role !== 'CUSTOMER' || !actor.cifId) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
     // A CIF that has not registered yet simply has no notifications.
-    const [customer] = await this.database.query('SELECT id FROM customers WHERE cif_id=$1', [actor.cifId]);
+    const [customer] = await this.database.query('SELECT customer_id AS id FROM wms.customers WHERE cif_id=$1', [actor.cifId]);
     if (!customer) return { items: [] };
     // An unread survey reminder is moot once the customer's current risk profile is valid.
-    const rows = await this.database.query(`SELECT n.id,n.kind,n.message,n.created_at,n.read_at FROM customer_notifications n
+    const rows = await this.database.query(`SELECT n.notification_id AS id,n.kind::text AS kind,n.message,n.created_at,n.read_at FROM wms.customer_notifications n
       WHERE n.customer_id=$1 AND NOT (n.kind='RISK_SURVEY_REMINDER' AND n.read_at IS NULL AND EXISTS(
-        SELECT 1 FROM wealth_services w JOIN risk_profiles r ON r.id=w.current_risk_profile_id
+        SELECT 1 FROM wms.wealth_services w JOIN wms.risk_profiles r ON r.risk_profile_id=w.current_risk_profile_id
         WHERE w.customer_id=n.customer_id AND r.expires_at>$2))
-      ORDER BY n.created_at DESC,n.id DESC LIMIT 100`, [customer.id, this.options.clock.now()]);
+      ORDER BY n.created_at DESC,n.notification_id DESC LIMIT 100`, [customer.id, this.options.clock.now()]);
     return { items: rows.map((row: { id: string; kind: string; message: string; created_at: Date; read_at: Date | null }) => ({
-      id: row.id, kind: row.kind, message: row.message, createdAt: row.created_at.toISOString(),
+      notificationId: row.id, kind: row.kind, message: row.message, createdAt: row.created_at.toISOString(),
       readAt: row.read_at ? row.read_at.toISOString() : null })) };
   }
 
   async markRead(actor: Actor, id: string) {
     const customer = await this.access.own(actor);
     const [result]: Array<Array<{ id: string; read_at: Date }>> = await this.database.query(
-      `UPDATE customer_notifications SET read_at=COALESCE(read_at,$3) WHERE id=$1 AND customer_id=$2 RETURNING id,read_at`,
+      `UPDATE wms.customer_notifications SET read_at=COALESCE(read_at,$3) WHERE notification_id=$1 AND customer_id=$2 RETURNING notification_id AS id,read_at`,
       [id, customer.id, this.options.clock.now()]);
     const updated = result?.[0];
     if (!updated) throw new ApiError(404, 'NOT_FOUND', 'Resource not found');
-    return { id: updated.id, readAt: updated.read_at.toISOString() };
+    return { notificationId: updated.id, readAt: updated.read_at.toISOString() };
   }
 }

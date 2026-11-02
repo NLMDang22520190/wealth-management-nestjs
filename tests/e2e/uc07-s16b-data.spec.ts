@@ -9,7 +9,7 @@ import { expectNoHorizontalOverflow, goTo, openApp, switchRole } from './support
  *  - drift: badge `data-testid="drift-badge"` only when count > 0 (text = the number); count 0 -> `data-testid="drift-zero"` muted "0" or "—"
  *  - detail risk badge `data-testid="risk-badge"`; filters toolbar `data-testid="customer-filters"`
  *  - load bar role=progressbar with aria-valuenow/max and data-level ok|warn|high
- *  - RM: visible "<rmName> + first 8 chars of id", full id in a title attribute
+ *  - RM: visible "<rmFullName> + first 8 chars of id", full id in a title attribute
  */
 const COLOURLESS = ['rgba(0, 0, 0, 0)', 'transparent'];
 
@@ -18,14 +18,14 @@ test.describe('UC07 S16b data display polish', () => {
   let betaId: string;
   test.beforeEach(async () => {
     await resetBusinessState();
-    alphaId = (await registerCustomer('00000101', 'customer-alpha')).customerId;
-    betaId = (await registerCustomer('00000102', 'customer-beta')).customerId;
-    await activateRisk('customer-alpha', 2); // BALANCED
-    await activateRisk('customer-beta', 4); // GROWTH
+    alphaId = (await registerCustomer('CIF100001', 'CIF100001')).customerId;
+    betaId = (await registerCustomer('CIF100002', 'CIF100002')).customerId;
+    await activateRisk('CIF100001', 2); // BALANCED
+    await activateRisk('CIF100002', 4); // GROWTH
     await addPendingProposal(alphaId);
   });
 
-  async function openList(page: Page, role = 'rm-alpha') {
+  async function openList(page: Page, role = 'NV0002') {
     await openApp(page);
     await switchRole(page, role);
     await goTo(page, 'Khách phụ trách');
@@ -35,9 +35,9 @@ test.describe('UC07 S16b data display polish', () => {
 
   test('AC6 drift badge shows only the number when count > 0 and the full label stays as screen-reader text', async ({ page }) => {
     await addHolding(betaId, 'e2e-risk-5-fund', '500000.00', '2026-01-15T04:00:00.000Z', 5);
-    await activateRisk('customer-beta', 0, 1); // downgrade over a risky holding queues one drift check
+    await activateRisk('CIF100002', 0, 1); // downgrade over a risky holding queues one drift check
     await openList(page);
-    const betaCell = row(page, 'Khách hàng demo Beta').locator('[data-label="Kiểm tra chờ"]');
+    const betaCell = row(page, 'Trần Quốc Huy').locator('[data-label="Kiểm tra chờ"]');
     const badge = betaCell.getByTestId('drift-badge');
     await expect(badge).toBeVisible();
     await expect(badge).toHaveText('1');
@@ -53,7 +53,7 @@ test.describe('UC07 S16b data display polish', () => {
 
   test('AC6 count 0 shows no badge, only a muted 0 or dash', async ({ page }) => {
     await openList(page);
-    const alphaCell = row(page, 'Khách hàng demo Alpha').locator('[data-label="Kiểm tra chờ"]');
+    const alphaCell = row(page, 'Nguyễn Thị Mai').locator('[data-label="Kiểm tra chờ"]');
     await expect(alphaCell).toBeVisible();
     await expect(alphaCell.getByTestId('drift-badge')).toHaveCount(0);
     await expect(alphaCell).toContainText('Kiểm tra danh mục chờ: 0'); // sr-only label
@@ -69,14 +69,14 @@ test.describe('UC07 S16b data display polish', () => {
     await addHolding(alphaId, 'e2e-fund-a', '1730000000.00', '2026-01-15T04:00:00.000Z');
     await addHolding(betaId, 'e2e-fund-b', '25000000.00', '2026-01-15T04:00:00.000Z');
     await openList(page);
-    const alphaAum = row(page, 'Khách hàng demo Alpha').locator('[data-label="AUM"]');
+    const alphaAum = row(page, 'Nguyễn Thị Mai').locator('[data-label="AUM"]');
     await expect(alphaAum).toContainText(/1,7\d? tỷ/);
     await expect(alphaAum).not.toContainText('1.730.000.000');
     await expect(alphaAum.locator('[title*="1.730.000.000"]')).toHaveCount(1); // exact value reachable by tooltip
-    const betaAum = row(page, 'Khách hàng demo Beta').locator('[data-label="AUM"]');
+    const betaAum = row(page, 'Trần Quốc Huy').locator('[data-label="AUM"]');
     await expect(betaAum).toContainText(/25 triệu/);
     await expect(betaAum.locator('[title*="25.000.000"]')).toHaveCount(1);
-    await page.getByRole('link', { name: 'Khách hàng demo Alpha' }).click();
+    await page.getByRole('link', { name: 'Nguyễn Thị Mai' }).click();
     await expect(page.getByRole('region', { name: 'Tài sản quản lý (AUM)' })).toContainText('1.730.000.000');
   });
 
@@ -85,12 +85,12 @@ test.describe('UC07 S16b data display polish', () => {
     await openList(page);
     await expect(page.getByRole('columnheader', { name: 'Tiền mặt' })).toBeVisible();
     await expect(page.getByRole('columnheader')).toHaveCount(7);
-    await expect(row(page, 'Khách hàng demo Alpha').locator('[data-label="Tiền mặt"]')).toBeVisible();
+    await expect(row(page, 'Nguyễn Thị Mai').locator('[data-label="Tiền mặt"]')).toBeVisible();
   });
 
   test('AC8 detail risk level is a coloured badge', async ({ page }) => {
     await openList(page);
-    await page.getByRole('link', { name: 'Khách hàng demo Alpha' }).click();
+    await page.getByRole('link', { name: 'Nguyễn Thị Mai' }).click();
     const badge = page.getByTestId('risk-badge');
     await expect(badge).toBeVisible();
     await expect(badge).toHaveText('Cân bằng');
@@ -101,8 +101,8 @@ test.describe('UC07 S16b data display polish', () => {
 
   test('AC8 Làm mới sits in the page header next to the title with a Cập nhật lúc timestamp', async ({ page }) => {
     await openList(page);
-    await page.getByRole('link', { name: 'Khách hàng demo Alpha' }).click();
-    const title = page.getByRole('heading', { level: 2, name: 'Khách hàng demo Alpha' });
+    await page.getByRole('link', { name: 'Nguyễn Thị Mai' }).click();
+    const title = page.getByRole('heading', { level: 2, name: 'Nguyễn Thị Mai' });
     await expect(title).toBeVisible();
     const header = page.locator('header').filter({ has: title });
     const refresh = header.getByRole('button', { name: 'Làm mới' });
@@ -115,14 +115,14 @@ test.describe('UC07 S16b data display polish', () => {
     expect(b.y + b.height, 'button is in the header, above the first content panel (AUM)').toBeLessThanOrEqual(aumBox.y);
   });
 
-  test('AC8 provenance SYNTHETIC_P3_READ_BRIDGE is shown as a readable label with the raw code only in a title', async ({ page }) => {
+  test('AC8 provenance P3_PORTFOLIO_SNAPSHOT is shown as a readable label with the raw code only in a title', async ({ page }) => {
     await addHolding(alphaId, 'e2e-fund-a', '1250000.50', '2026-01-15T04:59:00.000Z');
     await openList(page);
-    await page.getByRole('link', { name: 'Khách hàng demo Alpha' }).click();
+    await page.getByRole('link', { name: 'Nguyễn Thị Mai' }).click();
     const aum = page.getByRole('region', { name: 'Tài sản quản lý (AUM)' });
     await expect(aum).toContainText('Nguồn: Dữ liệu tổng hợp (demo)');
-    await expect(aum).not.toContainText('SYNTHETIC_P3_READ_BRIDGE');
-    await expect(aum.locator('[title="SYNTHETIC_P3_READ_BRIDGE"]')).toHaveCount(1);
+    await expect(aum).not.toContainText('P3_PORTFOLIO_SNAPSHOT');
+    await expect(aum.locator('[title="P3_PORTFOLIO_SNAPSHOT"]')).toHaveCount(1);
   });
 
   test('AC14 filters are a flat bar (no full border box, no shadow)', async ({ page }) => {
@@ -140,13 +140,13 @@ test.describe('UC07 S16b data display polish', () => {
 
   test('AC14 account numbers in onboarding are not monospace', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Đăng ký khách hàng');
-    await page.getByLabel('Mã CIF hoặc định danh').fill('00000101');
+    await page.getByLabel('Mã CIF hoặc định danh').fill('CIF100001');
     await page.getByRole('button', { name: 'Tra cứu' }).click();
-    const account = page.getByRole('radio', { name: /synthetic-vnd-account-101/ });
+    const account = page.getByRole('radio', { name: /0011000123451/ });
     await expect(account).toBeVisible();
-    const family = await page.getByText('synthetic-vnd-account-101', { exact: false }).last()
+    const family = await page.getByText('0011000123451', { exact: false }).last()
       .evaluate(element => getComputedStyle(element).fontFamily);
     expect(family, 'account number font').not.toMatch(/mono|consolas|courier/i);
     const body = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
@@ -156,15 +156,15 @@ test.describe('UC07 S16b data display polish', () => {
   test.describe('Assignments (leader)', () => {
     async function openAssignments(page: Page) {
       await openApp(page);
-      await switchRole(page, 'leader-alpha');
+      await switchRole(page, 'NV0001');
       await goTo(page, 'Phân công RM');
     }
     async function addLoad(rmId: string, count: number, tag: string) {
-      await sql(`INSERT INTO customers(id,cif_id,name,created_at)
+      await sql(`INSERT INTO wms.customers(customer_id,cif_id,full_name,created_at)
         SELECT gen_random_uuid(),$2::text||lpad(n::text,5,'0'),'Khách hàng tải '||$2::text||n::text,now() FROM generate_series(1,$1::int) n`, [count, tag]);
-      await sql(`INSERT INTO rm_assignment_history(id,customer_id,rm_id,team_id,valid_from,valid_to,provisional)
-        SELECT gen_random_uuid(),c.id,$1,t.team_id,now(),NULL,false FROM customers c
-        CROSS JOIN (SELECT team_id FROM rm_assignment_history WHERE customer_id=$2 AND valid_to IS NULL) t WHERE c.cif_id LIKE $3`,
+      await sql(`INSERT INTO wms.rm_assignments(customer_id,rm_id,team_id,valid_from,valid_to,provisional)
+        SELECT c.customer_id,$1,t.team_id,now(),NULL,false FROM wms.customers c
+        CROSS JOIN (SELECT team_id FROM wms.rm_assignments WHERE customer_id=$2 AND valid_to IS NULL) t WHERE c.cif_id LIKE $3`,
       [rmId, alphaId, `${tag}%`]);
     }
     async function expectRm(scope: Locator, name: string, fullId: string, label: string) {
@@ -174,19 +174,19 @@ test.describe('UC07 S16b data display polish', () => {
       await expect(scope.locator(`[title="${fullId}"]`).first(), `${label} keeps the full id in title`).toBeAttached();
     }
 
-    test('AC4 RM table, current RM fact and target options show rmName with a short id, full id in title', async ({ page }) => {
+    test('AC4 RM table, current RM fact and target options show rmFullName with a short id, full id in title', async ({ page }) => {
       await openAssignments(page);
       const directory = page.getByRole('region', { name: 'Danh sách RM' });
-      await expectRm(directory.getByRole('row', { name: /rm-alpha/ }), 'rm-alpha', ids.rmAlpha, 'RM table row');
+      await expectRm(directory.getByRole('row', { name: /Nguyễn Văn An/ }), 'Nguyễn Văn An', ids.rmAlpha, 'RM table row');
       await page.getByLabel('Chọn khách hàng').selectOption(alphaId);
       await page.getByRole('button', { name: 'Tải thông tin khách hàng' }).click();
       const panel = page.getByRole('region', { name: 'Khách hàng cần chuyển' });
       await expect(panel).toBeVisible();
-      await expectRm(panel, 'rm-alpha', ids.rmAlpha, 'current RM fact');
+      await expectRm(panel, 'Nguyễn Văn An', ids.rmAlpha, 'current RM fact');
       const target = page.getByLabel('RM nhận');
       const optionTexts = await target.evaluate(select => [...(select as HTMLSelectElement).options].map(option => option.textContent ?? ''));
-      const beta = optionTexts.find(text => text.includes('rm-beta'));
-      expect(beta, 'target option shows rm-beta').toBeTruthy();
+      const beta = optionTexts.find(text => text.includes('Lê Minh Bảo'));
+      expect(beta, 'target option shows Lê Minh Bảo').toBeTruthy();
       expect(beta).toContain(ids.rmBeta.slice(0, 8));
       expect(beta).toContain('/80');
       expect(optionTexts.some(text => text.includes(ids.rmBeta)), 'no long UUID in option text').toBe(false);
@@ -195,7 +195,7 @@ test.describe('UC07 S16b data display polish', () => {
       await page.getByRole('button', { name: 'Xác nhận chuyển' }).click();
       const dialog = page.getByRole('dialog', { name: 'Xác nhận chuyển RM' });
       await expect(dialog).toBeVisible();
-      await expect(dialog).toContainText(/rm-alpha[\s\S]*rm-beta/);
+      await expect(dialog).toContainText(/Nguyễn Văn An[\s\S]*Lê Minh Bảo/);
       await expect(dialog).not.toContainText(ids.rmAlpha);
       await expect(dialog).not.toContainText(ids.rmBeta);
       await expect(dialog.locator(`[title="${ids.rmAlpha}"]`).first()).toBeAttached();
@@ -204,7 +204,7 @@ test.describe('UC07 S16b data display polish', () => {
 
     test('AC9 load bar is a progressbar with 2/80 values, level ok and "2/80 khách" text', async ({ page }, testInfo) => {
       await openAssignments(page);
-      const alphaRow = page.getByRole('region', { name: 'Danh sách RM' }).getByRole('row', { name: /rm-alpha/ });
+      const alphaRow = page.getByRole('region', { name: 'Danh sách RM' }).getByRole('row', { name: /Nguyễn Văn An/ });
       await expect(alphaRow).toContainText('2/80 khách');
       if (testInfo.project.name !== 'desktop') return; // the bar itself is asserted on desktop
       const bar = alphaRow.locator('[role="progressbar"]');
@@ -223,7 +223,7 @@ test.describe('UC07 S16b data display polish', () => {
       for (const [add, total, level] of steps) {
         await addLoad(ids.rmBeta, add, `LD${batch++}`);
         await openAssignments(page);
-        const betaRow = page.getByRole('region', { name: 'Danh sách RM' }).getByRole('row', { name: /rm-beta/ });
+        const betaRow = page.getByRole('region', { name: 'Danh sách RM' }).getByRole('row', { name: /Lê Minh Bảo/ });
         await expect(betaRow).toContainText(`${total}/80 khách`);
         const bar = betaRow.locator('[role="progressbar"]');
         await expect(bar).toHaveAttribute('aria-valuenow', String(total));

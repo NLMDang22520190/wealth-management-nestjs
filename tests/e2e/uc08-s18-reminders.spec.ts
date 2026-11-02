@@ -20,9 +20,9 @@ test.describe('UC08 S18 leader reminders and transfer precondition (AC-U1)', () 
   let betaId: string; // valid risk profile
   test.beforeEach(async () => {
     await resetBusinessState();
-    alphaId = (await registerCustomer('00000101', 'customer-alpha')).customerId;
-    betaId = (await registerCustomer('00000102', 'customer-beta')).customerId;
-    await activateRisk('customer-beta', 2);
+    alphaId = (await registerCustomer('CIF100001', 'CIF100001')).customerId;
+    betaId = (await registerCustomer('CIF100002', 'CIF100002')).customerId;
+    await activateRisk('CIF100002', 2);
   });
 
   const survey = (page: Page) => page.getByRole('region', { name: 'Khảo sát rủi ro của khách hàng' });
@@ -30,7 +30,7 @@ test.describe('UC08 S18 leader reminders and transfer precondition (AC-U1)', () 
 
   async function openAssignments(page: Page) {
     await openApp(page);
-    await switchRole(page, 'leader-alpha');
+    await switchRole(page, 'NV0001');
     await goTo(page, 'Phân công RM');
     await expect(survey(page)).toBeVisible();
   }
@@ -43,14 +43,14 @@ test.describe('UC08 S18 leader reminders and transfer precondition (AC-U1)', () 
 
   test('AC-U1 every customer shows its survey status', async ({ page }) => {
     await openAssignments(page);
-    await expect(row(page, 'Khách hàng demo Alpha')).toContainText(PENDING);
-    await expect(row(page, 'Khách hàng demo Beta')).toContainText(DONE);
-    await expect(row(page, 'Khách hàng demo Beta')).not.toContainText(PENDING);
+    await expect(row(page, 'Nguyễn Thị Mai')).toContainText(PENDING);
+    await expect(row(page, 'Trần Quốc Huy')).toContainText(DONE);
+    await expect(row(page, 'Trần Quốc Huy')).not.toContainText(PENDING);
   });
 
   test('AC-U1 a customer without a valid risk profile cannot be transferred and the reason is shown', async ({ page }) => {
     await openAssignments(page);
-    await loadCustomer(page, alphaId, 'Khách hàng demo Alpha');
+    await loadCustomer(page, alphaId, 'Nguyễn Thị Mai');
     const panel = page.getByRole('region', { name: 'Khách hàng cần chuyển' });
     await expect(panel.getByText(REASON)).toBeVisible();
     await expect(panel.getByLabel('RM nhận')).toBeDisabled();
@@ -64,7 +64,7 @@ test.describe('UC08 S18 leader reminders and transfer precondition (AC-U1)', () 
 
   test('AC-U1 a customer with a valid risk profile still transfers (existing flow, no reason text)', async ({ page }) => {
     await openAssignments(page);
-    await loadCustomer(page, betaId, 'Khách hàng demo Beta');
+    await loadCustomer(page, betaId, 'Trần Quốc Huy');
     const panel = page.getByRole('region', { name: 'Khách hàng cần chuyển' });
     await expect(panel.getByText(REASON)).toHaveCount(0);
     await expect(panel.getByLabel('RM nhận')).toBeEnabled();
@@ -81,23 +81,23 @@ test.describe('UC08 S18 leader reminders and transfer precondition (AC-U1)', () 
     page.on('request', request => {
       if (request.method() === 'POST' && request.url().includes('/team/risk-survey-reminders')) bodies.push(request.postDataJSON());
     });
-    const button = row(page, 'Khách hàng demo Alpha').getByRole('button', { name: 'Nhắc làm khảo sát' });
+    const button = row(page, 'Nguyễn Thị Mai').getByRole('button', { name: 'Nhắc làm khảo sát' });
     await button.click();
     await expect(page.getByRole('status').filter({ hasText: 'Đã gửi 1 lời nhắc' })).toBeVisible();
     expect(bodies).toEqual([{ customerIds: [alphaId] }]);
-    expect(await sql("SELECT id FROM customer_notifications WHERE customer_id=$1 AND kind='RISK_SURVEY_REMINDER'", [alphaId])).toHaveLength(1);
+    expect(await sql("SELECT notification_id FROM wms.customer_notifications WHERE customer_id=$1 AND kind='RISK_SURVEY_REMINDER'", [alphaId])).toHaveLength(1);
 
     await button.click();
     await expect(page.getByRole('status').filter({ hasText: 'Khách đã được nhắc trong 24 giờ qua' })).toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: 'Đã gửi 1 lời nhắc' })).toHaveCount(0);
     expect(bodies).toHaveLength(2);
-    expect(await sql('SELECT id FROM customer_notifications WHERE customer_id=$1', [alphaId]), 'no duplicate reminder row').toHaveLength(1);
+    expect(await sql('SELECT notification_id FROM wms.customer_notifications WHERE customer_id=$1', [alphaId]), 'no duplicate reminder row').toHaveLength(1);
   });
 
   test('AC-U1 a customer with a valid profile has no per-customer reminder button', async ({ page }) => {
     await openAssignments(page);
-    await expect(row(page, 'Khách hàng demo Alpha').getByRole('button', { name: 'Nhắc làm khảo sát' })).toBeVisible();
-    await expect(row(page, 'Khách hàng demo Beta').getByRole('button', { name: 'Nhắc làm khảo sát' })).toHaveCount(0);
+    await expect(row(page, 'Nguyễn Thị Mai').getByRole('button', { name: 'Nhắc làm khảo sát' })).toBeVisible();
+    await expect(row(page, 'Trần Quốc Huy').getByRole('button', { name: 'Nhắc làm khảo sát' })).toHaveCount(0);
   });
 
   test('AC-U1 bulk button posts without customerIds and shows the sent count', async ({ page }) => {
@@ -110,8 +110,8 @@ test.describe('UC08 S18 leader reminders and transfer precondition (AC-U1)', () 
     await expect(page.getByRole('status').filter({ hasText: 'Đã gửi 1 lời nhắc' })).toBeVisible(); // only alpha; beta is valid (seed has two customer actors)
     expect(bodies).toHaveLength(1);
     expect((bodies[0] as { customerIds?: unknown }).customerIds, 'bulk sends no customerIds').toBeUndefined();
-    expect(await sql('SELECT customer_id FROM customer_notifications WHERE customer_id=$1', [alphaId])).toHaveLength(1);
-    expect(await sql('SELECT id FROM customer_notifications WHERE customer_id=$1', [betaId])).toHaveLength(0);
+    expect(await sql('SELECT customer_id FROM wms.customer_notifications WHERE customer_id=$1', [alphaId])).toHaveLength(1);
+    expect(await sql('SELECT notification_id FROM wms.customer_notifications WHERE customer_id=$1', [betaId])).toHaveLength(0);
   });
 
   test('AC-U1 the count in the bulk message comes from the response', async ({ page }) => {
@@ -129,7 +129,7 @@ test.describe('UC08 S18 leader reminders and transfer precondition (AC-U1)', () 
     });
     await openAssignments(page);
     // beta has a valid profile so the UI lets the attempt through; the (mocked) server still refuses.
-    await loadCustomer(page, betaId, 'Khách hàng demo Beta');
+    await loadCustomer(page, betaId, 'Trần Quốc Huy');
     await page.getByLabel('RM nhận').selectOption(ids.rmBeta);
     await page.getByLabel('Lý do chuyển').fill('Chuyển để thử lỗi khảo sát');
     await page.getByRole('button', { name: 'Xác nhận chuyển' }).click();
@@ -144,17 +144,17 @@ test.describe('UC08 S18 leader reminders and transfer precondition (AC-U1)', () 
 test.describe('UC08 S18 customer reminder banner (AC-U2)', () => {
   test.beforeEach(async () => {
     await resetBusinessState();
-    await registerCustomer('00000101', 'customer-alpha');
-    await registerCustomer('00000102', 'customer-beta');
-    await activateRisk('customer-beta', 2);
+    await registerCustomer('CIF100001', 'CIF100001');
+    await registerCustomer('CIF100002', 'CIF100002');
+    await activateRisk('CIF100002', 2);
   });
 
   const banner = (page: Page) => page.getByRole('region', { name: 'Thông báo' });
 
   async function remindAlpha() {
-    const lead = await tokenFor('leader-alpha');
+    const lead = await tokenFor('NV0001');
     const list = await api('/team/customers?page=1&pageSize=50', { token: lead });
-    const alpha = (list.body.items as Array<{ customerId: string; name: string }>).find(item => item.name.includes('Alpha'))!;
+    const alpha = (list.body.items as Array<{ customerId: string; fullName: string }>).find(item => item.fullName.includes('Mai'))!;
     const sent = await api('/team/risk-survey-reminders', { token: lead, body: { customerIds: [alpha.customerId] } });
     expect(sent.status).toBe(200);
     expect(sent.body.sent).toBe(1);
@@ -162,7 +162,7 @@ test.describe('UC08 S18 customer reminder banner (AC-U2)', () => {
 
   test('AC-U2 a customer with no unread notification sees no banner', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await expect(page.getByRole('navigation', { name: 'Điều hướng chính' })).toBeVisible();
     await expect(banner(page)).toHaveCount(0);
     await expect(page.getByText(BANNER)).toHaveCount(0);
@@ -171,7 +171,7 @@ test.describe('UC08 S18 customer reminder banner (AC-U2)', () => {
   test('AC-U2 the reminded customer sees the banner with a survey link, dismisses it, and it stays gone', async ({ page }) => {
     await remindAlpha();
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await expect(banner(page)).toContainText(BANNER);
     await expect(banner(page).getByRole('link')).toHaveAttribute('href', '#/risk-survey');
 
@@ -180,24 +180,24 @@ test.describe('UC08 S18 customer reminder banner (AC-U2)', () => {
     await banner(page).getByRole('button', { name: 'Đã xem' }).click();
     await expect(page.getByText(BANNER)).toHaveCount(0);
     expect(reads).toHaveLength(1);
-    expect(await sql('SELECT read_at FROM customer_notifications WHERE read_at IS NOT NULL')).toHaveLength(1);
+    expect(await sql('SELECT read_at FROM wms.customer_notifications WHERE read_at IS NOT NULL')).toHaveLength(1);
 
     await page.reload();
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await expect(page.getByRole('navigation', { name: 'Điều hướng chính' })).toBeVisible();
     await expect(page.getByText(BANNER)).toHaveCount(0);
-    await switchRole(page, 'customer-beta');
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100002');
+    await switchRole(page, 'CIF100001');
     await expect(page.getByText(BANNER)).toHaveCount(0);
   });
 
   test('AC-U2 the banner belongs to the reminded customer only', async ({ page }) => {
     await remindAlpha();
     await openApp(page);
-    await switchRole(page, 'customer-beta');
+    await switchRole(page, 'CIF100002');
     await expect(page.getByRole('navigation', { name: 'Điều hướng chính' })).toBeVisible();
     await expect(page.getByText(BANNER)).toHaveCount(0);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await expect(banner(page)).toContainText(BANNER);
   });
 });

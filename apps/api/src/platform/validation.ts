@@ -6,7 +6,8 @@ import { ApiError } from './http.js';
 type FieldRule = (value: unknown) => boolean;
 interface ValidatedBody { readonly fields: Readonly<Record<string, FieldRule>>; }
 export const text: FieldRule = value => typeof value === 'string' && value.trim().length > 0;
-export const uuid: FieldRule = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+// Any 8-4-4-4-12 hex id: the team seed uses fixed ids such as b0000000-0000-0000-0000-000000000003 (version nibble 0), which a strict RFC 4122 check would refuse.
+export const uuid: FieldRule = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
 export class MockTokenBody {
   static readonly fields = { actorId: text };

@@ -17,9 +17,9 @@ const REASON = 'Khách chưa hoàn thành khảo sát rủi ro';
 const BANNER = 'Trưởng nhóm nhắc bạn hoàn thành khảo sát rủi ro (10 câu hỏi)';
 
 async function remindCustomer(name: string) {
-  const lead = await tokenFor('leader-alpha');
+  const lead = await tokenFor('NV0001');
   const list = await api('/team/customers?page=1&pageSize=50', { token: lead });
-  const target = (list.body.items as Array<{ customerId: string; name: string }>).find(item => item.name.includes(name))!;
+  const target = (list.body.items as Array<{ customerId: string; fullName: string }>).find(item => item.fullName.includes(name))!;
   const sent = await api('/team/risk-survey-reminders', { token: lead, body: { customerIds: [target.customerId] } });
   expect(sent.status).toBe(200);
   expect(sent.body.sent).toBe(1);
@@ -29,33 +29,33 @@ test.describe('UC09 R4-fix', () => {
   let alphaId: string;
   test.beforeEach(async () => {
     await resetBusinessState();
-    alphaId = (await registerCustomer('00000101', 'customer-alpha')).customerId;
-    await registerCustomer('00000102', 'customer-beta');
-    await activateRisk('customer-beta', 2);
+    alphaId = (await registerCustomer('CIF100001', 'CIF100001')).customerId;
+    await registerCustomer('CIF100002', 'CIF100002');
+    await activateRisk('CIF100002', 2);
   });
 
   const banner = (page: Page) => page.getByRole('region', { name: 'Thông báo' });
   const survey = (page: Page) => page.getByRole('region', { name: 'Khảo sát rủi ro của khách hàng' });
   async function openAssignments(page: Page) {
     await openApp(page);
-    await switchRole(page, 'leader-alpha');
+    await switchRole(page, 'NV0001');
     await goTo(page, 'Phân công RM');
     await expect(survey(page)).toBeVisible();
   }
   async function addCustomers(prefix: string, label: string, count: number, rmId: string) {
-    await sql(`INSERT INTO customers(id,cif_id,name,created_at)
+    await sql(`INSERT INTO wms.customers(customer_id,cif_id,full_name,created_at)
       SELECT gen_random_uuid(),$2::text||lpad(n::text,5,'0'),$3::text||n::text,now() FROM generate_series(1,$1::int) n`, [count, prefix, label]);
-    await sql(`INSERT INTO rm_assignment_history(id,customer_id,rm_id,team_id,valid_from,valid_to,provisional)
-      SELECT gen_random_uuid(),c.id,$1,t.team_id,now(),NULL,false FROM customers c
-      CROSS JOIN (SELECT team_id FROM rm_assignment_history WHERE customer_id=$2 AND valid_to IS NULL) t WHERE c.cif_id LIKE $3`,
+    await sql(`INSERT INTO wms.rm_assignments(customer_id,rm_id,team_id,valid_from,valid_to,provisional)
+      SELECT c.customer_id,$1,t.team_id,now(),NULL,false FROM wms.customers c
+      CROSS JOIN (SELECT team_id FROM wms.rm_assignments WHERE customer_id=$2 AND valid_to IS NULL) t WHERE c.cif_id LIKE $3`,
     [rmId, alphaId, `${prefix}%`]);
   }
 
   test('R4fix-1 a reminded customer who then completes the survey sees no notification banner', async ({ page }) => {
-    await remindCustomer('Alpha');
-    await activateRisk('customer-alpha', 2);
+    await remindCustomer('Mai');
+    await activateRisk('CIF100001', 2);
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await expect(page.getByRole('navigation', { name: 'Điều hướng chính' })).toBeVisible();
     await expect(page.getByText(BANNER)).toHaveCount(0);
     await expect(banner(page)).toHaveCount(0);
@@ -66,7 +66,7 @@ test.describe('UC09 R4-fix', () => {
     await addCustomers('OVR', 'Khách hàng quá tải ', 85, ids.rmBeta);
     await openAssignments(page);
     const rows = page.getByRole('region', { name: 'Danh sách RM' });
-    for (const [rm, text] of [['rm-alpha', '2/80 khách'], ['rm-beta', '85/80 khách']] as const) {
+    for (const [rm, text] of [['Nguyễn Văn An', '2/80 khách'], ['Lê Minh Bảo', '85/80 khách']] as const) {
       const row = rows.getByRole('row', { name: new RegExp(rm) });
       await expect(row.getByText(text, { exact: true })).toBeVisible();
       const bar = row.locator('[role="progressbar"]');
@@ -76,9 +76,9 @@ test.describe('UC09 R4-fix', () => {
   });
 
   test('R4fix-6 focus does not fall back to <body> after pressing "Đã xem"', async ({ page }) => {
-    await remindCustomer('Alpha');
+    await remindCustomer('Mai');
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await expect(banner(page)).toContainText(BANNER);
     await banner(page).getByRole('button', { name: 'Đã xem' }).click();
     await expect(page.getByText(BANNER)).toHaveCount(0);
@@ -111,9 +111,9 @@ test.describe('UC09 R4-fix', () => {
 
   test('R4fix-8 at 375px the banner text keeps >= 60% of the banner width and the link/button wrap below it', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile', '375px layout check');
-    await remindCustomer('Alpha');
+    await remindCustomer('Mai');
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await expect(banner(page)).toContainText(BANNER);
     const region = (await banner(page).boundingBox())!;
     const text = (await banner(page).getByText(BANNER).boundingBox())!;

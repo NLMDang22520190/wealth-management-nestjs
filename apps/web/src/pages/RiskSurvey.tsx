@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 
 interface Questionnaire { version: string; questions: Array<{ id: string; text: string; options: Array<{ id: string; text: string }> }> }
-interface Draft { id: string; score: number; category: string; maxProductRisk: number; allocation: Allocation; expiresAt: string; expectedCurrentProfileVersion: number }
+interface Draft { draftId: string; score: number; category: string; maxProductRisk: number; allocation: Allocation; expiresAt: string; expectedCurrentProfileVersion: number }
 interface Challenge { challengeId: string; expiresAt: string }
 
 const surveyErrors = { '404': 'Bạn cần đồng ý dịch vụ trước khi làm khảo sát rủi ro. Mở mục Lời mời dịch vụ.' };
@@ -58,14 +58,14 @@ export function RiskSurvey() {
   const sendOtp = () => guarded(async () => {
     if (!draft) return;
     setCode('');
-    setChallenge(await api<Challenge>('/otp/challenges', { body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.id } }));
+    setChallenge(await api<Challenge>('/otp/challenges', { body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.draftId } }));
   });
 
   const confirm = () => guarded(async () => {
     if (!draft || !challenge) return;
     if (!/^\d{6}$/.test(code)) { setFailure('Mã OTP gồm đúng 6 chữ số.'); return; }
-    const name = `risk-confirm-${draft.id}`;
-    await api(`/me/risk-assessments/${draft.id}/confirm`, { key: intentKey(name, `${challenge.challengeId}:${code}`),
+    const name = `risk-confirm-${draft.draftId}`;
+    await api(`/me/risk-assessments/${draft.draftId}/confirm`, { key: intentKey(name, `${challenge.challengeId}:${code}`),
       body: { challengeId: challenge.challengeId, code, expectedCurrentProfileVersion: draft.expectedCurrentProfileVersion } });
     intentDone(name);
     setConfirmed(true);

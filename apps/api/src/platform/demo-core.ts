@@ -1,39 +1,29 @@
 import type { CoreBanking, CoreCustomer } from '../modules/customer-risk/onboarding.domain.js';
 
 // Explicitly synthetic local fixtures: these references never contact a bank or represent real customers.
+// CIF100001-CIF100005 mirror the team demo seed (names, birth dates, CASA numbers used as the VND account id);
+// CIF100006-CIF100009 are extra synthetic customers for UC-01 demos (eligible, blacklisted, credit group 3, minor).
+const customer = (cifId: string, name: string, dateOfBirth: string, accountId: string, extra: Partial<CoreCustomer> = {}): CoreCustomer => ({
+  cifId, name, dateOfBirth, active: true, kycVerified: true,
+  accounts: [{ id: accountId, ownerCifId: cifId, currency: 'VND', active: true }], ...extra,
+});
 const customers: CoreCustomer[] = [
-  {
-    cifId: '00000101', name: 'Khách hàng demo Alpha', dateOfBirth: '1990-01-15',
-    active: true, kycVerified: true,
-    accounts: [{ id: 'synthetic-vnd-account-101', ownerCifId: '00000101', currency: 'VND', active: true }],
-  },
-  {
-    cifId: '00000102', name: 'Khách hàng demo Beta', dateOfBirth: '1992-06-20',
-    active: true, kycVerified: true,
-    accounts: [{ id: 'synthetic-vnd-account-102', ownerCifId: '00000102', currency: 'VND', active: true }],
-  },
-  {
-    cifId: '00000103', name: 'Khách hàng demo Gamma (danh sách đen)', dateOfBirth: '1988-03-10',
-    active: true, kycVerified: true, blacklisted: true, creditGroup: 1,
-    accounts: [{ id: 'synthetic-vnd-account-103', ownerCifId: '00000103', currency: 'VND', active: true }],
-  },
-  {
-    cifId: '00000104', name: 'Khách hàng demo Delta (nhóm nợ 3)', dateOfBirth: '1985-11-25',
-    active: true, kycVerified: true, blacklisted: false, creditGroup: 3,
-    accounts: [{ id: 'synthetic-vnd-account-104', ownerCifId: '00000104', currency: 'VND', active: true }],
-  },
+  customer('CIF100001', 'Nguyễn Thị Mai', '1968-03-12', '0011000123451'),
+  customer('CIF100002', 'Trần Quốc Huy', '1985-07-25', '0011000123452'),
+  customer('CIF100003', 'Võ Thanh Tâm', '1990-11-02', '0011000123453'),
+  customer('CIF100004', 'Đặng Hải Yến', '1979-01-30', '0011000123454'),
+  customer('CIF100005', 'Bùi Gia Khánh', '1982-09-09', '0011000123455'),
+  customer('CIF100006', 'Phan Minh Quân', '1991-04-18', '0011000123456'),
+  customer('CIF100007', 'Lý Hoàng Nam (danh sách đen)', '1988-03-10', '0011000123457', { blacklisted: true, creditGroup: 1 }),
+  customer('CIF100008', 'Đỗ Thu Trang (nhóm nợ 3)', '1985-11-25', '0011000123458', { blacklisted: false, creditGroup: 3 }),
+  customer('CIF100009', 'Ngô Bảo Châu (dưới 18 tuổi)', '2012-08-05', '0011000123459'),
 ];
-const references = new Map<string, CoreCustomer>([
-  [customers[0].cifId, customers[0]], ['synthetic-identity-reference-101', customers[0]],
-  [customers[1].cifId, customers[1]], ['synthetic-identity-reference-102', customers[1]],
-  [customers[2].cifId, customers[2]], ['synthetic-identity-reference-103', customers[2]],
-  [customers[3].cifId, customers[3]], ['synthetic-identity-reference-104', customers[3]],
-]);
+const references = new Map<string, CoreCustomer>(customers.map(item => [item.cifId, item]));
 
 /** Wired by main only when development/test explicitly enables mocks. Unknown references remain unknown. */
 export const demoCoreBanking: CoreBanking = {
   async lookup(reference) {
-    const customer = references.get(reference);
-    return customer ? structuredClone(customer) : null;
+    const found = references.get(reference);
+    return found ? structuredClone(found) : null;
   },
 };

@@ -5,8 +5,9 @@ import type { EntityManager } from 'typeorm';
 @Injectable()
 export class ProposalCancellation {
   async forRmTransfer(manager: EntityManager, customerId: string, previousRmId: string, now: Date): Promise<number> {
-    const [, count] = await manager.query(`UPDATE proposals SET status='CANCELLED',cancellation_reason='RM_TRANSFER',updated_at=$3
-      WHERE customer_id=$1 AND author_rm_id=$2 AND status='PENDING_APPROVAL'`, [customerId, previousRmId, now]) as [unknown, number];
+    // closed_at from the app clock; the team state trigger would otherwise stamp the database time.
+    const [, count] = await manager.query(`UPDATE wms.proposals SET status='CANCELLED',cancel_reason='RM_TRANSFER',closed_at=$3
+      WHERE customer_id=$1 AND rm_id=$2 AND status='PENDING_APPROVAL'`, [customerId, previousRmId, now]) as [unknown, number];
     return count;
   }
 }

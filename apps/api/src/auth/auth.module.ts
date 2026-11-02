@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Module, Post, Req, UseGuards } from '@
 import { APP_GUARD } from '@nestjs/core';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { ApiRequest } from '../platform/http.js';
+import { publicIdentity } from './actor.js';
 import { MockTokenBody } from '../platform/validation.js';
 import { AuthService } from './auth.service.js';
 import { AuthenticationGuard, MockEnabledGuard, Public, RoleGuard } from './guards.js';
@@ -19,7 +20,7 @@ class AuthController {
 
   @ApiBearerAuth('bearer')
   @Get('auth/me')
-  me(@Req() request: ApiRequest) { return request.actor; }
+  me(@Req() request: ApiRequest) { return publicIdentity(request.actor!); }
 }
 
 @Module({

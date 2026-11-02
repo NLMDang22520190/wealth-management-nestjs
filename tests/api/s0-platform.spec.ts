@@ -3,7 +3,7 @@ import { inspect } from 'node:util';
 import type { INestApplication, LoggerService } from '@nestjs/common';
 import type { DataSource } from 'typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
-import { actors, seedTestActors } from '../helpers/actors.js';
+import { actors, insertCustomerRow, seedTestActors, viaDataSource } from '../helpers/actors.js';
 import { startTestDatabase } from '../helpers/postgres.js';
 
 const NOW = new Date('2026-01-15T00:00:00.000Z');
@@ -85,6 +85,8 @@ describe('S0 platform public boundary', () => {
     ({ createApplication } = await import(/* @vite-ignore */ compiled));
     application = await createApplication(options());
     await seedTestActors(application.dataSource);
+    // R9 AC4: a customer without invitation logs in only if it exists in wms.customers.
+    await insertCustomerRow(viaDataSource(application.dataSource), actors.customer);
     await application.app.listen(0, '127.0.0.1');
     baseUrl = await application.app.getUrl();
   });
@@ -102,7 +104,7 @@ describe('S0 platform public boundary', () => {
     const [postgres] = await application!.dataSource.query('SELECT version() AS version, current_database() AS database');
     expect(postgres.version).toContain('PostgreSQL');
     expect(postgres.database).toBe(database.databaseName);
-    const [migrationCount] = await application!.dataSource.query('SELECT count(*)::integer AS count FROM migrations');
+    const [migrationCount] = await application!.dataSource.query('SELECT count(*)::integer AS count FROM public.migrations');
     expect(migrationCount.count).toBeGreaterThan(0);
     const live = await request('/api/v1/health/live');
     expect(live.status).toBe(200);

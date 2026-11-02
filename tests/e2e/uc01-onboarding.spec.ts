@@ -7,7 +7,7 @@ test.describe('UC01 onboarding journey (AC07 + AC02)', () => {
 
   test('AC07 RM looks up a synthetic CIF, selects an own VND account and creates an invitation', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Đăng ký khách hàng');
 
     // S10 B13 AC3: stepper `Tiến trình đăng ký`, active step has aria-current="step" and moves forward.
@@ -21,12 +21,12 @@ test.describe('UC01 onboarding journey (AC07 + AC02)', () => {
     await page.getByRole('button', { name: 'Tra cứu' }).click();
     await expect(page.getByRole('alert')).toContainText('Không tìm thấy khách hàng'); // CUSTOMER_NOT_FOUND error state
 
-    await page.getByLabel('Mã CIF hoặc định danh').fill('00000101');
+    await page.getByLabel('Mã CIF hoặc định danh').fill('CIF100001');
     await page.getByRole('button', { name: 'Tra cứu' }).click();
-    await expect(page.getByText('Khách hàng demo Alpha')).toBeVisible();
+    await expect(page.getByText('Nguyễn Thị Mai')).toBeVisible();
     await expect(page.getByText('Đủ điều kiện')).toBeVisible();
     await expect(stepper.locator('[aria-current="step"]')).toContainText('Chọn tài khoản'); // lookup done, now pick an account
-    const account = page.getByRole('radio', { name: /synthetic-vnd-account-101/ });
+    const account = page.getByRole('radio', { name: /0011000123451/ });
     await expect(account).toBeVisible();
     await account.check();
     await expect(stepper.locator('[aria-current="step"]')).toContainText('Gửi lời mời'); // account chosen, ready to send
@@ -34,19 +34,19 @@ test.describe('UC01 onboarding journey (AC07 + AC02)', () => {
     await expect(page.getByText('Đã tạo lời mời')).toBeVisible();
     await expect(page.getByText('Chờ khách hàng đồng ý')).toBeVisible();
 
-    const inbox = await api('/me/onboarding-requests', { token: await tokenFor('customer-alpha') });
+    const inbox = await api('/me/onboarding-requests', { token: await tokenFor('CIF100001') });
     expect(inbox.body.items).toEqual([expect.objectContaining({ status: 'PENDING_CONSENT' })]);
     await expectNoHorizontalOverflow(page);
   });
 
   test('AC07/AC02 customer reads terms, requests OTP, rejects a wrong OTP, then confirms explicitly with the demo OTP', async ({ page }) => {
-    const rmToken = await tokenFor('rm-alpha');
+    const rmToken = await tokenFor('NV0002');
     const created = await api('/onboarding/requests', { token: rmToken, key: 'e2e-uc01-setup',
-      body: { cifRef: '00000101', selectedAccountId: 'synthetic-vnd-account-101' } });
+      body: { cifRef: 'CIF100001', selectedCasaNo: '0011000123451' } });
     expect(created.status).toBe(201);
 
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await goTo(page, 'Lời mời dịch vụ');
     await expect(page.getByText('Chờ đồng ý')).toBeVisible();
     await page.getByRole('button', { name: 'Xem điều khoản' }).click();
@@ -65,7 +65,7 @@ test.describe('UC01 onboarding journey (AC07 + AC02)', () => {
       await expect(box).toHaveAttribute('maxlength', '1');
       await expect(box).toHaveAttribute('inputmode', 'numeric');
     }
-    expect(await sql('SELECT id FROM wealth_services')).toHaveLength(0);
+    expect(await sql('SELECT service_id FROM wms.wealth_services')).toHaveLength(0);
     // Resend control: a countdown first (not waited out), the button only after it ends.
     await expect(page.getByText(/Gửi lại mã sau \d+s/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Gửi lại mã' })).toHaveCount(0);
@@ -92,13 +92,13 @@ test.describe('UC01 onboarding journey (AC07 + AC02)', () => {
     await expect(confirm).toBeEnabled();
     await confirm.click();
     await expect(page.getByRole('alert')).toContainText('Mã OTP không đúng');
-    expect(await sql('SELECT id FROM wealth_services')).toHaveLength(0);
+    expect(await sql('SELECT service_id FROM wms.wealth_services')).toHaveLength(0);
 
     await typeOtp(page, code);
     await confirm.click();
     await expect(page.getByText('Đã đồng ý dịch vụ')).toBeVisible();
     await expect(page.getByText('Chờ đánh giá rủi ro')).toBeVisible();
-    const services = await sql<{ status: string }>('SELECT status FROM wealth_services');
+    const services = await sql<{ status: string }>('SELECT status FROM wms.wealth_services');
     expect(services).toEqual([{ status: 'PENDING_RISK_ASSESSMENT' }]);
     await expectNoHorizontalOverflow(page);
   });

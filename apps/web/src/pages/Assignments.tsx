@@ -15,15 +15,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
-interface Rm { rmId: string; rmName: string | null; active: boolean; assigned: number; reserved: number; available: number; capacityLimit: number }
+interface Rm { rmId: string; rmFullName: string | null; active: boolean; assigned: number; reserved: number; available: number; capacityLimit: number }
 interface Customer {
-  customerId: string; name: string;
+  customerId: string; fullName: string;
   currentAssignment: { rmId: string; version: number };
   currentRisk: { category: string } | null;
   pendingProposals: { count: number };
 }
 interface Transfer { rmId: string; version: number; changed: boolean; cancelledProposals?: number }
-interface TeamCustomers { items: Array<{ customerId: string; name: string; rmName: string | null; riskProfileValid: boolean; lastReminderAt: string | null }>; total: number }
+interface TeamCustomers { items: Array<{ customerId: string; fullName: string; rmFullName: string | null; riskProfileValid: boolean; lastReminderAt: string | null }>; total: number }
 
 const ROSTER_PAGE_SIZE = 50;
 const SURVEY_LIST_LIMIT = 5;
@@ -178,8 +178,8 @@ export function Assignments() {
 
   const message = typeof failure === 'string' ? failure : failure ? describe(failure) : null;
   const rms = team.data?.items ?? [];
-  const nameOf = (id: string) => rmText(id, rms.find(rm => rm.rmId === id)?.rmName);
-  const headClass = 'h-auto px-4 py-3 text-[0.78rem] text-muted-foreground';
+  const nameOf = (id: string) => rmText(id, rms.find(rm => rm.rmId === id)?.rmFullName);
+  const headClass = 'h-auto px-2 py-3 sm:px-4 text-[0.78rem] text-muted-foreground';
 
   return (
     <>
@@ -203,10 +203,10 @@ export function Assignments() {
                   const used = rm.assigned + rm.reserved;
                   return (
                     <TableRow key={rm.rmId}>
-                      <TableHead scope="row" className="h-auto px-2 py-3 font-semibold sm:px-4"><span className="block truncate sm:max-w-none"><RmName id={rm.rmId} name={rm.rmName} /></span></TableHead>
+                      <TableHead scope="row" className="h-auto px-2 py-3 font-semibold sm:px-4"><span className="block max-w-36 truncate sm:max-w-none"><RmName id={rm.rmId} name={rm.rmFullName} /></span></TableHead>
                       <TableCell className="px-2 py-3 sm:px-4">
                         <div className="flex items-center gap-2.5">
-                          <Progress value={Math.min(used, rm.capacityLimit)} max={rm.capacityLimit} data-level={loadLevel(used, rm.capacityLimit)} aria-label={`Tải của ${rmText(rm.rmId, rm.rmName)}`} aria-valuetext={`${used}/${rm.capacityLimit} khách`}
+                          <Progress value={Math.min(used, rm.capacityLimit)} max={rm.capacityLimit} data-level={loadLevel(used, rm.capacityLimit)} aria-label={`Tải của ${rmText(rm.rmId, rm.rmFullName)}`} aria-valuetext={`${used}/${rm.capacityLimit} khách`}
                             className={cn('hidden w-24 flex-none sm:flex', levelColour[loadLevel(used, rm.capacityLimit)])} />
                           <span className="font-semibold tabular-nums">{used}/{rm.capacityLimit} khách</span>
                         </div>
@@ -233,7 +233,7 @@ export function Assignments() {
           <ul className="m-0 grid list-none gap-2 p-0">
             {surveyShown.map(item => (
               <li key={item.customerId} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card px-3.5 py-2.5">
-                <span className="min-w-0 flex-1 font-semibold">{item.name}</span>
+                <span className="min-w-0 flex-1 font-semibold">{item.fullName}</span>
                 <Badge variant={item.riskProfileValid ? 'ok' : 'wait'}>{item.riskProfileValid ? 'Đã hoàn thành khảo sát' : 'Chưa hoàn thành khảo sát'}</Badge>
                 {item.riskProfileValid ? null : (
                   <BusyButton type="button" variant="outline" size="sm" busy={reminding === item.customerId} disabled={reminding !== null}
@@ -256,7 +256,7 @@ export function Assignments() {
         <Field label="Chọn khách hàng" htmlFor="customer-id" className="flex-[1_1_240px]" error={errorFor('customer-id')}>
           <NativeSelect id="customer-id" value={customerId} onChange={event => { setCustomerId(event.target.value); setFieldError(null); }} {...invalidProps('customer-id-error', errorFor('customer-id'))}>
             <NativeSelectOption value="">Chọn khách hàng</NativeSelectOption>
-            {options.map(item => <NativeSelectOption key={item.customerId} value={item.customerId}>{item.name}</NativeSelectOption>)}
+            {options.map(item => <NativeSelectOption key={item.customerId} value={item.customerId}>{item.fullName}</NativeSelectOption>)}
           </NativeSelect>
         </Field>
         <BusyButton type="submit" busy={busy} className="mb-3.5">Tải thông tin khách hàng</BusyButton>
@@ -280,8 +280,8 @@ export function Assignments() {
       {customer ? (
         <Panel title="Khách hàng cần chuyển">
           <Facts>
-            <Fact label="Họ tên">{customer.name}</Fact>
-            <Fact label="RM hiện tại"><RmName id={customer.currentAssignment.rmId} name={rms.find(rm => rm.rmId === customer.currentAssignment.rmId)?.rmName} /></Fact>
+            <Fact label="Họ tên">{customer.fullName}</Fact>
+            <Fact label="RM hiện tại"><RmName id={customer.currentAssignment.rmId} name={rms.find(rm => rm.rmId === customer.currentAssignment.rmId)?.rmFullName} /></Fact>
             <Fact label="Phân công">Phiên bản phân công: {customer.currentAssignment.version}</Fact>
             <Fact label="Hồ sơ rủi ro">{customer.currentRisk ? riskLabel(customer.currentRisk.category) : 'Chưa có'}</Fact>
             <Fact label="Đề xuất chờ duyệt">{customer.pendingProposals.count}</Fact>
@@ -290,7 +290,7 @@ export function Assignments() {
           <Field label="RM nhận" htmlFor="target-rm" error={errorFor('target-rm')}>
             <NativeSelect id="target-rm" disabled={surveyMissing} {...invalidProps('target-rm-error', errorFor('target-rm'), surveyMissing ? 'transfer-blocked-reason' : undefined)} value={target} onChange={event => { setTarget(event.target.value); setFieldError(null); }}>
               <NativeSelectOption value="">Chọn RM nhận</NativeSelectOption>
-              {rms.filter(rm => rm.active).map(rm => <NativeSelectOption key={rm.rmId} value={rm.rmId}>{rmText(rm.rmId, rm.rmName)} ({rm.assigned + rm.reserved}/{rm.capacityLimit})</NativeSelectOption>)}
+              {rms.filter(rm => rm.active).map(rm => <NativeSelectOption key={rm.rmId} value={rm.rmId}>{rmText(rm.rmId, rm.rmFullName)} ({rm.assigned + rm.reserved}/{rm.capacityLimit})</NativeSelectOption>)}
             </NativeSelect>
           </Field>
           <Field label="Lý do chuyển" htmlFor="reason" error={errorFor('reason')}>
@@ -306,10 +306,10 @@ export function Assignments() {
           <DialogContent showCloseButton={false} className="gap-3 p-6 sm:max-w-[460px]">
             <DialogHeader>
               <DialogTitle className="text-[1.15rem] leading-snug font-semibold">Xác nhận chuyển RM</DialogTitle>
-              <DialogDescription className="text-[15px] text-foreground">Chuyển <strong>{customer.name}</strong> sang RM mới.</DialogDescription>
+              <DialogDescription className="text-[15px] text-foreground">Chuyển <strong>{customer.fullName}</strong> sang RM mới.</DialogDescription>
             </DialogHeader>
             <p className="m-0 flex flex-wrap items-center gap-2.5">
-              <code><RmName id={customer.currentAssignment.rmId} name={rms.find(rm => rm.rmId === customer.currentAssignment.rmId)?.rmName} /></code><ArrowRight aria-hidden="true" className="size-4 text-primary" /><code><RmName id={target} name={rms.find(rm => rm.rmId === target)?.rmName} /></code>
+              <code><RmName id={customer.currentAssignment.rmId} name={rms.find(rm => rm.rmId === customer.currentAssignment.rmId)?.rmFullName} /></code><ArrowRight aria-hidden="true" className="size-4 text-primary" /><code><RmName id={target} name={rms.find(rm => rm.rmId === target)?.rmFullName} /></code>
             </p>
             <p className="m-0 text-muted-foreground">Lý do: {reason.trim()}</p>
             {customer.pendingProposals.count > 0

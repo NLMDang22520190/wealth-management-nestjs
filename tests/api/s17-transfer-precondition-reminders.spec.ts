@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { actors } from '../helpers/actors.js';
+import { actors, gamma, insertCustomerRow, insertStaff, staff, staffIdOf, viaDataSource } from '../helpers/actors.js';
 import { eligibleCustomer, expectApiError, startApiFixture } from '../helpers/application.js';
+import { insertProposal, insertRiskProfile } from '../helpers/wms.js';
 
 type Fixture = Awaited<ReturnType<typeof startApiFixture>>;
 
-const replacementRm = '22222222-2222-4222-8222-222222222222';
-const foreignRm = { actorId: 'rm-s17-foreign', rmId: '44444444-4444-4444-8444-444444444444', teamId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
-const foreignLeader = 'leader-s17-foreign';
-const gamma = { actorId: 'customer-gamma', cifId: '00000103' };
+const replacementRm = staff.replacement.rmId;
+const foreignRm = staff.foreign;
+const foreignLeader = staff.foreignLeader.actorId;
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const PAST_PROFILE_EXPIRY = 367 * DAY; // risk profile is valid ~12 months from confirmation
@@ -21,29 +21,27 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
   let api: Fixture;
   beforeEach(async () => {
     api = await startApiFixture();
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,cif_id,active) VALUES($1,$2,$3,$4,true)',
-      [gamma.actorId, `mock-${gamma.actorId}`, 'CUSTOMER', gamma.cifId]);
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,true)',
-      ['rm-s17-replacement', 'mock-rm-s17-replacement', 'RM', replacementRm, actors.rm.teamId]);
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,true)',
-      [foreignRm.actorId, `mock-${foreignRm.actorId}`, 'RM', foreignRm.rmId, foreignRm.teamId]);
-    await api.dataSource.query("INSERT INTO mock_actors(actor_id,subject_id,role,team_id,active) VALUES($1,$2,'LEADER',$3,true)",
-      [foreignLeader, `mock-${foreignLeader}`, foreignRm.teamId]);
+    // gamma (foreign-team customer) logs in through its invitation (AC4); only staff need rows.
+    const sql = viaDataSource(api.dataSource);
+    await insertStaff(sql, staff.replacement);
+    await insertStaff(sql, foreignRm);
+    await insertStaff(sql, staff.foreignLeader);
   });
   afterEach(async () => { await api?.stop(); });
 
   async function register(cifId: string, actorId: string, rmActorId: string = actors.rm.actorId): Promise<string> {
     if (cifId === gamma.cifId) api.state.core = eligibleCustomer(cifId);
     const created = await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(rmActorId), key: `s17-onboard-${cifId}`,
-      body: { cifRef: cifId, selectedAccountId: eligibleCustomer(cifId).accounts[0].id } });
+      body: { cifRef: cifId, selectedCasaNo: eligibleCustomer(cifId).accounts[0].id } });
     expect(created.status).toBe(201);
     const token = await api.tokenFor(actorId);
-    const challenge = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id } });
+    const challenge = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId } });
     expect(challenge.status).toBe(201);
     const otp = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const accepted = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, { method: 'POST', token, key: `s17-consent-${cifId}`,
+    const accepted = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, { method: 'POST', token, key: `s17-consent-${cifId}`,
       body: { challengeId: otp.challengeId, code: otp.code } });
     expect(accepted.status).toBe(200);
+    api.tick(); // category 4: chk_rma_period needs valid_to > valid_from for a later transfer
     return accepted.body.customerId as string;
   }
   async function confirmRisk(actorId: string, tag: string) {
@@ -54,10 +52,10 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
       questionnaireVersion: questionnaire.body.version,
       answers: questionnaire.body.questions.map((q: any) => ({ questionId: q.id, optionId: q.options[2].id })) } });
     expect(draft.status).toBe(201);
-    const challenge = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.id } });
+    const challenge = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.draftId } });
     expect(challenge.status).toBe(201);
     const otp = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const confirmed = await api.request(`/me/risk-assessments/${draft.body.id}/confirm`, { method: 'POST', token, key: `s17-confirm-${tag}`,
+    const confirmed = await api.request(`/me/risk-assessments/${draft.body.draftId}/confirm`, { method: 'POST', token, key: `s17-confirm-${tag}`,
       body: { challengeId: otp.challengeId, code: otp.code, expectedCurrentProfileVersion: 0 } });
     expect(confirmed.status).toBe(200);
   }
@@ -78,24 +76,29 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
   }
   const notifications = async (actorId: string) => api.request('/notifications', { token: await api.tokenFor(actorId) });
   async function reminderAudits() {
-    return api.dataSource.query("SELECT * FROM audit_events WHERE action LIKE 'RISK_SURVEY_REMINDER%' AND outcome='SUCCESS' ORDER BY created_at, id");
+    return api.dataSource.query("SELECT * FROM wms.audit_logs WHERE action LIKE 'RISK_SURVEY_REMINDER%' AND outcome='SUCCESS' ORDER BY created_at, log_id");
   }
   async function assignmentEffects(customerId: string) {
     return {
-      history: await api.dataSource.query('SELECT id,rm_id,version,valid_to FROM rm_assignment_history WHERE customer_id=$1 ORDER BY version', [customerId]),
-      audits: await api.dataSource.query("SELECT id FROM audit_events WHERE action='RM_ASSIGNMENT_CHANGED'"),
-      events: await api.dataSource.query("SELECT id FROM outbox_events WHERE event_type='RmAssignmentChanged'"),
-      cancelled: await api.dataSource.query("SELECT id FROM proposals WHERE customer_id=$1 AND status='CANCELLED'", [customerId]),
+      history: await api.dataSource.query('SELECT assignment_id,rm_id,version,valid_to FROM wms.rm_assignments WHERE customer_id=$1 ORDER BY version', [customerId]),
+      audits: await api.dataSource.query("SELECT log_id FROM wms.audit_logs WHERE action='RM_ASSIGNMENT_CHANGED'"),
+      events: await api.dataSource.query("SELECT event_id FROM wms.outbox_events WHERE event_type='RmAssignmentChanged'"),
+      cancelled: await api.dataSource.query("SELECT proposal_id FROM wms.proposals WHERE customer_id=$1 AND status='CANCELLED'", [customerId]),
     };
   }
+  // Category 6: a team proposal needs the customer's account and a risk profile (see the two ACTIVE-service tests below).
   async function seedPendingProposal(customerId: string) {
-    await api.dataSource.query("INSERT INTO proposals(id,customer_id,author_rm_id,status,created_at,updated_at) VALUES($1,$2,$3,'PENDING_APPROVAL',$4,$4)",
-      [randomUUID(), customerId, actors.rm.rmId, api.state.now]);
+    await insertProposal(viaDataSource(api.dataSource), { customerId, authorRmId: actors.rm.rmId, now: api.state.now });
+  }
+  // Category 4: chk_ws_active forbids an ACTIVE service without a profile, so "ACTIVE but never surveyed" is modelled as ACTIVE
+  // with a profile that is already expired at the injected clock (the business outcome RISK_PROFILE_REQUIRED is unchanged).
+  async function activateWithExpiredProfile(customerId: string) {
+    await insertRiskProfile(viaDataSource(api.dataSource), { customerId, confirmedAt: new Date(api.state.now.getTime() - 400 * DAY) });
   }
 
   test('AC-P2 transfer of an ACTIVE-service customer without any risk profile is 422 RISK_PROFILE_REQUIRED with no state change', async () => {
     const customerId = await beta();
-    await api.dataSource.query("UPDATE wealth_services SET status='ACTIVE' WHERE customer_id=$1", [customerId]); // ACTIVE but never answered the survey
+    await activateWithExpiredProfile(customerId); // ACTIVE, but no valid profile
     await seedPendingProposal(customerId);
     const before = await assignmentEffects(customerId);
     expectApiError(await transfer(customerId), 422, 'RISK_PROFILE_REQUIRED');
@@ -103,7 +106,7 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
     expect(before.history).toHaveLength(1);
     expect(before.history[0].version).toBe(1);
     expect(before.cancelled).toHaveLength(0);
-    const [pending] = await api.dataSource.query("SELECT count(*)::integer AS n FROM proposals WHERE customer_id=$1 AND status='PENDING_APPROVAL'", [customerId]);
+    const [pending] = await api.dataSource.query("SELECT count(*)::integer AS n FROM wms.proposals WHERE customer_id=$1 AND status='PENDING_APPROVAL'", [customerId]);
     expect(pending.n).toBe(1);
   });
 
@@ -158,7 +161,8 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
     const audits = await reminderAudits();
     expect(audits).toHaveLength(1);
     expect(audits[0].actor_id).toBe(actors.leader.actorId);
-    expect(JSON.stringify(audits[0].payload) + audits[0].resource_id).toContain(b);
+    expect(audits[0].actor_role).toBe('LEADER');
+    expect(JSON.stringify(audits[0].new_value) + audits[0].reference_id).toContain(b);
   });
 
   test('AC-N1 explicit ids: valid profile -> skipped PROFILE_VALID; repeat within 24h -> skipped RECENTLY_REMINDED; after 24h it sends again', async () => {
@@ -184,6 +188,7 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
   });
 
   test('AC-N1 authorization and validation: foreign-team id 403 (nothing sent), non-LEADER 403, invalid ids 400', async () => {
+    await insertCustomerRow(viaDataSource(api.dataSource), actors.customer); // can log in (expected 403, not 401) without being invited
     const b = await beta();
     const g = await register(gamma.cifId, gamma.actorId, foreignRm.actorId);
     expectApiError(await remind({ customerIds: [b, g] }), 403, 'FORBIDDEN');
@@ -196,6 +201,7 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
   });
 
   test('AC-N2 customer sees only own reminders, newest first, with kind/message/readAt; can mark own as read; foreign id 404; RM/LEADER 403', async () => {
+    await insertCustomerRow(viaDataSource(api.dataSource), actors.customer); // can log in (empty list expected, not 401) without being invited
     const b = await beta();
     await register(gamma.cifId, gamma.actorId, foreignRm.actorId);
     expect((await remind({ customerIds: [b] })).body.sent).toBe(1);
@@ -204,20 +210,20 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
     const listed = await notifications(actors.otherCustomer.actorId);
     expect(listed.status).toBe(200);
     expect(listed.body.items).toHaveLength(2);
-    expect(listed.body.items[0]).toMatchObject({ id: expect.any(String), kind: 'RISK_SURVEY_REMINDER', readAt: null });
+    expect(listed.body.items[0]).toMatchObject({ notificationId: expect.any(String), kind: 'RISK_SURVEY_REMINDER', readAt: null });
     expect(listed.body.items[0].message.length).toBeGreaterThan(0);
     expect(new Date(listed.body.items[0].createdAt).getTime()).toBeGreaterThan(new Date(listed.body.items[1].createdAt).getTime());
     expect((await notifications(gamma.actorId)).body.items).toEqual([]);
     expect((await notifications(actors.customer.actorId)).body.items).toEqual([]);
 
-    const target = listed.body.items[0].id;
+    const target = listed.body.items[0].notificationId;
     expectApiError(await api.request(`/notifications/${target}/read`, { method: 'POST', token: await api.tokenFor(gamma.actorId) }), 404, 'NOT_FOUND');
     expect((await notifications(actors.otherCustomer.actorId)).body.items[0].readAt).toBeNull();
     const read = await api.request(`/notifications/${target}/read`, { method: 'POST', token: await api.tokenFor(actors.otherCustomer.actorId) });
     expect(read.status).toBe(200);
     const after = (await notifications(actors.otherCustomer.actorId)).body.items;
-    expect(after.find((n: any) => n.id === target).readAt).toBe(api.state.now.toISOString());
-    expect(after.find((n: any) => n.id !== target).readAt).toBeNull();
+    expect(after.find((n: any) => n.notificationId === target).readAt).toBe(api.state.now.toISOString());
+    expect(after.find((n: any) => n.notificationId !== target).readAt).toBeNull();
 
     for (const actorId of [actors.rm.actorId, actors.leader.actorId]) expectApiError(await notifications(actorId), 403, 'FORBIDDEN');
   });
@@ -242,13 +248,14 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
     expect(response.body.sent).toBe(1);
     expect(response.body.skipped.filter((s: any) => s.reason === 'PROFILE_VALID')).toEqual([]);
     expect(response.body.skipped.map((s: any) => s.customerId)).not.toContain(a);
-    const rows = await api.dataSource.query("SELECT customer_id FROM customer_notifications WHERE kind='RISK_SURVEY_REMINDER'");
+    const rows = await api.dataSource.query("SELECT customer_id, created_by FROM wms.customer_notifications WHERE kind='RISK_SURVEY_REMINDER'");
     expect(rows.map((r: any) => r.customer_id)).toEqual([b]);
+    expect(rows[0].created_by, 'AC10: created_by is the leader staff_id').toBe(staffIdOf(actors.leader));
   });
 
   test('R4fix-4 check order: ACTIVE service, no profile and a wrong expectedAssignmentVersion is 422 RISK_PROFILE_REQUIRED, not 409', async () => {
     const customerId = await beta();
-    await api.dataSource.query("UPDATE wealth_services SET status='ACTIVE' WHERE customer_id=$1", [customerId]);
+    await activateWithExpiredProfile(customerId);
     const response = await api.request(`/customers/${customerId}/rm-assignment`, { method: 'POST', token: await leaderToken(), key: randomUUID(),
       body: { targetRmId: replacementRm, reason: 'S17 order', expectedAssignmentVersion: 99 } });
     expectApiError(response, 422, 'RISK_PROFILE_REQUIRED');

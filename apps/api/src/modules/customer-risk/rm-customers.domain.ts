@@ -41,27 +41,27 @@ export function parseCustomerListQuery(raw: Raw): CustomerListQuery {
 export interface CustomerSummaryRow {
   customer_id: string; name: string; service_status: string; rm_id: string; team_id: string; assignment_version: number;
   provisional: boolean; assigned_from: Date; risk_id: string | null; risk_category: string | null; risk_version: number | null;
-  risk_expires_at: Date | null; aum_value: string | null; aum_as_of: Date | null; aum_provenance: string | null;
-  cash_value: string | null; cash_as_of: Date | null;
+  risk_expires_at: Date | null; aum_value: string | null; aum_as_of: string | null;
+  cash_value: string | null;
   drift_count: number; pending_count: number;
 }
 
 export function customerSummary(row: CustomerSummaryRow, now: Date) {
   const iso = (value: Date) => new Date(value).toISOString();
   return {
-    customerId: row.customer_id, name: row.name, serviceStatus: row.service_status,
+    customerId: row.customer_id, fullName: row.name, serviceStatus: row.service_status,
     currentAssignment: { rmId: row.rm_id, teamId: row.team_id, version: row.assignment_version,
       provisional: row.provisional, validFrom: iso(row.assigned_from) },
-    currentRisk: row.risk_id ? { id: row.risk_id, category: row.risk_category, version: row.risk_version,
+    currentRisk: row.risk_id ? { riskProfileId: row.risk_id, category: row.risk_category, version: row.risk_version,
       expiresAt: iso(row.risk_expires_at!), valid: now.getTime() < new Date(row.risk_expires_at!).getTime() } : null,
     // Missing valuation is unknown, never zero; value is a decimal string produced by SQL numeric math.
     aum: row.aum_value === null
       ? { value: null, asOf: null, provenance: null, dataStatus: 'UNAVAILABLE' }
-      : { value: row.aum_value, asOf: iso(row.aum_as_of!), provenance: row.aum_provenance, dataStatus: 'AVAILABLE' },
-    // P2 investment account balance; no account is unknown, a zero balance is a known value.
+      : { value: row.aum_value, asOf: `${row.aum_as_of}T00:00:00.000Z`, provenance: 'P3_PORTFOLIO_SNAPSHOT', dataStatus: 'AVAILABLE' },
+    // P2 available balance (balance minus held amount), read live; no account is unknown, a zero balance is a known value.
     cash: row.cash_value === null
       ? { value: null, asOf: null, provenance: null, dataStatus: 'UNAVAILABLE' }
-      : { value: row.cash_value, asOf: iso(row.cash_as_of!), provenance: 'P2_INVESTMENT_ACCOUNT', dataStatus: 'AVAILABLE' },
+      : { value: row.cash_value, asOf: now.toISOString(), provenance: 'P2_INVESTMENT_ACCOUNT', dataStatus: 'AVAILABLE' },
     driftAlerts: { count: row.drift_count, asOf: now.toISOString(), provenance: 'OUTBOX_RISK_HOLDINGS_CHECK', dataStatus: 'AVAILABLE' },
     pendingProposals: { count: row.pending_count, asOf: now.toISOString(), provenance: 'PROPOSALS_TABLE', dataStatus: 'AVAILABLE' },
   };

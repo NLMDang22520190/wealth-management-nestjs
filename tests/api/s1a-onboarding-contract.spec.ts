@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { actors } from '../helpers/actors.js';
 import { eligibleCustomer, expectApiError, startApiFixture, TEST_NOW } from '../helpers/application.js';
+import { rid } from '../helpers/wms.js';
 
 type Fixture = Awaited<ReturnType<typeof startApiFixture>>;
 const HOUR = 3_600_000;
@@ -22,7 +23,7 @@ describe('S1a AC03/AC08 complete onboarding contract', () => {
   async function create(key = 's1a-request', cifRef: string = actors.customer.cifId, requestId?: string) {
     return api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key,
       headers: { 'user-agent': DEVICE, ...(requestId ? { 'x-request-id': requestId } : {}) },
-      body: { cifRef, selectedAccountId: eligibleCustomer(cifRef).accounts[0].id } });
+      body: { cifRef, selectedCasaNo: eligibleCustomer(cifRef).accounts[0].id } });
   }
   async function pending(key = 's1a-request', cifRef: string = actors.customer.cifId) {
     const response = await create(key, cifRef);
@@ -49,11 +50,11 @@ describe('S1a AC03/AC08 complete onboarding contract', () => {
     });
   }
   async function count(table: string) {
-    const [row] = await api.dataSource.query(`SELECT count(*)::integer AS count FROM ${table}`);
+    const [row] = await api.dataSource.query(`SELECT count(*)::integer AS count FROM wms.${table}`);
     return row.count as number;
   }
   async function noRegistration() {
-    for (const table of ['wealth_services', 'investment_accounts', 'service_consents', 'rm_assignment_history']) {
+    for (const table of ['wealth_services', 'investment_accounts', 'service_consents', 'rm_assignments']) {
       expect(await count(table), `${table} must remain empty`).toBe(0);
     }
   }
@@ -63,7 +64,7 @@ describe('S1a AC03/AC08 complete onboarding contract', () => {
       const gate = barrier();
       let id: string | undefined;
       let delivery: Awaited<ReturnType<typeof otp>> | undefined;
-      if (operation !== 'create') id = (await pending()).id;
+      if (operation !== 'create') id = (await pending()).requestId;
       if (operation === 'confirm') delivery = await otp(id!);
       if (operation === 'OTP delivery') api.state.otpDelivery = async () => { await gate.wait(); };
       else api.state.coreLookup = async () => { await gate.wait(); return eligibleCustomer(); };
@@ -90,18 +91,18 @@ describe('S1a AC03/AC08 complete onboarding contract', () => {
   test('AC03 consent that reaches exact72h during Core lookup is refused using fresh return time', async () => {
     const request = await pending();
     api.state.now = new Date(new Date(request.expiresAt).getTime() - 1_000);
-    const delivery = await otp(request.id);
+    const delivery = await otp(request.requestId);
     const gate = barrier();
     api.state.coreLookup = async () => { await gate.wait(); return eligibleCustomer(); };
-    const response = confirm(request.id, delivery);
+    const response = confirm(request.requestId, delivery);
     try {
       await gate.entered;
       api.state.now = new Date(request.expiresAt);
     } finally { gate.release(); }
     expectApiError(await response, 410, 'ONBOARDING_EXPIRED');
     await noRegistration();
-    expect((await api.dataSource.query("SELECT * FROM audit_events WHERE action='SERVICE_REGISTERED' AND outcome='SUCCESS'")).length).toBe(0);
-    expect((await api.dataSource.query("SELECT * FROM outbox_events WHERE event_type='ServiceRegistered'")).length).toBe(0);
+    expect((await api.dataSource.query("SELECT * FROM wms.audit_logs WHERE action='SERVICE_REGISTERED' AND outcome='SUCCESS'")).length).toBe(0);
+    expect((await api.dataSource.query("SELECT * FROM wms.outbox_events WHERE event_type='ServiceRegistered'")).length).toBe(0);
   });
 
   test('AC03 identity reference resolves to canonical CIF with DOB and active status and registers the canonical customer', async () => {
@@ -113,51 +114,51 @@ describe('S1a AC03/AC08 complete onboarding contract', () => {
     });
     expect(lookup.status).toBe(200);
     expect(references).toContain(identityRef);
-    expect(lookup.body).toMatchObject({ cifRef: actors.customer.cifId, name: eligibleCustomer().name,
+    expect(lookup.body).toMatchObject({ cifRef: actors.customer.cifId, fullName: eligibleCustomer().name,
       dateOfBirth: '2008-01-15', active: true, eligible: true });
     const created = await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key: 'identity-request',
-      body: { cifRef: identityRef, selectedAccountId: lookup.body.accounts[0].id } });
+      body: { cifRef: identityRef, selectedCasaNo: lookup.body.accounts[0].casaNo } });
     expect(created.status).toBe(201);
-    const detail = await api.request(`/me/onboarding-requests/${created.body.id}`, { token: await api.tokenFor(actors.customer.actorId) });
+    const detail = await api.request(`/me/onboarding-requests/${created.body.requestId}`, { token: await api.tokenFor(actors.customer.actorId) });
     expect(detail.status).toBe(200);
-    const registered = await confirm(created.body.id, await otp(created.body.id));
+    const registered = await confirm(created.body.requestId, await otp(created.body.requestId));
     expect(registered.status).toBe(200);
-    const [customer] = await api.dataSource.query('SELECT * FROM customers WHERE id=$1', [registered.body.customerId]);
+    const [customer] = await api.dataSource.query('SELECT * FROM wms.customers WHERE customer_id=$1', [registered.body.customerId]);
     expect(customer.cif_id).toBe(actors.customer.cifId);
     expect(JSON.stringify([detail.body, registered.body])).not.toContain(identityRef);
   });
 
   describe('safe audit records share the business commit', () => {
     test('AC08 request, OTP issue and consent persist actor/time/correlation/device and filtered before-after without authentication secrets', async () => {
-      const created = await create('audited-request', actors.customer.cifId, 's1a-audit-request');
+      const created = await create('audited-request', actors.customer.cifId, rid(11));
       expect(created.status).toBe(201);
-      const issued = await issue(created.body.id, 's1a-audit-otp');
+      const issued = await issue(created.body.requestId, rid(12));
       expect(issued.status).toBe(201);
       const delivery = api.deliveries.find(item => item.challengeId === issued.body.challengeId)!;
       const customerToken = await api.tokenFor(actors.customer.actorId);
-      const accepted = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, {
-        method: 'POST', token: customerToken, key: 'audited-consent', headers: { 'user-agent': DEVICE, 'x-request-id': 's1a-audit-consent' },
+      const accepted = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, {
+        method: 'POST', token: customerToken, key: 'audited-consent', headers: { 'user-agent': DEVICE, 'x-request-id': rid(13) },
         body: { challengeId: delivery.challengeId, code: delivery.code },
       });
       expect(accepted.status).toBe(200);
       const expected = [
-        { action: 'ONBOARDING_REQUESTED', actor: actors.rm.actorId, requestId: 's1a-audit-request', before: null,
-          after: { id: created.body.id, status: 'PENDING_CONSENT', termsVersion: created.body.termsVersion } },
-        { action: 'OTP_ISSUED', actor: actors.customer.actorId, requestId: 's1a-audit-otp', before: null,
-          after: { challengeId: issued.body.challengeId, purpose: 'SERVICE_CONSENT', operationId: created.body.id } },
-        { action: 'SERVICE_REGISTERED', actor: actors.customer.actorId, requestId: 's1a-audit-consent',
-          before: { requestId: created.body.id, status: 'PENDING_CONSENT' },
-          after: { requestId: created.body.id, status: 'PENDING_RISK_ASSESSMENT', serviceId: accepted.body.serviceId } },
+        { action: 'ONBOARDING_REQUESTED', actor: actors.rm.actorId, role: 'RM', requestId: rid(11), before: null,
+          after: { id: created.body.requestId, status: 'PENDING_CONSENT', termsVersion: created.body.termsVersion } },
+        { action: 'OTP_ISSUED', actor: actors.customer.actorId, role: 'CUSTOMER', requestId: rid(12), before: null,
+          after: { challengeId: issued.body.challengeId, purpose: 'SERVICE_CONSENT', operationId: created.body.requestId } },
+        { action: 'SERVICE_REGISTERED', actor: actors.customer.actorId, role: 'CUSTOMER', requestId: rid(13),
+          before: { requestId: created.body.requestId, status: 'PENDING_CONSENT' },
+          after: { requestId: created.body.requestId, status: 'PENDING_RISK_ASSESSMENT', serviceId: accepted.body.serviceId } },
       ];
       for (const event of expected) {
-        const rows = await api.dataSource.query('SELECT * FROM audit_events WHERE action=$1 AND outcome=$2', [event.action, 'SUCCESS']);
+        const rows = await api.dataSource.query('SELECT * FROM wms.audit_logs WHERE action=$1 AND outcome=$2', [event.action, 'SUCCESS']);
         expect(rows, `${event.action} must be audited exactly once`).toHaveLength(1);
         const row = rows[0];
         expect(row.actor_id).toBe(event.actor);
         expect(new Date(row.created_at).toISOString()).toBe(TEST_NOW);
-        expect(row.metadata).toMatchObject({ requestId: event.requestId, ip: '127.0.0.1', device: DEVICE });
-        expect(row.metadata.before).toEqual(event.before === null ? null : expect.objectContaining(event.before));
-        expect(row.metadata.after).toEqual(expect.objectContaining(event.after));
+        expect(row).toMatchObject({ request_id: event.requestId, ip_address: '127.0.0.1', user_agent: DEVICE, actor_role: event.role });
+        expect(row.old_value).toEqual(event.before === null ? null : expect.objectContaining(event.before));
+        expect(row.new_value).toEqual(expect.objectContaining(event.after));
         const serialized = JSON.stringify(row);
         for (const forbidden of [delivery.code, customerToken, eligibleCustomer().name, eligibleCustomer().dateOfBirth]) {
           expect(serialized, `${event.action} must filter sensitive boundary data`).not.toContain(forbidden);
@@ -173,15 +174,15 @@ describe('S1a AC03/AC08 complete onboarding contract', () => {
       const tables = operation === 'request' ? ['onboarding_requests', 'rm_capacity_reservations'] : ['otp_challenges'];
       const before = await Promise.all(tables.map(table => count(table)));
       const deliveriesBefore = api.deliveries.length;
-      await api.dataSource.query('ALTER TABLE audit_events ADD CONSTRAINT s1a_audit_failure CHECK (false) NOT VALID');
+      await api.dataSource.query('ALTER TABLE wms.audit_logs ADD CONSTRAINT s1a_audit_failure CHECK (false) NOT VALID');
       try {
-        const response = operation === 'request' ? await create('audit-rollback') : await issue(request!.id);
+        const response = operation === 'request' ? await create('audit-rollback') : await issue(request!.requestId);
         expectApiError(response, 500, 'INTERNAL_ERROR');
         for (let index = 0; index < tables.length; index++) expect(await count(tables[index]), `${tables[index]} atomic rollback`).toBe(before[index]);
         expect(api.deliveries.length).toBe(deliveriesBefore);
         await noRegistration();
-      } finally { await api.dataSource.query('ALTER TABLE audit_events DROP CONSTRAINT s1a_audit_failure'); }
-      const retried = operation === 'request' ? await create('audit-rollback') : await issue(request!.id);
+      } finally { await api.dataSource.query('ALTER TABLE wms.audit_logs DROP CONSTRAINT s1a_audit_failure'); }
+      const retried = operation === 'request' ? await create('audit-rollback') : await issue(request!.requestId);
       expect(retried.status).toBe(201);
       for (let index = 0; index < tables.length; index++) expect(await count(tables[index]), `${tables[index]} retry writes once`).toBe(before[index] + 1);
     });
@@ -193,19 +194,19 @@ describe('S1a AC03/AC08 complete onboarding contract', () => {
     // Obtain a fresh trusted token explicitly on each clock step.
     const current = await api.request('/me/onboarding-requests', { token: await api.tokenFor(actors.customer.actorId) });
     expect(current.status).toBe(200);
-    expect(current.body.items).toContainEqual(expect.objectContaining({ id: own.id, status: 'PENDING_CONSENT', expiresAt: own.expiresAt, termsVersion: own.termsVersion }));
-    expect(JSON.stringify(current.body)).not.toContain(other.id);
+    expect(current.body.items).toContainEqual(expect.objectContaining({ requestId: own.requestId, status: 'PENDING_CONSENT', expiresAt: own.expiresAt, termsVersion: own.termsVersion }));
+    expect(JSON.stringify(current.body)).not.toContain(other.requestId);
     expect(JSON.stringify(current.body)).not.toContain(actors.otherCustomer.cifId);
     const foreign = await api.request('/me/onboarding-requests', { token: await api.tokenFor(actors.otherCustomer.actorId) });
     expect(foreign.status).toBe(200);
-    expect(foreign.body.items).toContainEqual(expect.objectContaining({ id: other.id }));
-    expect(JSON.stringify(foreign.body)).not.toContain(own.id);
+    expect(foreign.body.items).toContainEqual(expect.objectContaining({ requestId: other.requestId }));
+    expect(JSON.stringify(foreign.body)).not.toContain(own.requestId);
     expectApiError(await api.request('/me/onboarding-requests', { token: await api.tokenFor() }), 403, 'FORBIDDEN');
     expectApiError(await api.request('/me/onboarding-requests', { token: await api.tokenFor(actors.leader.actorId) }), 403, 'FORBIDDEN');
     api.state.now = new Date(own.expiresAt);
     const expired = await api.request('/me/onboarding-requests', { token: await api.tokenFor(actors.customer.actorId) });
     expect(expired.status).toBe(200);
-    expect(expired.body.items).toContainEqual(expect.objectContaining({ id: own.id, status: 'EXPIRED', expiresAt: own.expiresAt }));
-    expect(JSON.stringify(expired.body)).not.toContain(other.id);
+    expect(expired.body.items).toContainEqual(expect.objectContaining({ requestId: own.requestId, status: 'EXPIRED', expiresAt: own.expiresAt }));
+    expect(JSON.stringify(expired.body)).not.toContain(other.requestId);
   });
 });

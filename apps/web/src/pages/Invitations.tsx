@@ -5,7 +5,7 @@ import { AlertAction, Choice, Empty, ErrorAlert, Fact, Facts, Loading, OtpCodeIn
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-interface Invitation { id: string; status: string; expiresAt: string; termsVersion: string }
+interface Invitation { requestId: string; status: string; expiresAt: string; termsVersion: string }
 interface Detail extends Invitation { terms: string }
 interface Challenge { challengeId: string; expiresAt: string }
 
@@ -25,16 +25,16 @@ function InvitationCard({ item }: { item: Invitation }) {
     setBusy(true); setFailure(null);
     try { await work(); } catch (error) { setFailure(error); } finally { setBusy(false); }
   };
-  const readTerms = () => guarded(async () => setDetail(await api<Detail>(`/me/onboarding-requests/${item.id}`)));
+  const readTerms = () => guarded(async () => setDetail(await api<Detail>(`/me/onboarding-requests/${item.requestId}`)));
   const sendOtp = () => guarded(async () => {
     setCode('');
-    setChallenge(await api<Challenge>('/otp/challenges', { body: { purpose: 'SERVICE_CONSENT', operationId: item.id } }));
+    setChallenge(await api<Challenge>('/otp/challenges', { body: { purpose: 'SERVICE_CONSENT', operationId: item.requestId } }));
   });
   const confirm = () => guarded(async () => {
     if (!challenge) return;
     if (!/^\d{6}$/.test(code)) throw new Error('otp-format');
-    const name = `consent-${item.id}`;
-    await api('/me/onboarding-requests/' + item.id + '/confirm', { key: intentKey(name, `${challenge.challengeId}:${code}`),
+    const name = `consent-${item.requestId}`;
+    await api('/me/onboarding-requests/' + item.requestId + '/confirm', { key: intentKey(name, `${challenge.challengeId}:${code}`),
       body: { challengeId: challenge.challengeId, code } });
     intentDone(name);
     setDone(true);
@@ -62,8 +62,8 @@ function InvitationCard({ item }: { item: Invitation }) {
       {pending && !detail ? <Button type="button" onClick={() => void readTerms()} disabled={busy}>Xem điều khoản</Button> : null}
       {pending && detail ? (
         <>
-          <section className="my-3 max-h-[280px] overflow-auto rounded-lg border bg-muted px-4 py-3.5" aria-labelledby={`terms-${item.id}`}>
-            <h3 id={`terms-${item.id}`} className="mt-0 text-[0.95rem] font-semibold">Điều khoản dịch vụ</h3>
+          <section className="my-3 max-h-[280px] overflow-auto rounded-lg border bg-muted px-4 py-3.5" aria-labelledby={`terms-${item.requestId}`}>
+            <h3 id={`terms-${item.requestId}`} className="mt-0 text-[0.95rem] font-semibold">Điều khoản dịch vụ</h3>
             <p className="m-0 whitespace-pre-wrap">{detail.terms}</p>
           </section>
           <Choice>
@@ -98,7 +98,7 @@ export function Invitations() {
       {list.loading && !list.data ? <Loading skeleton /> : null}
       {list.error ? <ErrorAlert>{describe(list.error)} <AlertAction onClick={list.reload}>Thử lại</AlertAction></ErrorAlert> : null}
       {list.data && list.data.items.length === 0 ? <Empty>Bạn chưa có lời mời nào. RM sẽ gửi lời mời khi đăng ký dịch vụ cho bạn.</Empty> : null}
-      {list.data?.items.map(item => <InvitationCard key={item.id} item={item} />)}
+      {list.data?.items.map(item => <InvitationCard key={item.requestId} item={item} />)}
     </>
   );
 }

@@ -26,7 +26,7 @@ class RegistrationResult {
   @ApiProperty({ enum: ['PENDING_RISK_ASSESSMENT'] }) status!: string;
 }
 class PendingRequestResult {
-  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty({ format: 'uuid' }) requestId!: string;
   @ApiProperty({ enum: ['PENDING_CONSENT'] }) status!: string;
   @ApiProperty({ format: 'date-time' }) expiresAt!: string;
   @ApiProperty() termsVersion!: string;
@@ -61,7 +61,7 @@ class OnboardingController {
   @Roles('RM') @Post('onboarding/customer-lookup') @HttpCode(200)
   @ApiOperation({ summary: 'Resolve eligibility and active own VND accounts from Core banking' })
   @ApiResponse({ status: 429, description: 'RATE_LIMITED: 30 lookups per actor per minute (demo default)' })
-  @ApiResponse({ status: 200, description: 'Canonical cifRef, name, dateOfBirth, active, eligible and eligible accounts (external string account IDs)' }) @errors()
+  @ApiResponse({ status: 200, description: 'Canonical cifRef, fullName, dateOfBirth, active, eligible and eligible accounts ({ casaNo, ownerCifId, currency, active })' }) @errors()
   lookup(@Req() request: ApiRequest, @Body() body: CustomerLookupBody) { return this.onboarding.lookup(request.actor!, body.cifRef); }
 
   @Roles('RM') @Post('onboarding/requests')

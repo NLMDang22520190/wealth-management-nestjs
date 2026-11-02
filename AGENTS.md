@@ -13,7 +13,10 @@ WealthFlow – a university project for a Wealth Management System (WMS). This r
   - `platform/` (http, validation, transactions, audit, OTP), `auth/` (mock IAM), `business/` (route wiring), `database/migrations/`
 - `apps/web` – React 19 + Vite + shadcn/ui (`radix-nova` style, Radix, Tailwind CSS v4, lucide-react). Hash routing, Vietnamese UI.
 - `tests/api` – Vitest integration tests on a real PostgreSQL. `tests/e2e` – Playwright on Microsoft Edge, projects `desktop` (1280px) and `mobile` (375px).
-- `scripts/seed-demo.mjs` – runs migrations and seeds synthetic demo actors. `infra/compose.yml` – demo PostgreSQL 15.
+- `scripts/seed-demo.mjs` – runs migrations, then loads the team demo data once (`scripts/team-seed/wms_seed.sql`, copied byte for byte from the team; names and numbers are team-invented demo data; only change: its `demo-risk-v1-vi` questionnaire row is inserted as RETIRED because migration 008 already activates `demo-risk-v2-vi`). A second run is a no-op (skipped when `wms.staff_users` has rows). `infra/compose.yml` – demo PostgreSQL 15.
+- Database: schema **`wms`** (the team DDL in `apps/api/src/database/team/wms_schema.sql`, applied by migration 008, which replaces the old `public` P1 tables; `public.migrations` stays in `public`). A local demo database from before R9 is rebuilt by 008 (its data is not carried over). `.gitattributes` marks the vendored `*.sql` as `-text` so their sha256 pins (checked by `tests/api/s21-team-seed.spec.ts` and the migration tests) survive Windows checkouts.
+- Demo roles (login id = `employee_code` or CIF; the web picker lists them): **NV0001** Trưởng nhóm, **NV0002** and **NV0003** RM, customers **CIF100001–CIF100004**. NV0004/NV0005 (back office) exist in the seed but cannot log in to P1. The Core mock also knows CIF100005 (invitation only), **CIF100006** (eligible, for new invitations), **CIF100007** (blacklisted), **CIF100008** (credit group 3) and **CIF100009** (under 18).
+- JSON naming (R9): API field names follow the team column in camelCase (`requestId`, `draftId`, `riskProfileId`, `notificationId`, `fullName`, `rmFullName`, `selectedCasaNo`, `accounts[].casaNo`); the full map is `docs/part1/05-api-json-names.vi.md`. Rename only: paths, statuses and error codes did not change.
 
 ## Setup and commands
 
@@ -48,8 +51,8 @@ Before saying a change is done: `npm run lint` (0 warnings), `npm run typecheck`
 - **Idempotency:** mutating endpoints that accept `Idempotency-Key` bind it to actor, purpose, resource and payload; replays return the stored result.
 - **Audit and logs** store metadata and filtered before/after only — never tokens, OTP codes or secrets. Failed OTP and denied access are audited (FAILURE / DENIED).
 - **Mock auth, simulated Core and the demo OTP inbox** run only with `NODE_ENV` development/test and `MOCK_AUTH_ENABLED=true`; production config with mocks must keep failing at startup.
-- **Business rules in code** (keep docs in sync when you change them): risk score 10–50 → Thận trọng (10–20) / Cân bằng (21–35) / Tăng trưởng (36–50); profile valid 12 calendar months (UTC); RM capacity 80; OTP TTL `OTP_TTL_SECONDS` (default 120); RM transfer requires an ACTIVE service and a valid risk profile (`RISK_PROFILE_REQUIRED`); survey reminders at most once per customer per 24 h.
-- **Questionnaire changes** go in as a new questionnaire version (migration); confirmed profiles reference their version and stay immutable.
+- **Business rules in code** (keep docs in sync when you change them): risk score 10–50 → Thận trọng (10–20) / Cân bằng (21–35) / Tăng trưởng (36–50); profile valid 12 calendar months (UTC); RM capacity 80; OTP TTL `OTP_TTL_SECONDS` (default 120, allowed 1–120 because the team `chk_otp_ttl` caps it at 120 s); RM transfer requires an ACTIVE service and a valid risk profile (`RISK_PROFILE_REQUIRED`); survey reminders at most once per customer per 24 h.
+- **Questionnaire changes** go in as a new questionnaire version (migration); only one version may be ACTIVE (`ux_questionnaire_active`); confirmed profiles reference their version and stay immutable.
 - **No new dependencies** without the maintainer's approval. Do not run `shadcn add/init/apply` without approval; reuse `apps/web/src/components/ui/*`.
 
 ## Web UI conventions
@@ -62,7 +65,7 @@ Before saying a change is done: `npm run lint` (0 warnings), `npm run typecheck`
 
 ### E2E label contract (do not change without updating tests first)
 
-Tests select by these exact Vietnamese strings/roles: heading `WealthFlow`; badge `Môi trường demo`; select `Vai trò demo`; button `Chuyển vai`; text `Đang dùng vai: <actorId>`; nav `Điều hướng chính`; OTP group `Mã OTP` with boxes `Chữ số 1`…`Chữ số 6` (maxLength 1); dialog `Xác nhận chuyển RM`; drift text `Kiểm tra danh mục chờ: N` (screen-reader text in the list); `Hồ sơ rủi ro: Cân bằng`; `Đề xuất chờ duyệt: 1`; region `Tài sản quản lý (AUM)`; `Điểm: N`; regions `Khảo sát rủi ro của khách hàng`, `Thông báo`, `Kết quả dự kiến`. The customer list has 7 column headers on desktop. Search `tests/e2e` before renaming any visible text.
+Tests select by these exact Vietnamese strings/roles: heading `WealthFlow`; badge `Môi trường demo`; select `Vai trò demo`; button `Chuyển vai`; text `Đang dùng vai: <code>` (`NV0001`, `NV0002`, `NV0003`, `CIF100001`…`CIF100004`); role cards `Dùng vai <code>`; nav `Điều hướng chính`; OTP group `Mã OTP` with boxes `Chữ số 1`…`Chữ số 6` (maxLength 1); dialog `Xác nhận chuyển RM`; drift text `Kiểm tra danh mục chờ: N` (screen-reader text in the list); `Hồ sơ rủi ro: Cân bằng`; `Đề xuất chờ duyệt: 1`; region `Tài sản quản lý (AUM)`; `Điểm: N`; regions `Khảo sát rủi ro của khách hàng`, `Thông báo`, `Kết quả dự kiến`. The customer list has 7 column headers on desktop. Search `tests/e2e` before renaming any visible text.
 
 ## Git and publishing
 

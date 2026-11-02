@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 
 interface Aum { value: string | null; asOf: string | null; provenance: string | null; dataStatus: string }
 interface CustomerRow {
-  customerId: string; name: string; serviceStatus: string;
+  customerId: string; fullName: string; serviceStatus: string;
   currentRisk: { category: string; expiresAt: string; valid: boolean } | null;
   aum: Aum;
   cash: Aum;
@@ -113,7 +113,7 @@ export function CustomerList() {
                   {list.data.items.map(row => (
                     <TableRow key={row.customerId} role="row" className="max-md:block max-md:px-4 max-md:py-3.5">
                       <TableHead scope="row" role="rowheader" className={cn(cell, 'h-auto text-foreground max-md:mb-1 max-md:text-[1.02rem]')}>
-                        <a href={`#/rm/customers/${row.customerId}`} className="font-semibold text-foreground no-underline hover:text-primary hover:underline">{row.name}</a>
+                        <a href={`#/rm/customers/${row.customerId}`} className="font-semibold text-foreground no-underline hover:text-primary hover:underline">{row.fullName}</a>
                       </TableHead>
                       <TableCell role="cell" className={cn(cell, labelled)} data-label="Rủi ro">{row.currentRisk ? <RiskChip category={row.currentRisk.category} label={riskLabel(row.currentRisk.category)} /> : <Muted>Chưa có</Muted>}</TableCell>
                       <TableCell role="cell" className={cn(cell, labelled)} data-label="Hết hạn hồ sơ">{row.currentRisk ? <>{formatDate(row.currentRisk.expiresAt)}{row.currentRisk.valid ? '' : ' (quá hạn)'}</> : <Muted>Chưa có</Muted>}</TableCell>
@@ -160,7 +160,7 @@ export function CustomerDetail({ customerId }: { customerId: string }) {
       ) : null}
       {customer ? (
         <>
-          <PageTitle title={customer.name} actions={<>
+          <PageTitle title={customer.fullName} actions={<>
             {updatedAt ? <span className="text-[0.85rem] text-muted-foreground tabular-nums">Cập nhật lúc {formatTime(updatedAt)}</span> : null}
             {refresh}
           </>} />

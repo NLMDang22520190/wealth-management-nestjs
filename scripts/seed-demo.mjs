@@ -1,18 +1,34 @@
+import { readFile } from 'node:fs/promises';
+import pg from 'pg';
 import { Logger } from '@nestjs/common';
 import { createApplication } from '../apps/api/dist/application.js';
 import { ConfigurationError } from '../apps/api/dist/platform/configuration.js';
 
 const logger = new Logger('DemoSeed');
-// Public synthetic demo registry. Preserve all existing actor and business rows on repeat runs.
-const teamId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-const actors = [
-  ['rm-alpha', 'mock-rm-alpha', 'RM', null, '11111111-1111-4111-8111-111111111111', teamId],
-  ['rm-beta', 'mock-rm-beta', 'RM', null, '22222222-2222-4222-8222-222222222222', teamId],
-  ['leader-alpha', 'mock-leader-alpha', 'LEADER', null, null, teamId],
-  ['customer-alpha', 'mock-customer-alpha', 'CUSTOMER', '00000101', null, null],
-  ['customer-beta', 'mock-customer-beta', 'CUSTOMER', '00000102', null, null],
-];
 
+// R9: the team schema `wms` is built by the migrations that createApplication runs. This command then loads the vendored
+// team demo data (staff NV0001.., customers CIF100001..) once: it is skipped when wms.staff_users already has rows.
+const seedFile = new URL('./team-seed/wms_seed.sql', import.meta.url);
+// The only transformation of the team file (D-R9-13): migration 008 already made demo-risk-v2-vi the ACTIVE questionnaire
+// (one ACTIVE row allowed), so the team's demo-risk-v1-vi row is inserted as RETIRED.
+const activeV1 = "'::jsonb, 'ACTIVE', '2025-01-01 00:00+07');";
+const retiredV1 = "'::jsonb, 'RETIRED', '2025-01-01 00:00+07');";
+
+async function loadTeamSeed(databaseUrl) {
+  const client = new pg.Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    const { rows } = await client.query('SELECT count(*)::int AS n FROM wms.staff_users');
+    if (rows[0].n > 0) return false;
+    const raw = await readFile(seedFile, 'utf8');
+    if (raw.split(activeV1).length !== 2) throw new Error('Unexpected team seed content');
+    // The file carries its own BEGIN/COMMIT and `SET search_path`; this connection is private and closed right after.
+    await client.query(raw.replace(activeV1, retiredV1));
+    return true;
+  } finally {
+    await client.end();
+  }
+}
 async function seed() {
   const environment = process.env.NODE_ENV ?? 'development';
   const mockSetting = process.env.MOCK_AUTH_ENABLED ?? 'false';
@@ -23,13 +39,8 @@ async function seed() {
     jwtSecret: process.env.JWT_SECRET ?? '', clock: { now: () => new Date() }, logger,
   });
   try {
-    await dataSource.transaction(async manager => {
-      for (const actor of actors) {
-        await manager.query(`INSERT INTO mock_actors(actor_id,subject_id,role,cif_id,rm_id,team_id,active)
-          VALUES($1,$2,$3,$4,$5,$6,true) ON CONFLICT DO NOTHING`, actor);
-      }
-    });
-    logger.log('Synthetic demo actors seeded');
+    logger.log('Database migrated to the wms schema');
+    logger.log((await loadTeamSeed(process.env.DATABASE_URL ?? '')) ? 'Team demo data loaded' : 'Team demo data already present');
   } finally {
     // Ensure the standalone CLI releases the TypeORM pool even when Nest shutdown hooks
     // are unavailable during an initialization or transaction failure.

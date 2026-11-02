@@ -19,14 +19,14 @@ import { differentCode, goTo, openApp, otpBox, readDemoInbox, switchRole, typeOt
 const RING = 'rgb(255, 216, 119)';
 const desktopOnly = (info: { project: { name: string } }) => test.skip(info.project.name !== 'desktop', 'desktop-only check');
 
-async function createInvite(cif: string, rmActor = 'rm-alpha') {
+async function createInvite(cif: string, rmActor = 'NV0002') {
   const token = await tokenFor(rmActor);
   const lookup = await api('/onboarding/customer-lookup', { token, body: { cifRef: cif } });
   expect(lookup.status).toBe(200);
   const created = await api('/onboarding/requests', { token, key: `e2e-r8-invite-${cif}-${Math.random()}`,
-    body: { cifRef: cif, selectedAccountId: lookup.body.accounts[0].id } });
+    body: { cifRef: cif, selectedCasaNo: lookup.body.accounts[0].casaNo } });
   expect(created.status).toBe(201);
-  return created.body.id as string;
+  return created.body.requestId as string;
 }
 
 /** Focus is not on <body> and sits on a tabindex=-1 / status / alert element inside the result region. */
@@ -80,7 +80,7 @@ test.describe('UC10 R8 audit - accessibility', () => {
 
   test('A1 keyboard focus on a sidebar navigation link shows the #ffd877 ring', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     const link = page.getByRole('navigation', { name: 'Điều hướng chính' }).getByRole('link').first();
     await link.focus();
     await page.keyboard.press('Shift+Tab');
@@ -93,9 +93,9 @@ test.describe('UC10 R8 audit - accessibility', () => {
   });
 
   test('A2 survey preview result takes focus', async ({ page }) => {
-    await registerCustomer('00000101', 'customer-alpha');
+    await registerCustomer('CIF100001', 'CIF100001');
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await goTo(page, 'Khảo sát rủi ro');
     for (let q = 1; q <= 10; q++) {
       await expect(page.getByText(`Câu ${q}/10`, { exact: true })).toBeVisible();
@@ -107,9 +107,9 @@ test.describe('UC10 R8 audit - accessibility', () => {
   });
 
   test('A2 survey confirm success takes focus', async ({ page }) => {
-    await registerCustomer('00000101', 'customer-alpha');
+    await registerCustomer('CIF100001', 'CIF100001');
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await goTo(page, 'Khảo sát rủi ro');
     for (let q = 1; q <= 10; q++) {
       await expect(page.getByText(`Câu ${q}/10`, { exact: true })).toBeVisible();
@@ -127,9 +127,9 @@ test.describe('UC10 R8 audit - accessibility', () => {
   });
 
   test('A2 invitation consent success takes focus', async ({ page }) => {
-    await createInvite('00000101');
+    await createInvite('CIF100001');
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await goTo(page, 'Lời mời dịch vụ');
     await page.getByRole('button', { name: 'Xem điều khoản' }).click();
     await page.getByLabel('Tôi đã đọc và đồng ý với điều khoản').check();
@@ -143,11 +143,11 @@ test.describe('UC10 R8 audit - accessibility', () => {
 
   test('A2 onboarding invite success takes focus', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Đăng ký khách hàng');
-    await page.getByLabel('Mã CIF hoặc định danh').fill('00000101');
+    await page.getByLabel('Mã CIF hoặc định danh').fill('CIF100001');
     await page.getByRole('button', { name: 'Tra cứu' }).click();
-    await page.getByRole('radio', { name: /synthetic-vnd-account-101/ }).check();
+    await page.getByRole('radio', { name: /0011000123451/ }).check();
     await page.getByRole('button', { name: 'Tạo lời mời' }).click();
     await expect(page.getByText('Đã tạo lời mời')).toBeVisible();
     await expectFocusInResult(page.getByRole('region', { name: 'Lời mời đã gửi' }));
@@ -155,7 +155,7 @@ test.describe('UC10 R8 audit - accessibility', () => {
 
   test('A3 onboarding CIF lookup with an empty (or blank) CIF marks the field invalid, describes it and focuses it', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Đăng ký khách hàng');
     const cif = page.getByLabel('Mã CIF hoặc định danh');
     await page.getByRole('button', { name: 'Tra cứu' }).click();
@@ -167,10 +167,10 @@ test.describe('UC10 R8 audit - accessibility', () => {
   });
 
   test('A3 assignments transfer form: no target, then empty reason, each marks its field invalid and focuses it', async ({ page }) => {
-    const alphaId = (await registerCustomer('00000101', 'customer-alpha')).customerId;
-    await activateRisk('customer-alpha', 2);
+    const alphaId = (await registerCustomer('CIF100001', 'CIF100001')).customerId;
+    await activateRisk('CIF100001', 2);
     await openApp(page);
-    await switchRole(page, 'leader-alpha');
+    await switchRole(page, 'NV0001');
     await goTo(page, 'Phân công RM');
     await page.getByLabel('Chọn khách hàng').selectOption(alphaId);
     await page.getByRole('button', { name: 'Tải thông tin khách hàng' }).click();
@@ -184,9 +184,9 @@ test.describe('UC10 R8 audit - accessibility', () => {
   });
 
   test('A3 invitation OTP rejected by the server marks the first OTP box invalid, describes it and focuses it', async ({ page }) => {
-    await createInvite('00000101');
+    await createInvite('CIF100001');
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await goTo(page, 'Lời mời dịch vụ');
     await page.getByRole('button', { name: 'Xem điều khoản' }).click();
     await page.getByLabel('Tôi đã đọc và đồng ý với điều khoản').check();
@@ -199,11 +199,11 @@ test.describe('UC10 R8 audit - accessibility', () => {
   });
 
   test('B4 repeated Panel titles keep unique ids and every region label resolves to its own title', async ({ page }) => {
-    await createInvite('00000101');
-    await sql("UPDATE onboarding_requests SET status='EXPIRED' WHERE cif_id='00000101'");
-    await createInvite('00000101');
+    await createInvite('CIF100001');
+    await sql("UPDATE wms.onboarding_requests SET status='EXPIRED' WHERE cif_id='CIF100001'");
+    await createInvite('CIF100001');
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await goTo(page, 'Lời mời dịch vụ');
     const regions = page.getByRole('region', { name: /^Lời mời đăng ký dịch vụ/ });
     await expect(regions).toHaveCount(2);
@@ -230,16 +230,16 @@ test.describe('UC10 R8 audit - data display and robustness', () => {
   let betaId: string;
   test.beforeEach(async () => {
     await resetBusinessState();
-    alphaId = (await registerCustomer('00000101', 'customer-alpha')).customerId;
-    betaId = (await registerCustomer('00000102', 'customer-beta')).customerId;
-    await activateRisk('customer-alpha', 2);
-    await activateRisk('customer-beta', 4);
+    alphaId = (await registerCustomer('CIF100001', 'CIF100001')).customerId;
+    betaId = (await registerCustomer('CIF100002', 'CIF100002')).customerId;
+    await activateRisk('CIF100001', 2);
+    await activateRisk('CIF100002', 4);
     await addPendingProposal(alphaId);
   });
 
   async function openList(page: Page) {
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Khách phụ trách');
   }
   const row = (page: Page, name: string) => page.getByRole('row', { name: new RegExp(name) });
@@ -248,15 +248,15 @@ test.describe('UC10 R8 audit - data display and robustness', () => {
     await addHolding(alphaId, 'e2e-fund-a', '1730000000.00', '2026-01-15T04:00:00.000Z');
     await addHolding(betaId, 'e2e-fund-b', '25000000.00', '2026-01-15T04:00:00.000Z');
     await openList(page);
-    await expect(row(page, 'Khách hàng demo Alpha').locator('[data-label="AUM"]')).toContainText(/1,73 tỷ\s₫/);
-    await expect(row(page, 'Khách hàng demo Beta').locator('[data-label="AUM"]')).toContainText(/25 triệu\s₫/);
+    await expect(row(page, 'Nguyễn Thị Mai').locator('[data-label="AUM"]')).toContainText(/1,73 tỷ\s₫/);
+    await expect(row(page, 'Trần Quốc Huy').locator('[data-label="AUM"]')).toContainText(/25 triệu\s₫/);
   });
 
   test('B2 the drift cell is read once: sr-only label exposed once, visible badge / zero aria-hidden', async ({ page }) => {
     await addHolding(betaId, 'e2e-risk-5-fund', '500000.00', '2026-01-15T04:00:00.000Z', 5);
-    await activateRisk('customer-beta', 0, 1); // queues one drift check for beta
+    await activateRisk('CIF100002', 0, 1); // queues one drift check for beta
     await openList(page);
-    for (const [name, testId, count] of [['Khách hàng demo Beta', 'drift-badge', 1], ['Khách hàng demo Alpha', 'drift-zero', 0]] as const) {
+    for (const [name, testId, count] of [['Trần Quốc Huy', 'drift-badge', 1], ['Nguyễn Thị Mai', 'drift-zero', 0]] as const) {
       const current = row(page, name);
       await expect(current.getByTestId(testId)).toHaveText(String(count));
       const exposed = await current.evaluate(el => [...el.querySelectorAll('*')]
@@ -272,9 +272,9 @@ test.describe('UC10 R8 audit - data display and robustness', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.route('**/onboarding/customer-lookup', async route => { await new Promise(resolve => setTimeout(resolve, 4000)); await route.continue(); });
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Đăng ký khách hàng');
-    await page.getByLabel('Mã CIF hoặc định danh').fill('00000101');
+    await page.getByLabel('Mã CIF hoặc định danh').fill('CIF100001');
     await page.getByRole('button', { name: 'Tra cứu' }).click();
     await expect(page.getByText('Đang tra cứu…')).toBeVisible();
     await expect.poll(() => page.locator('.animate-spin').count(), { message: 'spinners visible while busy' }).toBeGreaterThanOrEqual(2);
@@ -286,14 +286,14 @@ test.describe('UC10 R8 audit - data display and robustness', () => {
 
   test('B3 button, badge and progress indicator never transition "all"', async ({ page }) => {
     await openList(page);
-    await expect(row(page, 'Khách hàng demo Alpha')).toBeVisible();
+    await expect(row(page, 'Nguyễn Thị Mai')).toBeVisible();
     const props = async (selector: string) => page.locator(selector).first().evaluate(el => getComputedStyle(el).transitionProperty);
     await expect(page.locator('[data-slot="button"]').first()).toBeVisible();
     const found: Record<string, string> = {
       button: await props('[data-slot="button"]'),
       badge: await props('[data-slot="badge"]'),
     };
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await goTo(page, 'Khảo sát rủi ro');
     await expect(page.getByRole('progressbar', { name: 'Tiến độ khảo sát' })).toBeVisible();
     found.progress = await props('[data-slot="progress-indicator"]');
@@ -304,7 +304,7 @@ test.describe('UC10 R8 audit - data display and robustness', () => {
 
   test('B6 typing in "Tìm theo tên" sends at most 2 name searches', async ({ page }) => {
     await openList(page);
-    await expect(row(page, 'Khách hàng demo Alpha')).toBeVisible();
+    await expect(row(page, 'Nguyễn Thị Mai')).toBeVisible();
     const searches: string[] = [];
     page.on('request', request => {
       const url = new URL(request.url());
@@ -319,7 +319,7 @@ test.describe('UC10 R8 audit - data display and robustness', () => {
   test('B5 token --gold-soft (#f0d39a) colours "Đang dùng vai" and the demo badge', async ({ page }, info) => {
     desktopOnly(info);
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     const result = await page.evaluate(() => {
       const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
       const ctx = canvas.getContext('2d', { willReadFrequently: true })!;

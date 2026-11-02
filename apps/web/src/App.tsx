@@ -20,18 +20,20 @@ interface Session { actorId: string; role: Role; serial: number }
 
 // Trusted demo actors seeded by `seed:demo`; the server remains the only authority on what each may do.
 const demoActors = [
-  { id: 'rm-alpha', label: 'rm-alpha (RM)' },
-  { id: 'rm-beta', label: 'rm-beta (RM)' },
-  { id: 'leader-alpha', label: 'leader-alpha (Trưởng nhóm)' },
-  { id: 'customer-alpha', label: 'customer-alpha (Khách hàng)' },
-  { id: 'customer-beta', label: 'customer-beta (Khách hàng)' },
+  { id: 'NV0001', label: 'NV0001 (Trưởng nhóm)' },
+  { id: 'NV0002', label: 'NV0002 (RM)' },
+  { id: 'NV0003', label: 'NV0003 (RM)' },
+  { id: 'CIF100001', label: 'CIF100001 (Khách hàng)' },
+  { id: 'CIF100002', label: 'CIF100002 (Khách hàng)' },
+  { id: 'CIF100003', label: 'CIF100003 (Khách hàng)' },
+  { id: 'CIF100004', label: 'CIF100004 (Khách hàng)' },
 ];
 
 // Starting points shown before a role is chosen; each card switches to that demo actor.
 const roleCards = [
-  { actorId: 'rm-alpha', title: 'Chuyên viên quan hệ khách hàng', body: 'Tra cứu khách trên hệ thống lõi, gửi lời mời dịch vụ và theo dõi danh mục khách đang phụ trách.' },
-  { actorId: 'customer-alpha', title: 'Khách hàng', body: 'Đồng ý điều khoản, làm khảo sát khẩu vị rủi ro và xác nhận hồ sơ bằng mã OTP.' },
-  { actorId: 'leader-alpha', title: 'Trưởng nhóm', body: 'Xem tải của từng chuyên viên và chuyển khách giữa các chuyên viên trong nhóm.' },
+  { actorId: 'NV0002', title: 'Chuyên viên quan hệ khách hàng', body: 'Tra cứu khách trên hệ thống lõi, gửi lời mời dịch vụ và theo dõi danh mục khách đang phụ trách.' },
+  { actorId: 'CIF100001', title: 'Khách hàng', body: 'Đồng ý điều khoản, làm khảo sát khẩu vị rủi ro và xác nhận hồ sơ bằng mã OTP.' },
+  { actorId: 'NV0001', title: 'Trưởng nhóm', body: 'Xem tải của từng chuyên viên và chuyển khách giữa các chuyên viên trong nhóm.' },
 ];
 
 const icons: Record<string, LucideIcon> = {
@@ -76,7 +78,7 @@ function RoleSwitch({ session, choice, onChoice, busy, failure, onSubmit }: {
   );
 }
 
-interface Notification { id: string; kind: string; message: string; createdAt: string; readAt: string | null }
+interface Notification { notificationId: string; kind: string; message: string; createdAt: string; readAt: string | null }
 
 /** Unread leader reminders for the signed-in customer, shown above every screen until dismissed. */
 function NotificationBanner({ onDismissed }: { onDismissed: () => void }) {
@@ -84,7 +86,7 @@ function NotificationBanner({ onDismissed }: { onDismissed: () => void }) {
   const [read, setRead] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
-  const unread = (list.data?.items ?? []).filter(item => !item.readAt && !read.includes(item.id));
+  const unread = (list.data?.items ?? []).filter(item => !item.readAt && !read.includes(item.notificationId));
   if (unread.length === 0) return null;
   const markRead = async (id: string) => {
     setBusy(id); setFailure(null);
@@ -95,14 +97,14 @@ function NotificationBanner({ onDismissed }: { onDismissed: () => void }) {
   return (
     <section role="region" aria-label="Thông báo" className="mb-5 grid gap-2">
       {unread.map(item => (
-        <div key={item.id} className="grid gap-2.5 rounded-xl border border-wait/30 bg-wait-soft px-4 py-3 text-wait">
+        <div key={item.notificationId} className="grid gap-2.5 rounded-xl border border-wait/30 bg-wait-soft px-4 py-3 text-wait">
           <div className="flex items-start gap-3">
             <Bell aria-hidden="true" className="mt-1 size-4 flex-none" />
             <p className="m-0 min-w-0 flex-1 font-semibold">Trưởng nhóm nhắc bạn hoàn thành khảo sát rủi ro (10 câu hỏi)</p>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-7">
             <a href="#/risk-survey" className="font-semibold underline underline-offset-4">Làm khảo sát</a>
-            <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void markRead(item.id)}>Đã xem</Button>
+            <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void markRead(item.notificationId)}>Đã xem</Button>
           </div>
         </div>
       ))}

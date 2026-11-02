@@ -1,6 +1,6 @@
 import { randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import type { EntityManager } from 'typeorm';
+import type { DataSource, EntityManager } from 'typeorm';
 import type { ApplicationOptions } from '../application.js';
 import { ApiError } from './http.js';
 import { RUNTIME_OPTIONS } from './runtime.module.js';
@@ -19,9 +19,11 @@ export class OtpService {
     const challengeId = randomUUID();
     const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
     const salt = randomBytes(32).toString('hex');
-    const expiresAt = new Date(this.options.clock.now().getTime() + (this.options.otpTtlSeconds ?? 120) * 1000).toISOString();
-    await manager.query(`INSERT INTO otp_challenges(id,actor_id,purpose,operation_id,payload_hash,code_hash,salt,expires_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [challengeId, actorId, purpose, operationId, payloadHash, hash(`${salt}:${code}`), salt, expiresAt]);
+    // Both timestamps come from the app clock: team chk_otp_ttl compares expires_at with issued_at.
+    const issuedAt = this.options.clock.now();
+    const expiresAt = new Date(issuedAt.getTime() + (this.options.otpTtlSeconds ?? 120) * 1000).toISOString();
+    await manager.query(`INSERT INTO wms.otp_challenges(challenge_id,actor_id,purpose,operation_id,payload_hash,code_hash,salt,issued_at,expires_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [challengeId, actorId, purpose, operationId, payloadHash, hash(`${salt}:${code}`), salt, issuedAt, expiresAt]);
     return { challengeId, actorId, purpose, operationId, code, expiresAt };
   }
 
@@ -39,7 +41,7 @@ export class OtpService {
 
   async consume(manager: EntityManager, challengeId: string, code: string, actorId: string,
     purpose: string, operationId: string, payloadHash: string): Promise<string> {
-    const [row] = await manager.query('SELECT * FROM otp_challenges WHERE id=$1 FOR UPDATE', [challengeId]);
+    const [row] = await manager.query('SELECT * FROM wms.otp_challenges WHERE challenge_id=$1 FOR UPDATE', [challengeId]);
     if (!row || row.actor_id !== actorId || row.purpose !== purpose || row.operation_id !== operationId || row.payload_hash !== payloadHash) {
       throw new ApiError(409, 'OTP_BINDING_MISMATCH', 'Challenge does not authorize this operation');
     }
@@ -50,7 +52,17 @@ export class OtpService {
       throw new ApiError(400, 'OTP_INVALID', 'Invalid verification code');
     }
     const receiptRef = randomUUID();
-    await manager.query('UPDATE otp_challenges SET consumed_at=$2,receipt_ref=$3 WHERE id=$1', [challengeId, now, receiptRef]);
+    await manager.query("UPDATE wms.otp_challenges SET status='VERIFIED',consumed_at=$2,receipt_ref=$3 WHERE challenge_id=$1", [challengeId, now, receiptRef]);
     return receiptRef;
+  }
+
+  /**
+   * A wrong code rolls the business transaction back, so the attempt is counted in its own short transaction (like the FAILURE audit row).
+   * The challenge stays ISSUED and usable until it expires; there is no attempt limit.
+   */
+  async recordFailedAttempt(database: DataSource, challengeId: string): Promise<void> {
+    await database.transaction(async manager => {
+      await manager.query('UPDATE wms.otp_challenges SET attempt_count=LEAST(attempt_count+1,32767) WHERE challenge_id=$1', [challengeId]);
+    });
   }
 }

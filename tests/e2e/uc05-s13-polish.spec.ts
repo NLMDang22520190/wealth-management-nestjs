@@ -13,11 +13,11 @@ test.describe('S13 UI polish (N1 N3 N4 N5 N8 N10)', () => {
       await route.fulfill({ status: 429, contentType: 'application/json', json: { code: 'RATE_LIMITED', message: 'Too many requests' } });
     });
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Đăng ký khách hàng');
-    await page.getByLabel('Mã CIF hoặc định danh').fill('00000101');
+    await page.getByLabel('Mã CIF hoặc định danh').fill('CIF100001');
     await page.getByRole('button', { name: 'Tra cứu' }).click();
-    await page.getByRole('radio', { name: /synthetic-vnd-account-101/ }).check();
+    await page.getByRole('radio', { name: /0011000123451/ }).check();
     await page.getByRole('button', { name: 'Tạo lời mời' }).click();
     const alert = page.getByRole('alert');
     await expect(alert).toContainText('Bạn đã tạo quá nhiều lời mời trong một phút. Vui lòng thử lại sau.');
@@ -29,16 +29,16 @@ test.describe('S13 UI polish (N1 N3 N4 N5 N8 N10)', () => {
       await route.fulfill({ status: 429, contentType: 'application/json', json: { code: 'RATE_LIMITED', message: 'Too many requests' } });
     });
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Đăng ký khách hàng');
-    await page.getByLabel('Mã CIF hoặc định danh').fill('00000101');
+    await page.getByLabel('Mã CIF hoặc định danh').fill('CIF100001');
     await page.getByRole('button', { name: 'Tra cứu' }).click();
     await expect(page.getByRole('alert')).toContainText('Bạn tra cứu quá nhiều lần. Hãy thử lại sau ít phút.');
   });
 
   test('N10 completed onboarding steps expose "đã xong" to screen readers, pending ones do not, current keeps aria-current', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Đăng ký khách hàng');
     const stepper = page.getByRole('list', { name: 'Tiến trình đăng ký' });
     const item = (label: string) => stepper.getByRole('listitem').filter({ hasText: label });
@@ -46,25 +46,25 @@ test.describe('S13 UI polish (N1 N3 N4 N5 N8 N10)', () => {
     await expect(item('Tra cứu')).toHaveAttribute('aria-current', 'step');
     expect(await spoken('Tra cứu'), 'no step is done yet').not.toContain('đã xong');
 
-    await page.getByLabel('Mã CIF hoặc định danh').fill('00000101');
+    await page.getByLabel('Mã CIF hoặc định danh').fill('CIF100001');
     await page.getByRole('button', { name: 'Tra cứu' }).click();
     await expect(item('Chọn tài khoản')).toHaveAttribute('aria-current', 'step');
     await expect.poll(() => spoken('Tra cứu')).toContain('đã xong');
     expect(await spoken('Chọn tài khoản'), 'the current step is not announced as done').not.toContain('đã xong');
     expect(await spoken('Gửi lời mời'), 'a pending step is not announced as done').not.toContain('đã xong');
 
-    await page.getByRole('radio', { name: /synthetic-vnd-account-101/ }).check();
+    await page.getByRole('radio', { name: /0011000123451/ }).check();
     await expect(item('Gửi lời mời')).toHaveAttribute('aria-current', 'step');
     await expect.poll(() => spoken('Chọn tài khoản')).toContain('đã xong');
     await expect(stepper.locator('[aria-current="step"]')).toHaveCount(1);
   });
 
   test('N5 a 6-digit one-time-code autofill into box "Chữ số 1" spreads across all six boxes', async ({ page }) => {
-    const created = await api('/onboarding/requests', { token: await tokenFor('rm-alpha'), key: 'e2e-s13-n5-setup',
-      body: { cifRef: '00000101', selectedAccountId: 'synthetic-vnd-account-101' } });
+    const created = await api('/onboarding/requests', { token: await tokenFor('NV0002'), key: 'e2e-s13-n5-setup',
+      body: { cifRef: 'CIF100001', selectedCasaNo: '0011000123451' } });
     expect(created.status).toBe(201);
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await goTo(page, 'Lời mời dịch vụ');
     await page.getByRole('button', { name: 'Xem điều khoản' }).click();
     await page.getByLabel('Tôi đã đọc và đồng ý với điều khoản').check();
@@ -84,13 +84,13 @@ test.describe('S13 UI polish (N1 N3 N4 N5 N8 N10)', () => {
   test.describe('leader screens', () => {
     let alphaId: string;
     test.beforeEach(async () => {
-      alphaId = (await registerCustomer('00000101', 'customer-alpha')).customerId;
-      await registerCustomer('00000102', 'customer-beta');
-      await activateRisk('customer-alpha', 2);
-      await activateRisk('customer-beta', 2);
+      alphaId = (await registerCustomer('CIF100001', 'CIF100001')).customerId;
+      await registerCustomer('CIF100002', 'CIF100002');
+      await activateRisk('CIF100001', 2);
+      await activateRisk('CIF100002', 2);
       await addPendingProposal(alphaId);
     });
-    const open = async (page: Page) => { await openApp(page); await switchRole(page, 'leader-alpha'); await goTo(page, 'Phân công RM'); };
+    const open = async (page: Page) => { await openApp(page); await switchRole(page, 'NV0001'); await goTo(page, 'Phân công RM'); };
 
     test('N3 changing the search so the selected customer drops out clears the selection and never loads that customer', async ({ page }) => {
       await open(page);
@@ -99,9 +99,9 @@ test.describe('S13 UI polish (N1 N3 N4 N5 N8 N10)', () => {
       await expect(picker).toHaveValue(alphaId);
       const loads: string[] = [];
       page.on('request', request => { if (request.method() === 'GET' && request.url().includes(`/customers/${alphaId}`)) loads.push(request.url()); });
-      await page.getByLabel('Tìm khách hàng').fill('demo Beta');
-      await expect(picker.getByRole('option', { name: /Khách hàng demo Beta/ })).toHaveCount(1);
-      await expect(picker.getByRole('option', { name: /Khách hàng demo Alpha/ })).toHaveCount(0);
+      await page.getByLabel('Tìm khách hàng').fill('Huy');
+      await expect(picker.getByRole('option', { name: /Trần Quốc Huy/ })).toHaveCount(1);
+      await expect(picker.getByRole('option', { name: /Nguyễn Thị Mai/ })).toHaveCount(0);
       await expect(picker, 'selection of the hidden customer is cleared (placeholder shown)').toHaveValue('');
       const load = page.getByRole('button', { name: 'Tải thông tin khách hàng' });
       if (await load.isEnabled()) await load.click();

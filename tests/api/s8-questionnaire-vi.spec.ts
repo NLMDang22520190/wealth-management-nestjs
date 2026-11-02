@@ -38,10 +38,10 @@ describe('S8 B4 Vietnamese risk questionnaire published as a new immutable versi
   }
   async function register() {
     const request = await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key: 's8-registration',
-      body: { cifRef: actors.customer.cifId, selectedAccountId: eligibleCustomer().accounts[0].id } });
+      body: { cifRef: actors.customer.cifId, selectedCasaNo: eligibleCustomer().accounts[0].id } });
     expect(request.status).toBe(201);
-    const otp = await challenge(request.body.id, 'SERVICE_CONSENT');
-    const response = await api.request(`/me/onboarding-requests/${request.body.id}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
+    const otp = await challenge(request.body.requestId, 'SERVICE_CONSENT');
+    const response = await api.request(`/me/onboarding-requests/${request.body.requestId}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
       key: 's8-consent', body: { challengeId: otp.challengeId, code: otp.code } });
     expect(response.status).toBe(200);
     return response.body as { customerId: string };
@@ -59,7 +59,7 @@ describe('S8 B4 Vietnamese risk questionnaire published as a new immutable versi
   async function insertV1Draft(customerId: string) {
     const id = randomUUID();
     const answers = v1Expected.map(question => ({ questionId: question.id, optionId: 'o3' }));
-    await api.dataSource.query(`INSERT INTO risk_assessment_drafts(id,customer_id,questionnaire_version,answers,score,category,max_product_risk,allocation,
+    await api.dataSource.query(`INSERT INTO wms.risk_assessment_drafts(draft_id,customer_id,questionnaire_version,answers,score,category,max_product_risk,allocation,
       expected_current_profile_version,payload_hash,created_at,expires_at) VALUES($1,$2,$3,$4,30,'BALANCED',3,$5,0,$6,$7,$8)`,
       [id, customerId, V1, JSON.stringify(answers), JSON.stringify({ cash: 5, deposit: 30, bond: 30, fund: 35 }), 'a'.repeat(64), api.state.now,
         new Date(api.state.now.getTime() + 24 * 3600 * 1000)]);
@@ -70,8 +70,8 @@ describe('S8 B4 Vietnamese risk questionnaire published as a new immutable versi
     await register();
     const value = await current();
     expect(value.version).not.toBe(V1);
-    const [v1] = await api.dataSource.query('SELECT * FROM risk_questionnaire_versions WHERE version=$1', [V1]);
-    const [active] = await api.dataSource.query('SELECT * FROM risk_questionnaire_versions WHERE version=$1', [value.version]);
+    const [v1] = await api.dataSource.query('SELECT * FROM wms.risk_questionnaire_versions WHERE version=$1', [V1]);
+    const [active] = await api.dataSource.query('SELECT * FROM wms.risk_questionnaire_versions WHERE version=$1', [value.version]);
     expect(new Date(active.effective_from).getTime()).toBeGreaterThan(new Date(v1.effective_from).getTime());
     expect(value.questions).toHaveLength(10);
     value.questions.forEach((question, index) => {
@@ -108,12 +108,12 @@ describe('S8 B4 Vietnamese risk questionnaire published as a new immutable versi
 
   test('AC04 v1 row is unchanged (identical English content and points, same effective time) but RETIRED, and its content stays immutable once used', async () => {
     const registered = await register();
-    const [v1] = await api.dataSource.query('SELECT * FROM risk_questionnaire_versions WHERE version=$1', [V1]);
+    const [v1] = await api.dataSource.query('SELECT * FROM wms.risk_questionnaire_versions WHERE version=$1', [V1]);
     expect(v1.questions).toEqual(v1Expected);
     expect(new Date(v1.effective_from).toISOString()).toBe('2026-01-01T00:00:00.000Z');
     expect(v1.status).toBe('RETIRED');
     await insertV1Draft(registered.customerId);
-    await expect(api.dataSource.query(`UPDATE risk_questionnaire_versions SET questions=jsonb_set(questions,'{0,text}','"tampered"'::jsonb) WHERE version=$1`, [V1])).rejects.toThrow();
+    await expect(api.dataSource.query(`UPDATE wms.risk_questionnaire_versions SET questions=jsonb_set(questions,'{0,text}','"tampered"'::jsonb) WHERE version=$1`, [V1])).rejects.toThrow();
   });
 
   test('AC04 history and the confirmed profile that reference v1 still read back with the v1 version after the switch', async () => {
@@ -121,18 +121,18 @@ describe('S8 B4 Vietnamese risk questionnaire published as a new immutable versi
     const draftId = await insertV1Draft(registered.customerId);
     const profileId = randomUUID();
     await api.dataSource.transaction(async manager => {
-      await manager.query(`INSERT INTO risk_profiles(id,customer_id,draft_id,questionnaire_version,answers,score,category,max_product_risk,allocation,version,confirmed_at,expires_at,otp_receipt_ref,payload_hash)
-        SELECT $1,customer_id,id,questionnaire_version,answers,score,category,max_product_risk,allocation,1,created_at,$3,$4,payload_hash FROM risk_assessment_drafts WHERE id=$2`,
+      await manager.query(`INSERT INTO wms.risk_profiles(risk_profile_id,customer_id,draft_id,questionnaire_version,answers,score,category,max_product_risk,allocation,version,confirmed_at,expires_at,otp_receipt_ref,payload_hash)
+        SELECT $1,customer_id,draft_id,questionnaire_version,answers,score,category,max_product_risk,allocation,1,created_at,$3,$4,payload_hash FROM wms.risk_assessment_drafts WHERE draft_id=$2`,
         [profileId, draftId, new Date(api.state.now.getTime() + 365 * 24 * 3600 * 1000), randomUUID()]);
-      await manager.query('UPDATE wealth_services SET current_risk_profile_id=$2 WHERE customer_id=$1', [registered.customerId, profileId]);
+      await manager.query('UPDATE wms.wealth_services SET current_risk_profile_id=$2 WHERE customer_id=$1', [registered.customerId, profileId]);
     });
     const token = await api.tokenFor(actors.customer.actorId);
     const profile = await api.request('/me/risk-profile', { token });
     expect(profile.status).toBe(200);
-    expect(profile.body.current).toMatchObject({ id: profileId, questionnaireVersion: V1, score: 30, category: 'BALANCED' });
+    expect(profile.body.current).toMatchObject({ riskProfileId: profileId, questionnaireVersion: V1, score: 30, category: 'BALANCED' });
     const history = await api.request('/me/risk-profile/history?page=1&pageSize=10', { token });
-    expect(history.body.items).toContainEqual(expect.objectContaining({ id: profileId, questionnaireVersion: V1 }));
-    const [v1] = await api.dataSource.query('SELECT * FROM risk_questionnaire_versions WHERE version=$1', [V1]);
+    expect(history.body.items).toContainEqual(expect.objectContaining({ riskProfileId: profileId, questionnaireVersion: V1 }));
+    const [v1] = await api.dataSource.query('SELECT * FROM wms.risk_questionnaire_versions WHERE version=$1', [V1]);
     expect(v1.questions).toEqual(v1Expected);
     expect(v1.status, 'v1 stays referenced by history but must no longer be the active questionnaire').toBe('RETIRED');
     expect((await current()).version).not.toBe(V1);
@@ -145,7 +145,7 @@ describe('S8 B4 Vietnamese risk questionnaire published as a new immutable versi
     const response = await api.request(`/me/risk-assessments/${draftId}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId), key: 's8-confirm-old',
       body: { challengeId: otp.challengeId, code: otp.code, expectedCurrentProfileVersion: 0 } });
     expectApiError(response, 409, 'QUESTIONNAIRE_VERSION_MISMATCH');
-    expect(await api.dataSource.query('SELECT id FROM risk_profiles WHERE customer_id=$1', [registered.customerId])).toEqual([]);
+    expect(await api.dataSource.query('SELECT risk_profile_id FROM wms.risk_profiles WHERE customer_id=$1', [registered.customerId])).toEqual([]);
     expect((await api.request('/me/risk-profile', { token: await api.tokenFor(actors.customer.actorId) })).body.current).toBeNull();
   });
 
@@ -159,7 +159,7 @@ describe('S8 B4 Vietnamese risk questionnaire published as a new immutable versi
   });
 
   test('AC04 a database migrated from zero ends with exactly one ACTIVE questionnaire: the Vietnamese version; v1 is retained as RETIRED', async () => {
-    const rows = await api.dataSource.query('SELECT version,status,questions FROM risk_questionnaire_versions ORDER BY effective_from');
+    const rows = await api.dataSource.query('SELECT version,status,questions FROM wms.risk_questionnaire_versions ORDER BY effective_from');
     const active = rows.filter((row: any) => row.status === 'ACTIVE');
     expect(active).toHaveLength(1);
     expect(active[0].version).not.toBe(V1);
@@ -169,6 +169,6 @@ describe('S8 B4 Vietnamese risk questionnaire published as a new immutable versi
       expect(question.options.map((option: any) => option.points)).toEqual([1, 2, 3, 4, 5]);
     }
     expect(rows.find((row: any) => row.version === V1)).toMatchObject({ status: 'RETIRED' });
-    expect(await api.dataSource.query("SELECT version FROM risk_questionnaire_versions WHERE status='ACTIVE'")).toEqual([{ version: active[0].version }]);
+    expect(await api.dataSource.query("SELECT version FROM wms.risk_questionnaire_versions WHERE status='ACTIVE'")).toEqual([{ version: active[0].version }]);
   });
 });

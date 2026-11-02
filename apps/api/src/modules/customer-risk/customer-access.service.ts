@@ -16,7 +16,7 @@ export class CustomerAccess {
 
   async own(actor: Actor, manager: EntityManager = this.database.manager): Promise<CustomerIdentity> {
     if (actor.role !== 'CUSTOMER' || !actor.cifId) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
-    const [customer] = await manager.query('SELECT id,cif_id FROM customers WHERE cif_id=$1', [actor.cifId]);
+    const [customer] = await manager.query('SELECT customer_id AS id,cif_id FROM wms.customers WHERE cif_id=$1', [actor.cifId]);
     if (!customer) throw new ApiError(404, 'NOT_FOUND', 'Resource not found');
     return customer;
   }
@@ -27,9 +27,9 @@ export class CustomerAccess {
   }
 
   async authorize(actor: Actor, customerId: string, manager: EntityManager): Promise<CustomerIdentity> {
-    const [customer] = await manager.query(`SELECT c.id,c.cif_id FROM customers c
-      JOIN rm_assignment_history a ON a.customer_id=c.id AND a.valid_to IS NULL
-      WHERE c.id=$1 AND (($2='RM' AND a.rm_id=$3) OR ($2='LEADER' AND a.team_id=$4)
+    const [customer] = await manager.query(`SELECT c.customer_id AS id,c.cif_id FROM wms.customers c
+      JOIN wms.rm_assignments a ON a.customer_id=c.customer_id AND a.valid_to IS NULL
+      WHERE c.customer_id=$1 AND (($2='RM' AND a.rm_id=$3) OR ($2='LEADER' AND a.team_id=$4)
         OR ($2='CUSTOMER' AND c.cif_id=$5))`,
       [customerId, actor.role, actor.rmId, actor.teamId, actor.cifId]);
     if (!customer) forbidden();
@@ -51,12 +51,12 @@ export class CustomerAccess {
     for (;;) {
       try {
         return await this.database.transaction(async manager => {
-          const [initial] = await manager.query(`SELECT c.cif_id,a.rm_id FROM customers c
-            JOIN rm_assignment_history a ON a.customer_id=c.id AND a.valid_to IS NULL WHERE c.id=$1`, [customerId]);
+          const [initial] = await manager.query(`SELECT c.cif_id,a.rm_id FROM wms.customers c
+            JOIN wms.rm_assignments a ON a.customer_id=c.customer_id AND a.valid_to IS NULL WHERE c.customer_id=$1`, [customerId]);
           if (!initial) forbidden();
           const rmIds = [...additionalRmIds, initial.rm_id];
           await lockCustomer(manager, initial.cif_id, rmIds);
-          const [current] = await manager.query('SELECT rm_id FROM rm_assignment_history WHERE customer_id=$1 AND valid_to IS NULL', [customerId]);
+          const [current] = await manager.query('SELECT rm_id FROM wms.rm_assignments WHERE customer_id=$1 AND valid_to IS NULL', [customerId]);
           if (!current || !rmIds.includes(current.rm_id)) throw new AssignmentLockChanged();
           return work(manager);
         });

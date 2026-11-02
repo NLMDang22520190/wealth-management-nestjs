@@ -15,6 +15,7 @@ import { QuestionnaireRetirement1791763200004 } from './database/migrations/1791
 import { RmAssignment1791763200005 } from './database/migrations/1791763200005-rm-assignment.js';
 import { VietnameseQuestionnaire1791763200006 } from './database/migrations/1791763200006-vietnamese-questionnaire.js';
 import { CustomerNotifications1791763200007 } from './database/migrations/1791763200007-customer-notifications.js';
+import { TeamSchemaWms1791763200008 } from './database/migrations/1791763200008-team-schema-wms.js';
 import { CustomerRiskModule } from './modules/customer-risk/onboarding.module.js';
 import type { CoreBanking } from './modules/customer-risk/onboarding.domain.js';
 import type { OtpDelivery } from './platform/otp.service.js';
@@ -35,7 +36,7 @@ export interface ApplicationOptions {
   lookupRateLimitPerMinute?: number;
   /** Per-RM onboarding invitations allowed per minute (default 10). */
   inviteRateLimitPerMinute?: number;
-  /** OTP lifetime in seconds, integer 1..900 (default 120). */
+  /** OTP lifetime in seconds, integer 1..120 (team chk_otp_ttl; default 120). */
   otpTtlSeconds?: number;
   coreBanking?: CoreBanking;
   otpDelivery?: (delivery: OtpDelivery) => void | Promise<void>;
@@ -55,7 +56,7 @@ export async function createApplication(options: ApplicationOptions): Promise<Ap
     type: 'postgres', url: options.databaseUrl, synchronize: false,
     migrations: [MockActors1791763200000, Onboarding1791763200001, AuditMetadata1791763200002, RiskProfiles1791763200003,
       QuestionnaireRetirement1791763200004, RmAssignment1791763200005,
-      VietnameseQuestionnaire1791763200006, CustomerNotifications1791763200007], migrationsTableName: 'migrations',
+      VietnameseQuestionnaire1791763200006, CustomerNotifications1791763200007, TeamSchemaWms1791763200008], migrationsTableName: 'migrations',
     logging: false,
   });
   let app: INestApplication | undefined;
