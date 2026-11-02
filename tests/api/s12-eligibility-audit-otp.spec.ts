@@ -122,7 +122,9 @@ describe('S12 W3/BR-01 device id and failed/denied audit', () => {
   });
 
   function expectSafe(rows: any[], secrets: string[]) {
-    const serialized = JSON.stringify(rows);
+    // request_id is asserted separately (rid(n) = 00000000-0000-4000-8000-...) and may contain digits equal to a wrong code such as '000000';
+    // every other column, including details, must still be free of codes, tokens and salts.
+    const serialized = JSON.stringify(rows.map(({ request_id: _requestId, ...rest }) => rest));
     for (const secret of secrets) expect(serialized).not.toContain(secret);
     expect(serialized).not.toMatch(/"(?:code|raw_code|code_hash|salt|token|accessToken|authorization)"\s*:/);
   }

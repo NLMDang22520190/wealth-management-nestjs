@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { actors, insertStaff, staff, viaDataSource } from '../helpers/actors.js';
+import { actors, insertCustomerRow, insertStaff, staff, viaDataSource } from '../helpers/actors.js';
 import { eligibleCustomer, expectApiError, startApiFixture } from '../helpers/application.js';
 import type { OtpDelivery } from '../helpers/application.js';
 import { insertAsset, insertHolding, rid } from '../helpers/wms.js';
@@ -123,6 +123,7 @@ describe('S2 AC04/AC08 risk lifecycle over HTTP and real PostgreSQL', () => {
 
   test('AC04/AC08 only own immutable draft-bound OTP activates service; invalid, expired, edited, replay and audit-failed confirmations preserve state', async () => {
     const registered = await register();
+    await insertCustomerRow(viaDataSource(api.dataSource), actors.otherCustomer); // a known customer without ownership: 403, not 401
     const value = await questionnaire();
     const preview = await draft(value, 35);
     const edited = await draft(value, 36, 'edited-answers-new-draft');
@@ -213,7 +214,7 @@ describe('S2 AC04/AC08 risk lifecycle over HTTP and real PostgreSQL', () => {
     expect(results.map(result => result.status).sort()).toEqual([200, 409]);
     expect(results.find(result => result.status === 409)!.body.code).toBe('RISK_PROFILE_STALE');
     const winner = results.find(result => result.status === 200)!.body;
-    expect((await confirmedRows(registered.customerId)).map((row: any) => row.id)).toEqual([winner.id]);
+    expect((await confirmedRows(registered.customerId)).map((row: any) => row.risk_profile_id)).toEqual([winner.id]);
     expect((await profile()).current).toMatchObject({ id: winner.id, version: 1 });
     const next = await draft(value, 35, 'next-version');
     expect(next.expectedCurrentProfileVersion).toBe(1);

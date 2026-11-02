@@ -140,7 +140,8 @@ describe('S20 AC6/AC7/AC8/AC9 UC-01, OTP, audit and idempotency on wms', () => {
     const questionnaire = await api.request('/risk-questionnaires/current', { token });
     const body = { questionnaireVersion: questionnaire.body.version,
       answers: questionnaire.body.questions.map((question: any) => ({ questionId: question.id, optionId: question.options[0].id })) };
-    const again = () => api.request('/me/risk-assessments', { method: 'POST', token, key: 's20-idem', body });
+    // the JWT lifetime is 3600 s (s0), so a token issued at TEST_NOW is expired after the clock moves; issue a fresh one per replay
+    const again = async () => api.request('/me/risk-assessments', { method: 'POST', token: await api.tokenFor(actors.customer.actorId), key: 's20-idem', body });
     api.state.now = new Date(new Date(TEST_NOW).getTime() + 24 * HOUR - 1000);
     const replay = await again();
     expect(replay.status).toBe(201);

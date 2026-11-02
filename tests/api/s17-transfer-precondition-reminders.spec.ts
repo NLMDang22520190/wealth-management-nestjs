@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { actors, gamma, insertStaff, staff, staffIdOf, viaDataSource } from '../helpers/actors.js';
+import { actors, gamma, insertCustomerRow, insertStaff, staff, staffIdOf, viaDataSource } from '../helpers/actors.js';
 import { eligibleCustomer, expectApiError, startApiFixture } from '../helpers/application.js';
 import { insertProposal, insertRiskProfile } from '../helpers/wms.js';
 
@@ -188,6 +188,7 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
   });
 
   test('AC-N1 authorization and validation: foreign-team id 403 (nothing sent), non-LEADER 403, invalid ids 400', async () => {
+    await insertCustomerRow(viaDataSource(api.dataSource), actors.customer); // can log in (expected 403, not 401) without being invited
     const b = await beta();
     const g = await register(gamma.cifId, gamma.actorId, foreignRm.actorId);
     expectApiError(await remind({ customerIds: [b, g] }), 403, 'FORBIDDEN');
@@ -200,6 +201,7 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
   });
 
   test('AC-N2 customer sees only own reminders, newest first, with kind/message/readAt; can mark own as read; foreign id 404; RM/LEADER 403', async () => {
+    await insertCustomerRow(viaDataSource(api.dataSource), actors.customer); // can log in (empty list expected, not 401) without being invited
     const b = await beta();
     await register(gamma.cifId, gamma.actorId, foreignRm.actorId);
     expect((await remind({ customerIds: [b] })).body.sent).toBe(1);
