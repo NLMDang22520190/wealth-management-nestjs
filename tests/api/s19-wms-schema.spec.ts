@@ -25,8 +25,8 @@ const OLD_MIGRATION_SHA256: Record<string, string> = {
   '1791763200003-risk-profiles.ts': '7fbc18bbb40858d676cbebc9fd851c2de688fbe14b00aaec223d85014c6db221',
   '1791763200004-questionnaire-retirement.ts': 'aca02bcbfb27c92aa5b605d85b6005c0a75938d6231263f73a0573bdd15523cb',
   '1791763200005-rm-assignment.ts': '3dfe5615b1c38927d10c26fa407b72c11f93c28b46f1ba2697f07d14a3576a63',
-  '1791763200006-vietnamese-questionnaire.ts': '04febb71ca73f8745240c9ffb8ecded54199576ebf1cab6e4dbc26642d3012b9',
-  '1791763200007-customer-notifications.ts': 'a3866497f0e01df90f493b48d0466e992959cc7fde9a60f88f72f49f40794b34',
+  '1791763200006-vietnamese-questionnaire.ts': 'dc58b7c886d389333c05d1a478089df7d560ded3c245d87eb7db7096c23118c6',
+  '1791763200007-customer-notifications.ts': '3989728e057d7920cfcd7cc1f2753272849b86a6afc929b5a8c7649756543b55',
 };
 const JWT_SECRET = 'wms-test-only-secret-at-least-32-characters';
 
@@ -106,8 +106,10 @@ describe('S19 AC1 migration 008 builds the vendored team DDL in schema wms', () 
   test('AC1 migration 008 exists and migrations 000-007 are unchanged', () => {
     const names = readdirSync(MIGRATIONS_SRC);
     expect(names.filter(name => name.startsWith('1791763200008-')), 'new migration 1791763200008-*.ts').toHaveLength(1);
+    // Hash the committed (LF) content: a Windows checkout may convert these files to CRLF.
     for (const [name, sha] of Object.entries(OLD_MIGRATION_SHA256)) {
-      expect(createHash('sha256').update(readFileSync(new URL(name, MIGRATIONS_SRC))).digest('hex'), name).toBe(sha);
+      const committed = readFileSync(new URL(name, MIGRATIONS_SRC), 'utf8').split(String.fromCharCode(13)).join('');
+      expect(createHash('sha256').update(committed).digest('hex'), name).toBe(sha);
     }
   });
 
