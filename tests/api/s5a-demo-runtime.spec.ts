@@ -5,8 +5,6 @@ import { actors, insertStaff, staff, viaPg } from '../helpers/actors.js';
 import { startTestDatabase } from '../helpers/postgres.js';
 import { ownedEnvironmentFile, reserveHttpPort, runtimeEnvironment, runtimeSecret, startRuntimeProcess } from '../helpers/runtime.js';
 
-// These stable, explicitly synthetic references are the public demo/README contract.
-const identities = ['synthetic-identity-reference-101', 'synthetic-identity-reference-102'];
 // R9: staff are trusted wms.staff_users rows; customers log in by CIF through their invitation, so only staff are registry rows.
 const rmBeta = staff.replacement;
 const registry = [actors.rm, actors.leader, rmBeta];
@@ -81,25 +79,30 @@ describe('S5a AC01/AC07 real CLI synthetic demo runtime', () => {
     expect(output).not.toContain(runtimeSecret);
   }
 
-  test('AC01/AC07 actual main CLI resolves synthetic CIF and identity with eligible DOB and own VND without injected Core callbacks', async () => {
+  // R9 S2 (D-R9-7, category 3): the Core mock now knows the team CIFs (CIF100001-CIF100005 from the team seed, CIF100006-CIF100009 synthetic);
+  // the old 0000010x references are gone. CIF100002 (team seed: Trần Quốc Huy) and CIF100006 (synthetic) stand in for the two customers.
+  // The `synthetic-identity-reference-10x` aliases are not asserted any more: D-R9-7 does not say whether they survive (open question OQ1).
+  const coreCustomers = [{ cif: 'CIF100002', name: 'Trần Quốc Huy', dateOfBirth: '1985-07-25', casa: '0011000123452' },
+    { cif: 'CIF100006', name: undefined, dateOfBirth: undefined, casa: undefined }] as const;
+  test('AC01/AC07 actual main CLI resolves synthetic CIF with eligible DOB and own VND without injected Core callbacks', async () => {
     const child = await ready();
     await fixtureActors();
     const token = await tokenFor(actors.rm.actorId);
-    for (const [index, actor] of [actors.customer, actors.otherCustomer].entries()) {
-      const byCif = await request('/onboarding/customer-lookup', { token, body: { cifRef: actor.cifId } });
+    for (const [index, customer] of coreCustomers.entries()) {
+      const byCif = await request('/onboarding/customer-lookup', { token, body: { cifRef: customer.cif } });
       expect(byCif.status).toBe(200); // Baseline valid RED: actual main returns CORE_UNAVAILABLE/503.
-      expect(byCif.body).toMatchObject({ cifRef: actor.cifId, active: true, eligible: true, name: expect.any(String) });
+      expect(byCif.body).toMatchObject({ cifRef: customer.cif, active: true, eligible: true, name: expect.any(String) });
       expect(byCif.body.name.trim().length).toBeGreaterThan(0);
+      if (customer.name) expect(byCif.body.name).toBe(customer.name);
       expect(byCif.body.dateOfBirth).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(new Date(`${byCif.body.dateOfBirth}T00:00:00Z`).toISOString().slice(0, 10)).toBe(byCif.body.dateOfBirth);
+      if (customer.dateOfBirth) expect(byCif.body.dateOfBirth).toBe(customer.dateOfBirth);
       expect(byCif.body.accounts).toContainEqual(expect.objectContaining({ id: expect.any(String), currency: 'VND' }));
-      const byIdentity = await request('/onboarding/customer-lookup', { token, body: { cifRef: identities[index] } });
-      expect(byIdentity.status).toBe(200);
-      expect(byIdentity.body).toEqual(byCif.body);
+      if (customer.casa) expect(byCif.body.accounts).toContainEqual(expect.objectContaining({ id: customer.casa, currency: 'VND' }));
       const created = await request('/onboarding/requests', { token, key: `s5a-core-${index}`,
-        body: { cifRef: identities[index], selectedAccountId: byCif.body.accounts.find((a: any) => a.currency === 'VND').id } });
+        body: { cifRef: customer.cif, selectedAccountId: byCif.body.accounts.find((a: any) => a.currency === 'VND').id } });
       expect(created.status).toBe(201); // Own-account validation is exercised at the real business boundary.
-      const inbox = await request('/me/onboarding-requests', { token: await tokenFor(actor.actorId) });
+      const inbox = await request('/me/onboarding-requests', { token: await tokenFor(customer.cif) }); // customers log in by CIF (AC4)
       expect(inbox.status).toBe(200);
       expect(inbox.body.items).toContainEqual(expect.objectContaining({ id: created.body.id }));
     }
@@ -109,9 +112,9 @@ describe('S5a AC01/AC07 real CLI synthetic demo runtime', () => {
     assertSanitized(child.output);
   });
 
-  // S1 scope of the seed command: it migrates an empty database to the wms schema and stays idempotent without touching user
-  // data. The team seed content itself (staff NV0001.., customers CIF100001..) is S2; the old mock_actors registry assertions
-  // are replaced by the staff_users equivalents on fixture rows (category 1).
+  // The seed command migrates an empty database to the wms schema, loads the team demo data (s21-team-seed.spec.ts pins its content)
+  // and stays idempotent without touching user data. The old mock_actors registry assertions are the staff_users equivalents on
+  // fixture rows (category 1); the Core CIF for the user-created invitation is a team-style CIF (category 3).
   test('AC01 seed CLI migrates empty PostgreSQL and repeats without deleting or replacing user business or unrelated staff', async () => {
     expect(await tables()).toEqual([]);
     const first = await seed();
@@ -131,10 +134,10 @@ describe('S5a AC01/AC07 real CLI synthetic demo runtime', () => {
       expect(me.body).toEqual(actor);
     }
     const token = await tokenFor(actors.rm.actorId);
-    const lookup = await request('/onboarding/customer-lookup', { token, body: { cifRef: actors.customer.cifId } });
+    const lookup = await request('/onboarding/customer-lookup', { token, body: { cifRef: 'CIF100006' } });
     expect(lookup.status).toBe(200);
     const created = await request('/onboarding/requests', { token, key: 's5a-user-created-request',
-      body: { cifRef: actors.customer.cifId, selectedAccountId: lookup.body.accounts[0].id } });
+      body: { cifRef: 'CIF100006', selectedAccountId: lookup.body.accounts[0].id } });
     expect(created.status).toBe(201);
     await sql.query("INSERT INTO wms.staff_users(iam_subject,employee_code,full_name,role,team_id,is_active) VALUES('user-owned-subject','NV9999','User owned staff','RM',$1,false)", [actors.rm.teamId]);
     const before = (await sql.query('SELECT * FROM wms.onboarding_requests WHERE request_id=$1', [created.body.id])).rows;

@@ -7,10 +7,10 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
   let alphaId: string;
   test.beforeEach(async () => {
     await resetBusinessState();
-    alphaId = (await registerCustomer('00000101', 'customer-alpha')).customerId;
-    await registerCustomer('00000102', 'customer-beta');
-    await activateRisk('customer-alpha', 2);
-    await activateRisk('customer-beta', 2);
+    alphaId = (await registerCustomer('CIF100001', 'CIF100001')).customerId;
+    await registerCustomer('CIF100002', 'CIF100002');
+    await activateRisk('CIF100001', 2);
+    await activateRisk('CIF100002', 2);
     await addPendingProposal(alphaId);
   });
 
@@ -18,16 +18,16 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     // F3: the leader picks from the team's customers by name; no UUID typing.
     await expect(page.getByLabel('Mã khách hàng')).toHaveCount(0);
     const picker = page.getByLabel('Chọn khách hàng');
-    await expect(picker.getByRole('option', { name: /Khách hàng demo Alpha/ })).toHaveCount(1);
-    await expect(picker.getByRole('option', { name: /Khách hàng demo Beta/ })).toHaveCount(1);
+    await expect(picker.getByRole('option', { name: /Nguyễn Thị Mai/ })).toHaveCount(1);
+    await expect(picker.getByRole('option', { name: /Trần Quốc Huy/ })).toHaveCount(1);
     // B1: the name is the option's VISIBLE text, not only an accessible-name attribute.
     const optionTexts = await picker.evaluate(select => [...(select as HTMLSelectElement).options].map(option => option.textContent ?? ''));
-    expect(optionTexts.some(text => text.includes('Khách hàng demo Alpha')), 'option text contains Alpha').toBe(true);
-    expect(optionTexts.some(text => text.includes('Khách hàng demo Beta')), 'option text contains Beta').toBe(true);
+    expect(optionTexts.some(text => text.includes('Nguyễn Thị Mai')), 'option text contains Alpha').toBe(true);
+    expect(optionTexts.some(text => text.includes('Trần Quốc Huy')), 'option text contains Beta').toBe(true);
     await picker.selectOption(alphaId);
     await page.getByRole('button', { name: 'Tải thông tin khách hàng' }).click();
     // B1: scoped to the loaded customer panel, not the whole page (the picker must not be what satisfies this).
-    await expect(page.getByRole('region', { name: 'Khách hàng cần chuyển' }).getByText('Khách hàng demo Alpha')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Khách hàng cần chuyển' }).getByText('Nguyễn Thị Mai')).toBeVisible();
   }
 
   /** S10 B13 AC4: `Xác nhận chuyển` opens the dialog; `Chuyển khách hàng` inside it performs the transfer. */
@@ -41,21 +41,21 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
 
   test('AC07 leader sees RM capacity x/80 and transfers a customer with a reason', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'leader-alpha');
+    await switchRole(page, 'NV0001');
     await goTo(page, 'Phân công RM');
     const directory = page.getByRole('region', { name: 'Danh sách RM' });
-    await expect(directory.getByRole('row', { name: /rm-alpha/ })).toContainText('2/80');
-    await expect(directory.getByRole('row', { name: /rm-beta/ })).toContainText('0/80');
+    await expect(directory.getByRole('row', { name: /NV0002/ })).toContainText('2/80');
+    await expect(directory.getByRole('row', { name: /NV0003/ })).toContainText('0/80');
 
     await loadCustomer(page);
     await expect(page.getByText('Phiên bản phân công: 1')).toBeVisible();
-    // F4: two more pending proposals appear after the page loaded the customer; only the server knows the real count (1 + 2 = 3).
-    await addPendingProposal(alphaId);
-    await addPendingProposal(alphaId);
+    // R9 category 6 (D-R9-12): the team schema allows at most one PENDING_APPROVAL proposal per customer (ux_proposal_single_pending),
+    // so the former F4 setup "two more pending proposals appear after the page loaded the customer (1 + 2 = 3)" is no longer
+    // possible; the count the page loaded (1) and the server count at transfer time (1) now coincide.
     await page.getByLabel('RM nhận').selectOption(ids.rmBeta);
     await page.getByRole('button', { name: 'Xác nhận chuyển' }).click();
     await expect(page.getByRole('alert')).toContainText('Vui lòng nhập lý do chuyển'); // validation, nothing sent
-    expect(await sql("SELECT id FROM rm_assignment_history WHERE reason IS NOT NULL")).toHaveLength(0);
+    expect(await sql("SELECT assignment_id FROM wms.rm_assignments WHERE reason IS NOT NULL")).toHaveLength(0);
 
     await expect(page.getByRole('dialog')).toHaveCount(0); // validation comes first: no dialog without a reason
     await page.getByLabel('Lý do chuyển').fill('Cân đối tải công việc giữa các RM');
@@ -66,8 +66,8 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     await open.click();
     const dialog = page.getByRole('dialog', { name: 'Xác nhận chuyển RM' });
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText(/rm-alpha[\s\S]*rm-beta/); // current RM -> target RM by name (S16b AC4); full ids live in title attributes
-    await expect(dialog).toContainText('1 đề xuất đang chờ duyệt sẽ bị hủy'); // N = pending count loaded with the customer (the 2 added later are unknown to the page)
+    await expect(dialog).toContainText(/NV0002[\s\S]*NV0003/); // current RM -> target RM by name (S16b AC4); full ids live in title attributes
+    await expect(dialog).toContainText('1 đề xuất đang chờ duyệt sẽ bị hủy'); // N = pending count loaded with the customer
     await dialog.getByRole('button', { name: 'Hủy' }).click();
     await expect(dialog).toBeHidden();
     await expect(open).toBeFocused();
@@ -77,25 +77,25 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     await expect(dialog).toBeHidden();
     await expect(open).toBeFocused(); // focus returns to the opener
     expect(posts, 'cancelling or escaping the dialog sends nothing').toHaveLength(0);
-    expect(await sql("SELECT id FROM rm_assignment_history WHERE reason IS NOT NULL")).toHaveLength(0);
-    expect(await sql("SELECT id FROM proposals WHERE customer_id=$1 AND status='PENDING_APPROVAL'", [alphaId])).toHaveLength(3);
+    expect(await sql("SELECT assignment_id FROM wms.rm_assignments WHERE reason IS NOT NULL")).toHaveLength(0);
+    expect(await sql("SELECT proposal_id FROM wms.proposals WHERE customer_id=$1 AND status='PENDING_APPROVAL'", [alphaId])).toHaveLength(1);
 
     await confirmInDialog(page);
     expect(posts).toHaveLength(1);
     await expect(page.getByText('Đã chuyển khách hàng')).toBeVisible();
     await expect(page.getByText('đề xuất đang chờ duyệt của khách đã bị hủy', { exact: false })).toBeVisible();
-    await expect(page.getByText('3 đề xuất đang chờ duyệt của khách đã bị hủy', { exact: false })).toBeVisible(); // exact server count
-    await expect(directory.getByRole('row', { name: /rm-alpha/ })).toContainText('1/80');
-    await expect(directory.getByRole('row', { name: /rm-beta/ })).toContainText('1/80');
-    const current = await sql<{ rm_id: string; reason: string }>('SELECT rm_id,reason FROM rm_assignment_history WHERE customer_id=$1 AND valid_to IS NULL', [alphaId]);
+    await expect(page.getByText('1 đề xuất đang chờ duyệt của khách đã bị hủy', { exact: false })).toBeVisible(); // exact server count (category 6: 3 -> 1)
+    await expect(directory.getByRole('row', { name: /NV0002/ })).toContainText('1/80');
+    await expect(directory.getByRole('row', { name: /NV0003/ })).toContainText('1/80');
+    const current = await sql<{ rm_id: string; reason: string }>('SELECT rm_id,reason FROM wms.rm_assignments WHERE customer_id=$1 AND valid_to IS NULL', [alphaId]);
     expect(current).toEqual([{ rm_id: ids.rmBeta, reason: 'Cân đối tải công việc giữa các RM' }]);
-    expect(await sql("SELECT id FROM proposals WHERE customer_id=$1 AND status='PENDING_APPROVAL'", [alphaId])).toHaveLength(0);
+    expect(await sql("SELECT proposal_id FROM wms.proposals WHERE customer_id=$1 AND status='PENDING_APPROVAL'", [alphaId])).toHaveLength(0);
     await expectNoHorizontalOverflow(page);
   });
 
   test('AC07 a stale assignment version shows a visible conflict message and refresh loads the current assignment', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'leader-alpha');
+    await switchRole(page, 'NV0001');
     await goTo(page, 'Phân công RM');
     await loadCustomer(page);
     await expect(page.getByText('Phiên bản phân công: 1')).toBeVisible();
@@ -109,22 +109,22 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     await expect(page.getByRole('alert')).toContainText('Phân công đã thay đổi');
     await page.getByRole('button', { name: 'Tải lại' }).click();
     await expect(page.getByText('Phiên bản phân công: 2')).toBeVisible();
-    const rows = await sql('SELECT id FROM rm_assignment_history WHERE customer_id=$1', [alphaId]);
+    const rows = await sql('SELECT assignment_id FROM wms.rm_assignments WHERE customer_id=$1', [alphaId]);
     expect(rows).toHaveLength(2); // the stale request created no extra assignment (original + one API transfer)
     await expectNoHorizontalOverflow(page);
   });
 
   test('B2 picker search filters on the server and paging shows Hiển thị N/M with Tải thêm khách hàng', async ({ page }) => {
-    // 105 extra customers of the leader's team, inserted cheaply with SQL (names sort before "demo", so Alpha/Beta fall past page 1).
-    await sql(`INSERT INTO customers(id,cif_id,name,created_at)
+    // 105 extra customers of the leader's team, inserted cheaply with SQL (names sort before "Nguyễn"/"Trần", so Mai/Huy fall past page 1).
+    await sql(`INSERT INTO wms.customers(customer_id,cif_id,full_name,created_at)
       SELECT gen_random_uuid(),'BULK'||lpad(n::text,5,'0'),'Khách hàng bulk '||lpad(n::text,3,'0'),now() FROM generate_series(1,105) n`);
-    await sql(`INSERT INTO rm_assignment_history(id,customer_id,rm_id,team_id,valid_from,valid_to,provisional)
-      SELECT gen_random_uuid(),c.id,t.rm_id,t.team_id,now(),NULL,false FROM customers c
-      CROSS JOIN (SELECT rm_id,team_id FROM rm_assignment_history WHERE customer_id=$1 AND valid_to IS NULL) t WHERE c.cif_id LIKE 'BULK%'`, [alphaId]);
+    await sql(`INSERT INTO wms.rm_assignments(customer_id,rm_id,team_id,valid_from,valid_to,provisional)
+      SELECT c.customer_id,t.rm_id,t.team_id,now(),NULL,false FROM wms.customers c
+      CROSS JOIN (SELECT rm_id,team_id FROM wms.rm_assignments WHERE customer_id=$1 AND valid_to IS NULL) t WHERE c.cif_id LIKE 'BULK%'`, [alphaId]);
     const total = 107;
 
     await openApp(page);
-    await switchRole(page, 'leader-alpha');
+    await switchRole(page, 'NV0001');
     await goTo(page, 'Phân công RM');
     const picker = page.getByLabel('Chọn khách hàng');
     const hint = page.getByText(/Hiển thị \d+\/\d+ khách hàng/);
@@ -143,19 +143,19 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     }
     await expect(hint).toContainText(`Hiển thị ${total}/${total} khách hàng`);
     await expect(more).toHaveCount(0);
-    await expect(picker.getByRole('option', { name: /Khách hàng demo Alpha/ })).toHaveCount(1);
+    await expect(picker.getByRole('option', { name: /Nguyễn Thị Mai/ })).toHaveCount(1);
 
     // Search: the term goes to the server (name= query), narrows the options and the hint.
     const searched = page.waitForRequest(request => request.url().includes('/team/customers') && request.url().includes('name='));
-    await page.getByLabel('Tìm khách hàng').fill('demo Beta');
-    expect((await searched).url()).toContain(encodeURIComponent('demo Beta'));
+    await page.getByLabel('Tìm khách hàng').fill('Huy');
+    expect((await searched).url()).toContain(encodeURIComponent('Huy'));
     await expect(hint).toContainText('Hiển thị 1/1 khách hàng');
-    await expect(picker.getByRole('option', { name: /Khách hàng demo Beta/ })).toHaveCount(1);
+    await expect(picker.getByRole('option', { name: /Trần Quốc Huy/ })).toHaveCount(1);
     await expect(picker.getByRole('option', { name: /Khách hàng bulk/ })).toHaveCount(0);
     await expect(more).toHaveCount(0);
-    await picker.selectOption({ label: 'Khách hàng demo Beta' });
+    await picker.selectOption({ label: 'Trần Quốc Huy' });
     await page.getByRole('button', { name: 'Tải thông tin khách hàng' }).click();
-    await expect(page.getByRole('region', { name: 'Khách hàng cần chuyển' }).getByText('Khách hàng demo Beta')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Khách hàng cần chuyển' }).getByText('Trần Quốc Huy')).toBeVisible();
   });
 
   test('B7 a transfer response without cancelledProposals never shows "undefined" and still reports the transfer', async ({ page }) => {
@@ -167,7 +167,7 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
       await route.fulfill({ response: real, json: body });
     });
     await openApp(page);
-    await switchRole(page, 'leader-alpha');
+    await switchRole(page, 'NV0001');
     await goTo(page, 'Phân công RM');
     // Independent of the B1 picker-text check: select by value so only B7 can fail here.
     await page.getByLabel('Chọn khách hàng').selectOption(alphaId);

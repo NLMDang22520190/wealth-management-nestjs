@@ -60,7 +60,7 @@ async function effectiveColors(locator: Locator): Promise<{ fg: number[]; bg: nu
 
 async function openSurvey(page: Page) {
   await openApp(page);
-  await switchRole(page, 'customer-alpha');
+  await switchRole(page, 'CIF100001');
   await goTo(page, 'Khảo sát rủi ro');
   await expect(page.getByText('Câu 1/10', { exact: true })).toBeVisible();
 }
@@ -86,7 +86,7 @@ test.describe('S16a visual refactor (AC1 AC2 AC5 AC10 AC11 AC12 AC13 AC15)', () 
   let alphaId: string;
   test.beforeEach(async () => {
     await resetBusinessState();
-    alphaId = (await registerCustomer('00000101', 'customer-alpha')).customerId;
+    alphaId = (await registerCustomer('CIF100001', 'CIF100001')).customerId;
   });
 
   test('AC1 the "10/10 câu" progress text is fully visible (not clipped) inside the viewport and the bar keeps usable width', async ({ page }) => {
@@ -159,10 +159,10 @@ test.describe('S16a visual refactor (AC1 AC2 AC5 AC10 AC11 AC12 AC13 AC15)', () 
   });
 
   test('AC10 the "sẽ bị hủy" warning is an amber alert box above the confirm button in the dialog', async ({ page }) => {
-    await activateRisk('customer-alpha', 2);
+    await activateRisk('CIF100001', 2);
     await addPendingProposal(alphaId);
     await openApp(page);
-    await switchRole(page, 'leader-alpha');
+    await switchRole(page, 'NV0001');
     await goTo(page, 'Phân công RM');
     await page.getByLabel('Chọn khách hàng').selectOption(alphaId);
     await page.getByRole('button', { name: 'Tải thông tin khách hàng' }).click();
@@ -195,11 +195,11 @@ test.describe('S16a visual refactor (AC1 AC2 AC5 AC10 AC11 AC12 AC13 AC15)', () 
       await route.fulfill({ status: 500, contentType: 'application/json', json: { code: 'INTERNAL', message: 'boom' } });
     });
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Đăng ký khách hàng');
-    await page.getByLabel('Mã CIF hoặc định danh').fill('00000101');
+    await page.getByLabel('Mã CIF hoặc định danh').fill('CIF100001');
     await page.getByRole('button', { name: 'Tra cứu' }).click();
-    await page.getByRole('radio', { name: /synthetic-vnd-account-101/ }).check();
+    await page.getByRole('radio', { name: /0011000123451/ }).check();
     await page.getByRole('button', { name: 'Tạo lời mời' }).click();
     const sending = page.getByRole('button').filter({ hasText: 'Đang gửi…' });
     await expect(sending).toBeVisible();
@@ -219,7 +219,7 @@ test.describe('S16a visual refactor (AC1 AC2 AC5 AC10 AC11 AC12 AC13 AC15)', () 
     await openApp(page);
     const demo = await page.getByLabel('Vai trò demo').evaluate(el => parseFloat(getComputedStyle(el).fontSize));
     expect(demo, 'Vai trò demo select').toBeGreaterThanOrEqual(16);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Đăng ký khách hàng');
     const cif = await page.getByLabel('Mã CIF hoặc định danh').evaluate(el => parseFloat(getComputedStyle(el).fontSize));
     expect(cif, 'CIF input').toBeGreaterThanOrEqual(16);
@@ -244,7 +244,7 @@ test.describe('S16a visual refactor (AC1 AC2 AC5 AC10 AC11 AC12 AC13 AC15)', () 
 
   test('AC12 keyboard focus on a link in the navy sidebar shows a visible, high-contrast indicator', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     const nav = page.getByRole('navigation', { name: 'Điều hướng chính' });
     let focused = false;
     for (let i = 0; i < 40 && !focused; i++) {
@@ -294,9 +294,9 @@ test.describe('S16a visual refactor (AC1 AC2 AC5 AC10 AC11 AC12 AC13 AC15)', () 
   });
 
   test('AC15 the disabled "Trang trước" button text has at least 3:1 contrast against its background', async ({ page }) => {
-    await activateRisk('customer-alpha', 2);
+    await activateRisk('CIF100001', 2);
     await openApp(page);
-    await switchRole(page, 'rm-alpha');
+    await switchRole(page, 'NV0002');
     await goTo(page, 'Khách phụ trách');
     const prev = page.getByRole('navigation', { name: 'Phân trang' }).getByRole('button', { name: 'Trang trước' });
     await expect(prev).toBeDisabled();

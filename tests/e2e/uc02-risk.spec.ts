@@ -36,18 +36,18 @@ async function expectAllocation(region: Locator, maxProductRisk: number, allocat
 }
 
 test.describe('UC02 risk survey journey (AC07)', () => {
-  test.beforeEach(async () => { await resetBusinessState(); await registerCustomer('00000101', 'customer-alpha'); });
+  test.beforeEach(async () => { await resetBusinessState(); await registerCustomer('CIF100001', 'CIF100001'); });
 
   test('AC07 customer answers 10 questions with progress, previews, changes an answer, confirms with OTP and sees profile and history', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await goTo(page, 'Khảo sát rủi ro');
     await expectQuestion(page, 1);
     await expect(page.getByRole('progressbar', { name: 'Tiến độ khảo sát' })).toHaveAttribute('aria-valuenow', '0');
     // Validation state: nothing answered means no way forward and no draft is created.
     await expect(page.getByRole('button', { name: 'Câu tiếp' })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Xem kết quả dự kiến' })).toHaveCount(0);
-    expect(await sql('SELECT id FROM risk_assessment_drafts')).toHaveLength(0);
+    expect(await sql('SELECT draft_id FROM wms.risk_assessment_drafts')).toHaveLength(0);
 
     for (let q = 1; q <= 3; q++) await answerAndNext(page, q, 2);
     await expectQuestion(page, 4);
@@ -63,7 +63,7 @@ test.describe('UC02 risk survey journey (AC07)', () => {
     // Last question: `Xem kết quả dự kiến` replaces `Câu tiếp`, disabled until answered; still no draft.
     await expect(page.getByRole('button', { name: 'Câu tiếp' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Xem kết quả dự kiến' })).toBeDisabled();
-    expect(await sql('SELECT id FROM risk_assessment_drafts')).toHaveLength(0);
+    expect(await sql('SELECT draft_id FROM wms.risk_assessment_drafts')).toHaveLength(0);
 
     await answer(page, 2);
     await expect(page.getByText('10/10 câu')).toBeVisible();
@@ -73,7 +73,7 @@ test.describe('UC02 risk survey journey (AC07)', () => {
     await expect(preview).toContainText('Điểm: 30');
     await expect(preview).toContainText('Bản nháp, chưa có hiệu lực');
     await expectAllocation(preview, 3, { cash: 5, deposit: 30, bond: 30, fund: 35 }); // F1 BALANCED matrix from the API
-    expect(await sql('SELECT id FROM risk_profiles')).toHaveLength(0); // preview is not a confirmed profile
+    expect(await sql('SELECT risk_profile_id FROM wms.risk_profiles')).toHaveLength(0); // preview is not a confirmed profile
 
     // Changing an answer invalidates the previous preview; a new preview is required.
     for (let q = 10; q > 1; q--) await page.getByRole('button', { name: 'Câu trước' }).click(); // back to question 1
@@ -89,7 +89,7 @@ test.describe('UC02 risk survey journey (AC07)', () => {
     await expect(preview).toContainText('Tăng trưởng');
     await expect(preview).toContainText('Điểm: 40');
     await expectAllocation(preview, 5, { cash: 5, deposit: 15, bond: 20, fund: 60 }); // F1 GROWTH matrix from the API
-    expect(await sql('SELECT id FROM risk_assessment_drafts')).toHaveLength(2);
+    expect(await sql('SELECT draft_id FROM wms.risk_assessment_drafts')).toHaveLength(2);
 
     await page.getByRole('button', { name: 'Gửi mã OTP' }).click();
     const code = await readDemoInbox(page);
@@ -102,7 +102,7 @@ test.describe('UC02 risk survey journey (AC07)', () => {
     await typeOtp(page, differentCode(code));
     await confirm.click();
     await expect(page.getByRole('alert')).toContainText('Mã OTP không đúng');
-    expect(await sql('SELECT id FROM risk_profiles')).toHaveLength(0);
+    expect(await sql('SELECT risk_profile_id FROM wms.risk_profiles')).toHaveLength(0);
     await typeOtp(page, code);
     await expect(confirm).toBeEnabled();
     await confirm.click();
@@ -112,7 +112,7 @@ test.describe('UC02 risk survey journey (AC07)', () => {
     const current = page.getByRole('region', { name: 'Hồ sơ hiện tại' });
     await expect(current).toContainText('Tăng trưởng');
     await expect(current).toContainText('Điểm: 40');
-    const profile = await api('/me/risk-profile', { token: await tokenFor('customer-alpha') });
+    const profile = await api('/me/risk-profile', { token: await tokenFor('CIF100001') });
     expect(profile.body.current.category).toBe('GROWTH');
     expect(profile.body.current.maxProductRisk).toBe(5);
     await expectAllocation(current, profile.body.current.maxProductRisk, profile.body.current.allocation); // F1 profile region, values from the API
@@ -126,7 +126,7 @@ test.describe('UC02 risk survey journey (AC07)', () => {
 
   test('AC07 arrow keys move the selection within the question group', async ({ page }) => {
     await openApp(page);
-    await switchRole(page, 'customer-alpha');
+    await switchRole(page, 'CIF100001');
     await goTo(page, 'Khảo sát rủi ro');
     await expectQuestion(page, 1);
     const radios = page.getByRole('radiogroup').getByRole('radio');
