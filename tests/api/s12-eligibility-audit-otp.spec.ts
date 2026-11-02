@@ -18,7 +18,7 @@ describe('S12 W2/BR-02 eligibility: blacklisted or credit group >= 3 is ineligib
   const core = (extra: Partial<CoreCustomer>): CoreCustomer => ({ ...eligibleCustomer(), ...extra });
   const lookup = async () => api.request('/onboarding/customer-lookup', { method: 'POST', token: await api.tokenFor(), body: { cifRef: actors.customer.cifId } });
   const create = async (key: string) => api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key,
-    body: { cifRef: actors.customer.cifId, selectedAccountId: eligibleCustomer().accounts[0].id } });
+    body: { cifRef: actors.customer.cifId, selectedCasaNo: eligibleCustomer().accounts[0].id } });
   async function rowCounts() {
     const result: Record<string, number> = {};
     for (const table of ['onboarding_requests', 'rm_capacity_reservations', 'wealth_services', 'investment_accounts', 'service_consents', 'outbox_events']) {
@@ -60,11 +60,11 @@ describe('S12 W2/BR-02 eligibility: blacklisted or credit group >= 3 is ineligib
     const created = await create('s12-recheck');
     expect(created.status).toBe(201);
     const issued = await api.request('/otp/challenges', { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
-      body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id } });
+      body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId } });
     expect(issued.status).toBe(201);
     const delivery = api.deliveries.find(item => item.challengeId === issued.body.challengeId)!;
     api.state.core = core({ blacklisted: true, creditGroup: 1 });
-    const refused = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, { method: 'POST',
+    const refused = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, { method: 'POST',
       token: await api.tokenFor(actors.customer.actorId), key: 's12-recheck-confirm', body: { challengeId: delivery.challengeId, code: delivery.code } });
     expectApiError(refused, 422, 'CUSTOMER_INELIGIBLE');
     for (const table of ['wealth_services', 'investment_accounts', 'service_consents', 'rm_assignments']) {
@@ -83,7 +83,7 @@ describe('S12 W3/BR-01 device id and failed/denied audit', () => {
 
   const create = async (key: string, headers: Record<string, string> = {}) => api.request('/onboarding/requests', { method: 'POST',
     token: await api.tokenFor(), key, headers: { 'user-agent': 'S12 browser agent', ...headers },
-    body: { cifRef: actors.customer.cifId, selectedAccountId: eligibleCustomer().accounts[0].id } });
+    body: { cifRef: actors.customer.cifId, selectedCasaNo: eligibleCustomer().accounts[0].id } });
   const auditFor = (action: string) => api.dataSource.query('SELECT * FROM wms.audit_logs WHERE action=$1', [action]);
   async function challenge(operationId: string, purpose: string): Promise<OtpDelivery> {
     const response = await api.request('/otp/challenges', { method: 'POST', token: await api.tokenFor(actors.customer.actorId), body: { purpose, operationId } });
@@ -132,15 +132,15 @@ describe('S12 W3/BR-01 device id and failed/denied audit', () => {
   test('W3b a wrong OTP on onboarding consent writes a FAILURE audit row (OTP_INVALID, actor, resource, requestId) while the business transaction rolls back', async () => {
     const created = await create('s12-otp-fail');
     expect(created.status).toBe(201);
-    const otp = await challenge(created.body.id, 'SERVICE_CONSENT');
+    const otp = await challenge(created.body.requestId, 'SERVICE_CONSENT');
     const token = await api.tokenFor(actors.customer.actorId);
-    const rejected = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, { method: 'POST', token, key: 's12-consent-fail',
+    const rejected = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, { method: 'POST', token, key: 's12-consent-fail',
       headers: { 'x-request-id': rid(21) }, body: { challengeId: otp.challengeId, code: wrongCode(otp.code) } });
     expectApiError(rejected, 400, 'OTP_INVALID');
     const rows = await api.dataSource.query("SELECT * FROM wms.audit_logs WHERE outcome='FAILURE'");
     expect(rows, 'exactly one FAILURE audit row for the failed confirmation').toHaveLength(1);
     expect(rows[0].actor_id).toBe(actors.customer.actorId);
-    expect(rows[0].reference_id).toBe(created.body.id);
+    expect(rows[0].reference_id).toBe(created.body.requestId);
     expect(rows[0].request_id).toBe(rid(21));
     expect(JSON.stringify(rows[0])).toContain('OTP_INVALID');
     const [salt] = await api.dataSource.query('SELECT salt FROM wms.otp_challenges WHERE challenge_id=$1', [otp.challengeId]);
@@ -154,8 +154,8 @@ describe('S12 W3/BR-01 device id and failed/denied audit', () => {
 
   test('W3b a wrong OTP on risk confirmation writes a FAILURE audit row for that draft', async () => {
     const created = await create('s12-risk-register');
-    const consent = await challenge(created.body.id, 'SERVICE_CONSENT');
-    const accepted = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
+    const consent = await challenge(created.body.requestId, 'SERVICE_CONSENT');
+    const accepted = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
       key: 's12-risk-consent', body: { challengeId: consent.challengeId, code: consent.code } });
     expect(accepted.status).toBe(200);
     const questionnaire = await api.request('/risk-questionnaires/current', { token: await api.tokenFor(actors.customer.actorId) });
@@ -164,15 +164,15 @@ describe('S12 W3/BR-01 device id and failed/denied audit', () => {
     const draft = await api.request('/me/risk-assessments', { method: 'POST', token: await api.tokenFor(actors.customer.actorId), key: 's12-risk-draft',
       body: { questionnaireVersion: questionnaire.body.version, answers } });
     expect(draft.status).toBe(201);
-    const otp = await challenge(draft.body.id, 'RISK_PROFILE_CONFIRM');
-    const rejected = await api.request(`/me/risk-assessments/${draft.body.id}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
+    const otp = await challenge(draft.body.draftId, 'RISK_PROFILE_CONFIRM');
+    const rejected = await api.request(`/me/risk-assessments/${draft.body.draftId}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
       key: 's12-risk-fail', headers: { 'x-request-id': rid(22) },
       body: { challengeId: otp.challengeId, code: wrongCode(otp.code), expectedCurrentProfileVersion: 0 } });
     expectApiError(rejected, 400, 'OTP_INVALID');
     const rows = await api.dataSource.query("SELECT * FROM wms.audit_logs WHERE outcome='FAILURE'");
     expect(rows).toHaveLength(1);
     expect(rows[0].actor_id).toBe(actors.customer.actorId);
-    expect(rows[0].reference_id).toBe(draft.body.id);
+    expect(rows[0].reference_id).toBe(draft.body.draftId);
     expect(rows[0].request_id).toBe(rid(22));
     expect(JSON.stringify(rows[0])).toContain('OTP_INVALID');
     expectSafe(rows, [otp.code, wrongCode(otp.code)]);
@@ -181,8 +181,8 @@ describe('S12 W3/BR-01 device id and failed/denied audit', () => {
 
   test('W3c an RM refused with 403 on GET /customers/:id writes a DENIED audit row with actor, resource and requestId', async () => {
     const created = await create('s12-denied-register');
-    const consent = await challenge(created.body.id, 'SERVICE_CONSENT');
-    const accepted = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
+    const consent = await challenge(created.body.requestId, 'SERVICE_CONSENT');
+    const accepted = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
       key: 's12-denied-consent', body: { challengeId: consent.challengeId, code: consent.code } });
     expect(accepted.status).toBe(200);
     const token = await api.tokenFor(rmBeta.actorId);
@@ -208,12 +208,12 @@ describe('S12 W5 OTP TTL default 120 s on the injected clock', () => {
 
   async function pendingWithOtp(key: string) {
     const created = await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key,
-      body: { cifRef: actors.customer.cifId, selectedAccountId: eligibleCustomer().accounts[0].id } });
+      body: { cifRef: actors.customer.cifId, selectedCasaNo: eligibleCustomer().accounts[0].id } });
     expect(created.status).toBe(201);
     const issued = await api.request('/otp/challenges', { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
-      body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id } });
+      body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId } });
     expect(issued.status).toBe(201);
-    return { requestId: created.body.id as string, issued: issued.body,
+    return { requestId: created.body.requestId as string, issued: issued.body,
       delivery: api.deliveries.find(item => item.challengeId === issued.body.challengeId)! };
   }
   const confirm = async (value: Awaited<ReturnType<typeof pendingWithOtp>>, key: string) => api.request(`/me/onboarding-requests/${value.requestId}/confirm`, {
@@ -279,11 +279,11 @@ describe('S12 W5 OTP_TTL_SECONDS through the real CLI', () => {
     const rm = await token(actors.rm);
     const looked = await call('/onboarding/customer-lookup', rm, { cifRef: actors.customer.cifId });
     expect(looked.status).toBe(200);
-    const created = await call('/onboarding/requests', rm, { cifRef: actors.customer.cifId, selectedAccountId: looked.body.accounts[0].id }, 's12-cli-ttl');
+    const created = await call('/onboarding/requests', rm, { cifRef: actors.customer.cifId, selectedCasaNo: looked.body.accounts[0].casaNo }, 's12-cli-ttl');
     expect(created.status).toBe(201);
     const customer = await token(actors.customer);
     const issuedAt = Date.now();
-    const issued = await call('/otp/challenges', customer, { purpose: 'SERVICE_CONSENT', operationId: created.body.id });
+    const issued = await call('/otp/challenges', customer, { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId });
     expect(issued.status).toBe(201);
     const lifetime = new Date(issued.body.expiresAt).getTime() - issuedAt;
     expect(lifetime).toBeGreaterThan(20_000);

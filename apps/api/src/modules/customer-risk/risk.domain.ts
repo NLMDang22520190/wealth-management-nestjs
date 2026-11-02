@@ -56,14 +56,14 @@ export function scoreAnswers(questions: RiskQuestion[], answers: RiskAnswer[]): 
 }
 
 export function draftProjection(row: RiskDraftRow) {
-  return { id: row.draft_id, questionnaireVersion: row.questionnaire_version, answers: row.answers,
+  return { draftId: row.draft_id, questionnaireVersion: row.questionnaire_version, answers: row.answers,
     score: row.score, category: row.category, maxProductRisk: row.max_product_risk, allocation: row.allocation,
     expectedCurrentProfileVersion: row.expected_current_profile_version, payloadHash: row.payload_hash,
     expiresAt: new Date(row.expires_at).toISOString() };
 }
 
 export function profileProjection(row: RiskProfileRow, now: Date) {
-  return { id: row.risk_profile_id, draftId: row.draft_id, customerId: row.customer_id, version: row.version,
+  return { riskProfileId: row.risk_profile_id, draftId: row.draft_id, customerId: row.customer_id, version: row.version,
     questionnaireVersion: row.questionnaire_version, answers: row.answers, score: row.score, category: row.category,
     maxProductRisk: row.max_product_risk, allocation: row.allocation,
     confirmedAt: new Date(row.confirmed_at).toISOString(), expiresAt: new Date(row.expires_at).toISOString(),

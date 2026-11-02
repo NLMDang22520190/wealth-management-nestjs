@@ -21,10 +21,10 @@ describe('S2a AC04/AC08 draft audit and trusted questionnaire publication', () =
   }
   async function register() {
     const request = await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key: 's2a-registration',
-      body: { cifRef: actors.customer.cifId, selectedAccountId: eligibleCustomer().accounts[0].id } });
+      body: { cifRef: actors.customer.cifId, selectedCasaNo: eligibleCustomer().accounts[0].id } });
     expect(request.status).toBe(201);
-    const otp = await challenge(request.body.id, 'SERVICE_CONSENT');
-    const response = await api.request(`/me/onboarding-requests/${request.body.id}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
+    const otp = await challenge(request.body.requestId, 'SERVICE_CONSENT');
+    const response = await api.request(`/me/onboarding-requests/${request.body.requestId}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
       key: 's2a-consent', body: { challengeId: otp.challengeId, code: otp.code } });
     expect(response.status).toBe(200);
     return { ...response.body, otp };
@@ -46,9 +46,9 @@ describe('S2a AC04/AC08 draft audit and trusted questionnaire publication', () =
     return api.dataSource.query("SELECT * FROM wms.audit_logs WHERE action='RISK_DRAFT_CREATED' AND outcome='SUCCESS' ORDER BY reference_id");
   }
   function assertAudit(audit: any, result: any) {
-    expect(audit).toMatchObject({ actor_id: actors.customer.actorId, actor_role: 'CUSTOMER', reference_id: result.id,
+    expect(audit).toMatchObject({ actor_id: actors.customer.actorId, actor_role: 'CUSTOMER', reference_id: result.draftId,
       request_id: rid(41), ip_address: '127.0.0.1', user_agent: 'Synthetic draft device', old_value: null,
-      new_value: { id: result.id, questionnaireVersion: result.questionnaireVersion, expectedCurrentProfileVersion: result.expectedCurrentProfileVersion,
+      new_value: { id: result.draftId, questionnaireVersion: result.questionnaireVersion, expectedCurrentProfileVersion: result.expectedCurrentProfileVersion,
         score: 10, category: 'CONSERVATIVE' } });
     expect(new Date(audit.created_at).toISOString()).toBe(api.state.now.toISOString());
   }
@@ -66,7 +66,7 @@ describe('S2a AC04/AC08 draft audit and trusted questionnaire publication', () =
     // Soft checks let the independent rollback boundary run even when the append is missing.
     expect.soft(audits, 'a newly created draft must have exactly one successful audit, including on replay').toHaveLength(1);
     if (audits[0]) assertAudit(audits[0], first.body);
-    expect(await api.dataSource.query('SELECT draft_id FROM wms.risk_assessment_drafts WHERE draft_id=$1', [first.body.id])).toEqual([{ draft_id: first.body.id }]);
+    expect(await api.dataSource.query('SELECT draft_id FROM wms.risk_assessment_drafts WHERE draft_id=$1', [first.body.draftId])).toEqual([{ draft_id: first.body.draftId }]);
     const beforeDrafts = await api.dataSource.query('SELECT * FROM wms.risk_assessment_drafts ORDER BY draft_id');
     const beforeOutbox = await api.dataSource.query('SELECT * FROM wms.outbox_events ORDER BY event_id');
     const [beforeService] = await api.dataSource.query('SELECT * FROM wms.wealth_services WHERE service_id=$1', [registered.serviceId]);
@@ -88,7 +88,7 @@ describe('S2a AC04/AC08 draft audit and trusted questionnaire publication', () =
     expect(await api.dataSource.query('SELECT * FROM wms.idempotency_records WHERE idem_key=$1', ['s2a-atomic-draft'])).toHaveLength(1);
     const recoveredAudits = await draftAudits();
     expect.soft(recoveredAudits, 'each committed intent creates one audit and retry/replay creates no duplicates').toHaveLength(2);
-    const recoveredAudit = recoveredAudits.find((audit: any) => audit.reference_id === retried.body.id);
+    const recoveredAudit = recoveredAudits.find((audit: any) => audit.reference_id === retried.body.draftId);
     expect.soft(recoveredAudit).toBeDefined();
     if (recoveredAudit) assertAudit(recoveredAudit, retried.body);
     const observed = JSON.stringify([first.body, retried.body, recoveredAudits, api.logs]);
@@ -104,8 +104,8 @@ describe('S2a AC04/AC08 draft audit and trusted questionnaire publication', () =
     const original = await questionnaire();
     const preview = await draft(original, 's2a-original-draft');
     expect(preview.status).toBe(201);
-    const otp = await challenge(preview.body.id);
-    const confirmed = await api.request(`/me/risk-assessments/${preview.body.id}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
+    const otp = await challenge(preview.body.draftId);
+    const confirmed = await api.request(`/me/risk-assessments/${preview.body.draftId}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
       key: 's2a-original-confirm', body: { challengeId: otp.challengeId, code: otp.code, expectedCurrentProfileVersion: preview.body.expectedCurrentProfileVersion } });
     expect(confirmed.status).toBe(200);
     const [originalRow] = await api.dataSource.query('SELECT * FROM wms.risk_questionnaire_versions WHERE version=$1', [original.version]);
@@ -154,7 +154,7 @@ describe('S2a AC04/AC08 draft audit and trusted questionnaire publication', () =
     expect(newPreview.status).toBe(201);
     expect(newPreview.body).toMatchObject({ questionnaireVersion: nextVersion, answers: draftBody(active).answers,
       expectedCurrentProfileVersion: 1, score: 10, category: 'CONSERVATIVE' });
-    expect(newPreview.body.id).not.toBe(preview.body.id);
+    expect(newPreview.body.draftId).not.toBe(preview.body.draftId);
     expect((await api.request('/me/risk-profile', { token })).body.current).toEqual(confirmed.body);
   });
 });

@@ -49,10 +49,10 @@ export interface CustomerSummaryRow {
 export function customerSummary(row: CustomerSummaryRow, now: Date) {
   const iso = (value: Date) => new Date(value).toISOString();
   return {
-    customerId: row.customer_id, name: row.name, serviceStatus: row.service_status,
+    customerId: row.customer_id, fullName: row.name, serviceStatus: row.service_status,
     currentAssignment: { rmId: row.rm_id, teamId: row.team_id, version: row.assignment_version,
       provisional: row.provisional, validFrom: iso(row.assigned_from) },
-    currentRisk: row.risk_id ? { id: row.risk_id, category: row.risk_category, version: row.risk_version,
+    currentRisk: row.risk_id ? { riskProfileId: row.risk_id, category: row.risk_category, version: row.risk_version,
       expiresAt: iso(row.risk_expires_at!), valid: now.getTime() < new Date(row.risk_expires_at!).getTime() } : null,
     // Missing valuation is unknown, never zero; value is a decimal string produced by SQL numeric math.
     aum: row.aum_value === null

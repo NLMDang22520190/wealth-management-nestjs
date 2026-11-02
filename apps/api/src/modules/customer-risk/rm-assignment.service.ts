@@ -20,13 +20,13 @@ export class RmAssignmentService {
 
   async team(actor: Actor) {
     if (actor.role !== 'LEADER' || !actor.teamId) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
-    // DECISION[D-R9 S1]: rmName is the RM's staff_users.employee_code until S3c renames it to rmFullName (full_name).
-    const rows = await this.database.query(`SELECT s.staff_id AS rm_id,s.employee_code,s.team_id,s.is_active,s.max_customers,
+    // rmFullName = staff_users.full_name (R9 S3; S1 served employee_code as rmName).
+    const rows = await this.database.query(`SELECT s.staff_id AS rm_id,s.full_name,s.team_id,s.is_active,s.max_customers,
       (SELECT count(*)::integer FROM wms.rm_assignments h WHERE h.rm_id=s.staff_id AND h.valid_to IS NULL) AS assigned,
       (SELECT count(*)::integer FROM wms.rm_capacity_reservations r WHERE r.rm_id=s.staff_id AND r.status='ACTIVE' AND r.expires_at>$2) AS reserved
       FROM wms.staff_users s WHERE s.role='RM' AND s.team_id=$1 ORDER BY s.staff_id`, [actor.teamId, this.options.clock.now()]);
-    return { items: rows.map((row: { rm_id: string; employee_code: string | null; team_id: string; is_active: boolean; max_customers: number; assigned: number; reserved: number }) => ({
-      rmId: row.rm_id, rmName: row.employee_code ?? null, teamId: row.team_id, active: row.is_active, assigned: row.assigned, reserved: row.reserved,
+    return { items: rows.map((row: { rm_id: string; full_name: string; team_id: string; is_active: boolean; max_customers: number; assigned: number; reserved: number }) => ({
+      rmId: row.rm_id, rmFullName: row.full_name, teamId: row.team_id, active: row.is_active, assigned: row.assigned, reserved: row.reserved,
       available: Math.max(0, row.max_customers - row.assigned - row.reserved), capacityLimit: row.max_customers })) };
   }
 
@@ -35,18 +35,18 @@ export class RmAssignmentService {
     const params: unknown[] = [actor.teamId];
     let filter = '';
     if (name) { params.push(`%${name.replace(/[\\%_]/g, '\\$&')}%`); filter = ' AND c.full_name ILIKE $2'; }
-    // DECISION[D-R9 S1]: rmName = staff_users.employee_code of the assigned RM (S3c: full_name).
+    // rmFullName = staff_users.full_name of the assigned RM.
     const from = `FROM wms.customers c JOIN wms.rm_assignments a ON a.customer_id=c.customer_id AND a.valid_to IS NULL
       LEFT JOIN wms.staff_users m ON m.role='RM' AND m.staff_id=a.rm_id
       WHERE a.team_id=$1${filter}`;
     const [count] = await this.database.query(`SELECT count(*)::integer AS total ${from}`, params);
-    const rows = await this.database.query(`SELECT c.customer_id AS id,c.full_name AS name,a.rm_id,m.employee_code AS rm_name,a.version,
+    const rows = await this.database.query(`SELECT c.customer_id AS id,c.full_name AS name,a.rm_id,m.full_name AS rm_name,a.version,
       EXISTS(SELECT 1 FROM wms.wealth_services w JOIN wms.risk_profiles r ON r.risk_profile_id=w.current_risk_profile_id WHERE w.customer_id=c.customer_id AND r.expires_at>$${params.length + 3}) AS risk_valid,
       (SELECT max(n.created_at) FROM wms.customer_notifications n WHERE n.customer_id=c.customer_id AND n.kind='RISK_SURVEY_REMINDER') AS last_reminder_at ${from} ORDER BY c.full_name,c.customer_id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, paging.pageSize, (paging.page - 1) * paging.pageSize, this.options.clock.now()]);
     return { page: paging.page, pageSize: paging.pageSize, total: count.total,
       items: rows.map((row: { id: string; name: string; rm_id: string; rm_name: string | null; version: number; risk_valid: boolean; last_reminder_at: Date | null }) =>
-        ({ customerId: row.id, name: row.name, rmId: row.rm_id, rmName: row.rm_name ?? null, assignmentVersion: row.version,
+        ({ customerId: row.id, fullName: row.name, rmId: row.rm_id, rmFullName: row.rm_name ?? null, assignmentVersion: row.version,
           riskProfileValid: row.risk_valid, lastReminderAt: row.last_reminder_at ? row.last_reminder_at.toISOString() : null })) };
   }
 

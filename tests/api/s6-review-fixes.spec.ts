@@ -27,15 +27,15 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     if (cifId === gamma.cifId) api.state.core = eligibleCustomer(cifId);
     const created = await api.request('/onboarding/requests', {
       method: 'POST', token: await api.tokenFor(rmActorId), key: `s6-register-${cifId}`,
-      body: { cifRef: cifId, selectedAccountId: eligibleCustomer(cifId).accounts[0].id },
+      body: { cifRef: cifId, selectedCasaNo: eligibleCustomer(cifId).accounts[0].id },
     });
     expect(created.status).toBe(201);
     const challenge = await api.request('/otp/challenges', {
-      method: 'POST', token: await api.tokenFor(actorId), body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id },
+      method: 'POST', token: await api.tokenFor(actorId), body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId },
     });
     expect(challenge.status).toBe(201);
     const delivery = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const accepted = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, {
+    const accepted = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, {
       method: 'POST', token: await api.tokenFor(actorId), key: `s6-consent-${cifId}`,
       body: { challengeId: delivery.challengeId, code: delivery.code },
     });
@@ -55,11 +55,11 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     });
     expect(draft.status).toBe(201);
     const challenge = await api.request('/otp/challenges', {
-      method: 'POST', token: await api.tokenFor(actorId), body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.id },
+      method: 'POST', token: await api.tokenFor(actorId), body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.draftId },
     });
     expect(challenge.status).toBe(201);
     const delivery = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const confirmed = await api.request(`/me/risk-assessments/${draft.body.id}/confirm`, {
+    const confirmed = await api.request(`/me/risk-assessments/${draft.body.draftId}/confirm`, {
       method: 'POST', token: await api.tokenFor(actorId), key: `s6-confirm-${customerId}-${expectedVersion}`,
       body: { challengeId: delivery.challengeId, code: delivery.code, expectedCurrentProfileVersion: expectedVersion },
     });
@@ -136,7 +136,7 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     expect(ids(list.body).sort(byId)).toEqual([first.customerId, second.customerId].sort(byId));
     expect(ids(list.body)).not.toContain(foreign.customerId);
     expect(list.body.items.find((item: any) => item.customerId === first.customerId))
-      .toEqual({ customerId: first.customerId, name: 'Alpha Leader Test', rmId: actors.rm.rmId, assignmentVersion: 1, rmName: actors.rm.actorId, riskProfileValid: false, lastReminderAt: null });
+      .toEqual({ customerId: first.customerId, fullName: 'Alpha Leader Test', rmId: actors.rm.rmId, assignmentVersion: 1, rmFullName: `Synthetic RM ${actors.rm.actorId}`, riskProfileValid: false, lastReminderAt: null });
 
     const filtered = await api.request('/team/customers?name=beta', { token: leaderToken });
     expect(filtered.status).toBe(200);
@@ -165,7 +165,7 @@ describe('S6 review fixes over HTTP and real PostgreSQL', () => {
     expect((await transfer(first.customerId, replacementRm, 1, 's6-f3-move')).status).toBe(200);
     const list = await api.request('/team/customers', { token: await api.tokenFor(actors.leader.actorId) });
     expect(list.status).toBe(200);
-    expect(list.body.items).toEqual([{ customerId: first.customerId, name: expect.any(String), rmId: replacementRm, assignmentVersion: 2, rmName: staff.replacement.actorId, riskProfileValid: true, lastReminderAt: null }]);
+    expect(list.body.items).toEqual([{ customerId: first.customerId, fullName: expect.any(String), rmId: replacementRm, assignmentVersion: 2, rmFullName: `Synthetic RM ${staff.replacement.actorId}`, riskProfileValid: true, lastReminderAt: null }]);
   });
 
   // F4

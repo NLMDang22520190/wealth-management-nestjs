@@ -19,7 +19,7 @@ const BANNER = 'Trưởng nhóm nhắc bạn hoàn thành khảo sát rủi ro (
 async function remindCustomer(name: string) {
   const lead = await tokenFor('NV0001');
   const list = await api('/team/customers?page=1&pageSize=50', { token: lead });
-  const target = (list.body.items as Array<{ customerId: string; name: string }>).find(item => item.name.includes(name))!;
+  const target = (list.body.items as Array<{ customerId: string; fullName: string }>).find(item => item.fullName.includes(name))!;
   const sent = await api('/team/risk-survey-reminders', { token: lead, body: { customerIds: [target.customerId] } });
   expect(sent.status).toBe(200);
   expect(sent.body.sent).toBe(1);
@@ -66,7 +66,7 @@ test.describe('UC09 R4-fix', () => {
     await addCustomers('OVR', 'Khách hàng quá tải ', 85, ids.rmBeta);
     await openAssignments(page);
     const rows = page.getByRole('region', { name: 'Danh sách RM' });
-    for (const [rm, text] of [['NV0002', '2/80 khách'], ['NV0003', '85/80 khách']] as const) {
+    for (const [rm, text] of [['Nguyễn Văn An', '2/80 khách'], ['Lê Minh Bảo', '85/80 khách']] as const) {
       const row = rows.getByRole('row', { name: new RegExp(rm) });
       await expect(row.getByText(text, { exact: true })).toBeVisible();
       const bar = row.locator('[role="progressbar"]');

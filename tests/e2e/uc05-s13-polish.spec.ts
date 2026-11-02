@@ -61,7 +61,7 @@ test.describe('S13 UI polish (N1 N3 N4 N5 N8 N10)', () => {
 
   test('N5 a 6-digit one-time-code autofill into box "Chữ số 1" spreads across all six boxes', async ({ page }) => {
     const created = await api('/onboarding/requests', { token: await tokenFor('NV0002'), key: 'e2e-s13-n5-setup',
-      body: { cifRef: 'CIF100001', selectedAccountId: '0011000123451' } });
+      body: { cifRef: 'CIF100001', selectedCasaNo: '0011000123451' } });
     expect(created.status).toBe(201);
     await openApp(page);
     await switchRole(page, 'CIF100001');

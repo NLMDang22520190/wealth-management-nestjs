@@ -28,7 +28,7 @@ Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một �
 ## Luồng Phần 1
 
 1. **RM tra cứu khách (UC01):** Core mô phỏng trả CIF, điều kiện đăng ký (đủ 18 tuổi, eKYC, không thuộc danh sách đen, nhóm nợ dưới 3) và tài khoản VND chính chủ. Giao diện đi theo 3 bước (Tra cứu → Chọn tài khoản → Gửi lời mời); lời mời có hạn 72 giờ. Tra cứu có kiểm tra quyền theo phân công hiện tại; mỗi RM tra cứu tối đa 30 lần/phút và tạo tối đa 10 lời mời/phút.
-2. **Khách đồng ý điều khoản (UC01):** khách đọc điều khoản, nhận OTP (hiệu lực 120 giây, chỉnh bằng `OTP_TTL_SECONDS`) và tự nhập vào 6 ô (dán được cả mã, có đếm ngược gửi lại mã). Consent, dịch vụ, tài khoản số dư 0 và phân công RM được ghi trong cùng một transaction.
+2. **Khách đồng ý điều khoản (UC01):** khách đọc điều khoản, nhận OTP (hiệu lực 120 giây, chỉnh bằng `OTP_TTL_SECONDS` trong khoảng 1–120) và tự nhập vào 6 ô (dán được cả mã, có đếm ngược gửi lại mã). Consent, dịch vụ, tài khoản số dư 0 và phân công RM được ghi trong cùng một transaction.
 3. **Khách khảo sát rủi ro (UC02):** 10 câu hỏi tiếng Việt, hiện từng câu với nút Câu trước/Câu tiếp; server tính điểm và trả kết quả dự kiến kèm **mức rủi ro sản phẩm tối đa** và **phân bổ tài sản**. Chỉ khi xác nhận OTP mới tạo hồ sơ có hiệu lực 12 tháng và kích hoạt dịch vụ. Khi trưởng nhóm gửi lời nhắc, khách thấy banner **Thông báo** dẫn tới trang khảo sát; banner tự ẩn khi hồ sơ đã còn hiệu lực.
 4. **Trưởng nhóm phân công (UC03):** chọn khách trong nhóm, xem tải từng RM theo tên (giới hạn 80 khách), chuyển RM kèm lý do sau hộp xác nhận nêu rõ tác động. Chỉ chuyển được khách có dịch vụ đang hoạt động **và hồ sơ rủi ro còn hiệu lực** (nếu không: `RISK_PROFILE_REQUIRED`). Khách chưa hoàn thành khảo sát có nút **Nhắc làm khảo sát** (từng khách hoặc tất cả), mỗi khách tối đa 1 lời nhắc trong 24 giờ. Đề xuất đang chờ của RM cũ bị hủy trong cùng transaction và số lượng hủy do server trả về.
 5. **RM theo dõi khách (UC04):** chỉ thấy khách đang phụ trách; lọc, sắp xếp, phân trang phía server. AUM (rút gọn trong danh sách, số chính xác ở trang chi tiết), tiền mặt, số lượt kiểm tra danh mục chờ và đề xuất chờ duyệt đều có `asOf`/nguồn; AUM chưa có dữ liệu hiển thị "Chưa có dữ liệu", không bao giờ là 0.
@@ -77,7 +77,7 @@ Khởi động PostgreSQL. Với Docker, dùng file compose có sẵn (thông ti
 docker compose -f infra/compose.yml up -d
 ```
 
-Không dùng Docker thì trỏ `DATABASE_URL` trong `.env` tới một database PostgreSQL trống của bạn. Sau đó chạy migration + seed (chạy lại nhiều lần vẫn an toàn) và khởi động API:
+Không dùng Docker thì trỏ `DATABASE_URL` trong `.env` tới một database PostgreSQL trống của bạn. Sau đó chạy migration + seed (chạy lại nhiều lần vẫn an toàn) và khởi động API. Dữ liệu CSDL nằm trong schema `wms` của nhóm: migration 008 thay các bảng `public` cũ, nên database demo cục bộ tạo trước đó sẽ được dựng lại (dữ liệu cũ không được chuyển). `seed:demo` nạp dữ liệu mẫu của nhóm (`scripts/team-seed/wms_seed.sql`, sao nguyên văn; tên và số liệu là dữ liệu demo do nhóm tự đặt, không phải dữ liệu thật) đúng một lần; chỉ một thay đổi là bộ câu hỏi `demo-risk-v1-vi` được nạp ở trạng thái RETIRED vì `demo-risk-v2-vi` đã ACTIVE:
 
 ```bash
 npm run seed:demo
@@ -94,9 +94,11 @@ Mở `http://127.0.0.1:5173`, chọn **Vai trò demo** rồi bấm **Chuyển va
 
 | Vai | Dùng để |
 |---|---|
-| `rm-alpha` (RM) | Tra cứu CIF `00000101` / `00000102`, tạo lời mời, xem khách phụ trách |
-| `customer-alpha`, `customer-beta` (Khách) | Đồng ý điều khoản, khảo sát rủi ro, xem hồ sơ. Mã OTP xem ở nút **Xem hộp thư OTP demo** |
-| `leader-alpha` (Trưởng nhóm) | Xem tải RM, chuyển khách giữa `rm-alpha` và `rm-beta` |
+| `NV0002` (RM An), `NV0003` (RM Bảo) | Tra cứu CIF `CIF100006` (đủ điều kiện) để tạo lời mời; `CIF100007` (danh sách đen), `CIF100008` (nhóm nợ 3), `CIF100009` (dưới 18 tuổi) bị từ chối; xem khách phụ trách |
+| `CIF100001` … `CIF100004` (Khách: Mai, Huy, Tâm, Yến) | Xem hồ sơ, khảo sát rủi ro (CIF100004 chưa khảo sát và nhận lời nhắc). Mã OTP xem ở nút **Xem hộp thư OTP demo** |
+| `NV0001` (Trưởng nhóm) | Xem tải RM, chuyển khách giữa `NV0002` và `NV0003` |
+
+Mã đăng nhập demo là `employee_code` (nhân viên) hoặc mã CIF (khách). Nhân viên back office `NV0004`/`NV0005` có trong dữ liệu mẫu nhưng không đăng nhập được vào Phân hệ 1. CIF100005 chỉ có lời mời đang chờ ký. Tên trường JSON của API theo tên cột của nhóm (`requestId`, `fullName`, `rmFullName`, `selectedCasaNo`…), xem [bản đồ tên trường](docs/part1/05-api-json-names.vi.md).
 
 Mock auth, Core mô phỏng và hộp thư OTP demo **chỉ bật khi `NODE_ENV` là development/test và `MOCK_AUTH_ENABLED=true`**; cấu hình production kèm mock bị từ chối khi khởi động.
 
@@ -122,7 +124,7 @@ flowchart LR
 ```text
 apps/api      NestJS: platform (auth, http, validation, transactions), modules/customer-risk, bridges P2–P4, migrations
 apps/web      React 19 + Vite + shadcn/ui (Radix, Tailwind CSS v4, lucide icons); hash routing
-scripts/      seed-demo.mjs — tạo actor demo, chạy migration
+scripts/      seed-demo.mjs — chạy migration và nạp dữ liệu mẫu của nhóm; team-seed/wms_seed.sql
 tests/api     Integration test trên PostgreSQL thật (Vitest)
 tests/e2e     Playwright: hành trình UC01–04 trên desktop 1280px và mobile 375px
 infra/        Docker Compose PostgreSQL 15 cho demo
@@ -172,7 +174,7 @@ GitHub Actions (`.github/workflows/ci.yml`) chạy build, lint, typecheck và te
 
 - Bộ câu hỏi khảo sát được lưu theo phiên bản: phiên bản tiếng Việt `demo-risk-v2-vi` đang dùng, phiên bản đầu `demo-risk-v1` (tiếng Anh) được giữ nguyên ở trạng thái ngừng dùng cho lịch sử. Bản nháp làm trên phiên bản đã ngừng không xác nhận được.
 - "Kiểm tra danh mục chờ" là số yêu cầu kiểm tra holdings đang mở do hạ mức rủi ro; engine định giá và drift đầy đủ thuộc Phần 3.
-- Tên RM là mã actor trong registry demo (ví dụ `rm-alpha`) kèm 8 ký tự đầu của mã RM; chưa có tên hiển thị thật.
+- Tên RM hiển thị là `full_name` trong `staff_users` (ví dụ `Nguyễn Văn An`) kèm 8 ký tự đầu của mã RM; vì dữ liệu mẫu dùng UUID cố định, hai RM demo có cùng 8 ký tự đầu.
 - Lời nhắc khảo sát là thông báo trong ứng dụng; chưa gửi email/SMS và chưa có nhắc tự động khi hồ sơ sắp hết hạn.
 - Giới hạn tần suất (cấu hình bằng `LOOKUP_RATE_LIMIT_PER_MINUTE`, `INVITE_RATE_LIMIT_PER_MINUTE`, mặc định 30 và 10) được giữ trong bộ nhớ của một tiến trình API.
 - Mock IAM/OTP chỉ phục vụ demo, chưa phải cơ chế đủ điều kiện triển khai ngân hàng thật.
@@ -184,6 +186,7 @@ GitHub Actions (`.github/workflows/ci.yml`) chạy build, lint, typecheck và te
 - [Đặc tả UC01–04 và sơ đồ UC tổng thể](docs/part1/02-use-cases.vi.md)
 - [Trình tự xác nhận rủi ro](docs/part1/03-risk-sequence.vi.md)
 - [Từ điển dữ liệu](docs/part1/04-data-dictionary.vi.md)
+- [Tên trường JSON của API](docs/part1/05-api-json-names.vi.md)
 - [Hướng dẫn cho coding agent](AGENTS.md) (lệnh, quy tắc, chuỗi giao diện mà test E2E dựa vào)
 
 Tài liệu gốc DOCX/HTML của môn học và thông tin cá nhân không được đưa vào repo.

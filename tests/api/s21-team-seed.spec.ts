@@ -259,10 +259,10 @@ describe('S21 R9-S2 vendored team seed, demo login and Core mock', () => {
       for (const [cif, name, dateOfBirth, casa] of expected) {
         const found = await lookup(token, cif);
         expect(found.status, cif).toBe(200);
-        expect(found.body, cif).toMatchObject({ cifRef: cif, name, active: true, eligible: true });
+        expect(found.body, cif).toMatchObject({ cifRef: cif, fullName: name, active: true, eligible: true });
         if (dateOfBirth) expect(found.body.dateOfBirth, cif).toBe(dateOfBirth);
         else expect(found.body.dateOfBirth, `${cif} DOB is not in the team seed`).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-        expect(found.body.accounts, cif).toContainEqual(expect.objectContaining({ id: casa, currency: 'VND' }));
+        expect(found.body.accounts, cif).toContainEqual(expect.objectContaining({ casaNo: casa, currency: 'VND' }));
       }
     }, 60_000);
 
@@ -271,11 +271,11 @@ describe('S21 R9-S2 vendored team seed, demo login and Core mock', () => {
       const token = await rmToken();
       const found = await lookup(token, 'CIF100006');
       expect(found.status).toBe(200);
-      expect(found.body).toMatchObject({ cifRef: 'CIF100006', active: true, eligible: true, name: expect.stringMatching(/\S/) });
+      expect(found.body).toMatchObject({ cifRef: 'CIF100006', active: true, eligible: true, fullName: expect.stringMatching(/\S/) });
       expect(ageOn(found.body.dateOfBirth)).toBeGreaterThanOrEqual(18);
-      const account = (found.body.accounts as Array<{ id: string; currency: string }>).find(item => item.currency === 'VND');
+      const account = (found.body.accounts as Array<{ casaNo: string; currency: string }>).find(item => item.currency === 'VND');
       expect(account, 'a VND account').toBeDefined();
-      const created = await request('/onboarding/requests', { token, key: 's21-core-100006', body: { cifRef: 'CIF100006', selectedAccountId: account!.id } });
+      const created = await request('/onboarding/requests', { token, key: 's21-core-100006', body: { cifRef: 'CIF100006', selectedCasaNo: account!.casaNo } });
       expect(created.status).toBe(201);
     }, 60_000);
 
@@ -290,7 +290,7 @@ describe('S21 R9-S2 vendored team seed, demo login and Core mock', () => {
       if (reason === 'under 18') expect(ageOn(found.body.dateOfBirth), 'DOB makes the customer a minor').toBeLessThan(18);
       else expect(ageOn(found.body.dateOfBirth), 'adult, so the other rule is what blocks').toBeGreaterThanOrEqual(18);
       const refused = await request('/onboarding/requests', { token, key: `s21-core-${cif}`,
-        body: { cifRef: cif, selectedAccountId: found.body.accounts[0]?.id ?? 'unused' } });
+        body: { cifRef: cif, selectedCasaNo: found.body.accounts[0]?.casaNo ?? 'unused' } });
       expect(refused.status).toBe(422);
       expect(refused.body.code).toBe('CUSTOMER_INELIGIBLE');
       expect((await rows('SELECT count(*)::int AS n FROM wms.onboarding_requests'))[0].n).toBe(0);

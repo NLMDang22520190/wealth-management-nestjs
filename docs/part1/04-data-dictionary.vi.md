@@ -1,5 +1,7 @@
 # Từ điển dữ liệu — Phần 1
 
+> Từ R9 các bảng dưới đây nằm trong schema `wms` với tên và cột của nhóm (ví dụ `staff_users`, `customers.customer_id`, `onboarding_requests.request_id`, `rm_assignments`); mô tả cũ ở dưới là lịch sử trước migration 008. Tên trường JSON xem `05-api-json-names.vi.md`.
+
 Cơ sở dữ liệu: PostgreSQL. Schema được quản lý bằng migration; ứng dụng không dùng `synchronize`. Tài liệu này mô tả các bảng nền đã có trong source; các bảng risk và tích hợp RM sẽ được bổ sung khi triển khai tương ứng.
 
 ## Đăng ký dịch vụ

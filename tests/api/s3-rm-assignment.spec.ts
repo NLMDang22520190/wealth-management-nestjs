@@ -30,13 +30,13 @@ describe('S3 AC05/AC08/AC12 RM transfer on real PostgreSQL', () => {
 
   async function register(cifId: string = actors.customer.cifId, actorId: string = actors.customer.actorId, activate = true) {
     const created = await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key: `onboard-${cifId}`,
-      body: { cifRef: cifId, selectedAccountId: eligibleCustomer(cifId).accounts[0].id } });
+      body: { cifRef: cifId, selectedCasaNo: eligibleCustomer(cifId).accounts[0].id } });
     expect(created.status).toBe(201);
     const customerToken = await api.tokenFor(actorId);
-    const challenge = await api.request('/otp/challenges', { method: 'POST', token: customerToken, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id } });
+    const challenge = await api.request('/otp/challenges', { method: 'POST', token: customerToken, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId } });
     expect(challenge.status).toBe(201);
     const otp = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const accepted = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, { method: 'POST', token: customerToken, key: `consent-${cifId}`, body: { challengeId: otp.challengeId, code: otp.code } });
+    const accepted = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, { method: 'POST', token: customerToken, key: `consent-${cifId}`, body: { challengeId: otp.challengeId, code: otp.code } });
     expect(accepted.status).toBe(200);
     if (activate) {
       const questionnaire = await api.request('/risk-questionnaires/current', { token: customerToken });
@@ -46,10 +46,10 @@ describe('S3 AC05/AC08/AC12 RM transfer on real PostgreSQL', () => {
         answers: questionnaire.body.questions.map((question: any) => ({ questionId: question.id, optionId: question.options[2].id })),
       } });
       expect(preview.status).toBe(201);
-      const riskChallenge = await api.request('/otp/challenges', { method: 'POST', token: customerToken, body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: preview.body.id } });
+      const riskChallenge = await api.request('/otp/challenges', { method: 'POST', token: customerToken, body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: preview.body.draftId } });
       expect(riskChallenge.status).toBe(201);
       const riskOtp = api.deliveries.find(item => item.challengeId === riskChallenge.body.challengeId)!;
-      const confirmed = await api.request(`/me/risk-assessments/${preview.body.id}/confirm`, { method: 'POST', token: customerToken, key: `risk-confirm-${cifId}`,
+      const confirmed = await api.request(`/me/risk-assessments/${preview.body.draftId}/confirm`, { method: 'POST', token: customerToken, key: `risk-confirm-${cifId}`,
         body: { challengeId: riskOtp.challengeId, code: riskOtp.code, expectedCurrentProfileVersion: 0 } });
       expect(confirmed.status).toBe(200);
       api.tick(); // category 4: chk_rma_period needs valid_to > valid_from for the later transfer
@@ -157,7 +157,7 @@ describe('S3 AC05/AC08/AC12 RM transfer on real PostgreSQL', () => {
     for (let index = 0; index < 79; index++) {
       await api.dataSource.transaction(async manager => {
         await insertActiveCustomer((text, params) => manager.query(text, params), { index, rmId: replacement.rmId, teamId: replacement.teamId!, now: api.state.now,
-          template: { consentId: consent.consent_id, draftId: first.profile.draftId, profileId: first.profile.id } });
+          template: { consentId: consent.consent_id, draftId: first.profile.draftId, profileId: first.profile.riskProfileId } });
       });
     }
     // Category 4: chk_onb_ttl fixes the request at created_at + 72 h; the reservation keeps its own 1 s expiry below.
@@ -280,8 +280,8 @@ describe('S3 AC05/AC08/AC12 RM transfer on real PostgreSQL', () => {
       async manager => ({ rows: await manager.query('SELECT * FROM wms.proposals WHERE customer_id=$1', [customerId]),
         risk: await risk.eligibility(actor, customerId, manager, api.state.now) }));
     expect((await readConsumer(first.customerId, actors.rm)).rows.map((row: any) => row.proposal_id)).toContain(firstPending);
-    expect((await readConsumer(first.customerId, actors.customer)).risk).toMatchObject({ profileId: first.profile.id, version: 1, valid: true });
-    expect((await readConsumer(first.customerId, actors.leader)).risk.profileId).toBe(first.profile.id);
+    expect((await readConsumer(first.customerId, actors.customer)).risk).toMatchObject({ profileId: first.profile.riskProfileId, version: 1, valid: true });
+    expect((await readConsumer(first.customerId, actors.leader)).risk.profileId).toBe(first.profile.riskProfileId);
     await expect(readConsumer(first.customerId, actors.otherCustomer)).rejects.toMatchObject({ code: 'FORBIDDEN' });
     await expect(readConsumer(first.customerId, staff.foreignLeader)).rejects.toMatchObject({ code: 'FORBIDDEN' });
     // Transfer-first: a database trigger barrier holds transfer AFTER it owns shared locks.
@@ -311,7 +311,7 @@ describe('S3 AC05/AC08/AC12 RM transfer on real PostgreSQL', () => {
     for (const suffix of ['', '/history']) expectApiError(await api.request(`/customers/${first.customerId}/risk-profile${suffix}`, { token: oldRmToken }), 403, 'FORBIDDEN');
     await expect(readConsumer(first.customerId, actors.rm)).rejects.toMatchObject({ code: 'FORBIDDEN' });
     const replacementRead = await readConsumer(first.customerId, replacement);
-    expect(replacementRead.risk).toMatchObject({ profileId: first.profile.id, version: 1, valid: true });
+    expect(replacementRead.risk).toMatchObject({ profileId: first.profile.riskProfileId, version: 1, valid: true });
     expect(replacementRead.rows.find((row: any) => row.proposal_id === firstPending).status).toBe('CANCELLED');
     await expect(executeConsumer(first.customerId, firstPending, replacement)).rejects.toMatchObject({ code: 'PROPOSAL_NOT_PENDING' });
     // Approval-first: callback writes are inside the actual port's transaction and locks.

@@ -9,10 +9,10 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
 interface Lookup {
-  cifRef: string; name: string; dateOfBirth: string; active: boolean; eligible: boolean;
-  accounts: Array<{ id: string; currency: string }>;
+  cifRef: string; fullName: string; dateOfBirth: string; active: boolean; eligible: boolean;
+  accounts: Array<{ casaNo: string; currency: string }>;
 }
-interface Invitation { id: string; status: string; expiresAt: string; termsVersion: string }
+interface Invitation { requestId: string; status: string; expiresAt: string; termsVersion: string }
 
 /** UC01 (RM): look up a customer in Core, pick one of their own VND accounts, create an invitation. */
 export function Onboarding() {
@@ -46,7 +46,7 @@ export function Onboarding() {
     setBusy('create'); setFailure(null);
     try {
       const created = await api<Invitation>('/onboarding/requests', { key: intentKey(name, account),
-        body: { cifRef: lookup.cifRef, selectedAccountId: account } });
+        body: { cifRef: lookup.cifRef, selectedCasaNo: account } });
       intentDone(name);
       setInvitation(created);
     } catch (error) { setFailure({ validation: describe(error, { RATE_LIMITED: 'Bạn đã tạo quá nhiều lời mời trong một phút. Vui lòng thử lại sau.' }) }); }
@@ -95,7 +95,7 @@ export function Onboarding() {
       {lookup && !invitation ? (
         <Panel title="Thông tin khách hàng">
           <Facts>
-            <Fact label="Họ tên">{lookup.name}</Fact>
+            <Fact label="Họ tên">{lookup.fullName}</Fact>
             <Fact label="Mã CIF">{lookup.cifRef}</Fact>
             <Fact label="Ngày sinh">{lookup.dateOfBirth.split('-').reverse().join('/')}</Fact>
             <Fact label="Điều kiện đăng ký">{lookup.eligible ? <Badge variant="ok">Đủ điều kiện</Badge> : <Badge variant="bad">Chưa đủ điều kiện</Badge>}</Fact>
@@ -104,9 +104,9 @@ export function Onboarding() {
             <fieldset className="m-0 mb-4 min-w-0 border-0 p-0">
               <legend className="mb-2 p-0 font-semibold">Tài khoản VND của khách hàng</legend>
               {lookup.accounts.map(item => (
-                <Choice key={item.id}>
-                  <input type="radio" className={choiceInput} name="account" value={item.id} checked={account === item.id} onChange={() => setAccount(item.id)} />
-                  <span>Tài khoản {item.currency} <span className="font-medium tabular-nums">{item.id}</span></span>
+                <Choice key={item.casaNo}>
+                  <input type="radio" className={choiceInput} name="account" value={item.casaNo} checked={account === item.casaNo} onChange={() => setAccount(item.casaNo)} />
+                  <span>Tài khoản {item.currency} <span className="font-medium tabular-nums">{item.casaNo}</span></span>
                 </Choice>
               ))}
             </fieldset>

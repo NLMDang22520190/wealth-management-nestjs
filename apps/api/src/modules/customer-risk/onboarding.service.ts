@@ -56,8 +56,9 @@ export class OnboardingService {
     // A registered customer's PII is only visible to the current assignee; unregistered prospects stay open to any RM.
     const [registered] = await this.database.query('SELECT customer_id FROM wms.customers WHERE cif_id=$1', [customer.cifId]);
     if (registered) await this.access.authorize(actor, registered.customer_id, this.database.manager);
-    return { cifRef: customer.cifId, name: customer.name, dateOfBirth: customer.dateOfBirth, active: customer.active,
-      eligible: isEligible(customer, this.options.clock.now()), accounts: eligibleAccounts(customer) };
+    return { cifRef: customer.cifId, fullName: customer.name, dateOfBirth: customer.dateOfBirth, active: customer.active,
+      eligible: isEligible(customer, this.options.clock.now()),
+      accounts: eligibleAccounts(customer).map(({ id, ...account }) => ({ casaNo: id, ...account })) };
   }
 
   private requireEligible(customer: CoreCustomer, selectedAccount: string, now: Date): void {
@@ -67,7 +68,7 @@ export class OnboardingService {
 
   async create(actor: Actor, body: OnboardingRequestBody, key: string | undefined, context: AuditContext) {
     if (!actor.rmId || !actor.teamId) throw new ApiError(403, 'FORBIDDEN', 'Access denied');
-    const payload = { cifRef: body.cifRef, selectedAccountId: body.selectedAccountId };
+    const payload = { cifRef: body.cifRef, selectedCasaNo: body.selectedCasaNo };
     const replay = await idempotencyReplay(this.database.manager, actor.actorId, 'ONBOARDING_REQUEST', body.cifRef, key, payload, this.options.clock.now());
     if (replay) return replay.response;
     this.limitInvite(actor);
@@ -78,7 +79,7 @@ export class OnboardingService {
       key, payload, now, async () => {
         await lockCustomer(manager, customer.cifId, [actor.rmId!]);
         const now = this.options.clock.now();
-        this.requireEligible(customer, body.selectedAccountId, now);
+        this.requireEligible(customer, body.selectedCasaNo, now);
         const [registered] = await manager.query('SELECT customer_id FROM wms.customers WHERE cif_id=$1', [customer.cifId]);
         if (registered) throw new ApiError(409, 'SERVICE_EXISTS', 'Service already registered');
         // Normalize historical expired requests before the partial unique constraint is consulted.
@@ -99,12 +100,15 @@ export class OnboardingService {
         const [request] = await manager.query(`INSERT INTO wms.onboarding_requests
           (request_id,cif_id,customer_name,selected_casa_no,rm_id,team_id,status,terms_version,terms_hash,created_at,expires_at)
           VALUES($1,$2,$3,$4,$5,$6,'PENDING_CONSENT',$7,$8,$9,$10) RETURNING *`,
-          [id, customer.cifId, customer.name, body.selectedAccountId, actor.rmId, actor.teamId, terms.terms_version, terms.content_hash, now, expiresAt]);
+          [id, customer.cifId, customer.name, body.selectedCasaNo, actor.rmId, actor.teamId, terms.terms_version, terms.content_hash, now, expiresAt]);
         await manager.query(`INSERT INTO wms.rm_capacity_reservations(request_id,rm_id,status,created_at,expires_at)
           VALUES($1,$2,'ACTIVE',$3,$4)`, [id, actor.rmId, now, expiresAt]);
         const result = requestProjection(request);
-        await appendAudit(manager, actor, { type: 'ONBOARDING_REQUEST', id }, 'ONBOARDING_REQUESTED', result, now,
-          { ...context, before: null, after: result });
+        // The audit trail keeps its own stable shape (`id`); only the API JSON uses the team column name `requestId`.
+        const { requestId, ...fields } = result;
+        const audited = { id: requestId, ...fields };
+        await appendAudit(manager, actor, { type: 'ONBOARDING_REQUEST', id }, 'ONBOARDING_REQUESTED', audited, now,
+          { ...context, before: null, after: audited });
         return result;
       }, 201));
   }

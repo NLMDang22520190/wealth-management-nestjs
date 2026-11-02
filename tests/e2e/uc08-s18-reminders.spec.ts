@@ -154,7 +154,7 @@ test.describe('UC08 S18 customer reminder banner (AC-U2)', () => {
   async function remindAlpha() {
     const lead = await tokenFor('NV0001');
     const list = await api('/team/customers?page=1&pageSize=50', { token: lead });
-    const alpha = (list.body.items as Array<{ customerId: string; name: string }>).find(item => item.name.includes('Mai'))!;
+    const alpha = (list.body.items as Array<{ customerId: string; fullName: string }>).find(item => item.fullName.includes('Mai'))!;
     const sent = await api('/team/risk-survey-reminders', { token: lead, body: { customerIds: [alpha.customerId] } });
     expect(sent.status).toBe(200);
     expect(sent.body.sent).toBe(1);

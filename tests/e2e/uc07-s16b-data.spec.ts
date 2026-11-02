@@ -9,7 +9,7 @@ import { expectNoHorizontalOverflow, goTo, openApp, switchRole } from './support
  *  - drift: badge `data-testid="drift-badge"` only when count > 0 (text = the number); count 0 -> `data-testid="drift-zero"` muted "0" or "—"
  *  - detail risk badge `data-testid="risk-badge"`; filters toolbar `data-testid="customer-filters"`
  *  - load bar role=progressbar with aria-valuenow/max and data-level ok|warn|high
- *  - RM: visible "<rmName> + first 8 chars of id", full id in a title attribute
+ *  - RM: visible "<rmFullName> + first 8 chars of id", full id in a title attribute
  */
 const COLOURLESS = ['rgba(0, 0, 0, 0)', 'transparent'];
 
@@ -174,19 +174,19 @@ test.describe('UC07 S16b data display polish', () => {
       await expect(scope.locator(`[title="${fullId}"]`).first(), `${label} keeps the full id in title`).toBeAttached();
     }
 
-    test('AC4 RM table, current RM fact and target options show rmName with a short id, full id in title', async ({ page }) => {
+    test('AC4 RM table, current RM fact and target options show rmFullName with a short id, full id in title', async ({ page }) => {
       await openAssignments(page);
       const directory = page.getByRole('region', { name: 'Danh sách RM' });
-      await expectRm(directory.getByRole('row', { name: /NV0002/ }), 'NV0002', ids.rmAlpha, 'RM table row');
+      await expectRm(directory.getByRole('row', { name: /Nguyễn Văn An/ }), 'Nguyễn Văn An', ids.rmAlpha, 'RM table row');
       await page.getByLabel('Chọn khách hàng').selectOption(alphaId);
       await page.getByRole('button', { name: 'Tải thông tin khách hàng' }).click();
       const panel = page.getByRole('region', { name: 'Khách hàng cần chuyển' });
       await expect(panel).toBeVisible();
-      await expectRm(panel, 'NV0002', ids.rmAlpha, 'current RM fact');
+      await expectRm(panel, 'Nguyễn Văn An', ids.rmAlpha, 'current RM fact');
       const target = page.getByLabel('RM nhận');
       const optionTexts = await target.evaluate(select => [...(select as HTMLSelectElement).options].map(option => option.textContent ?? ''));
-      const beta = optionTexts.find(text => text.includes('NV0003'));
-      expect(beta, 'target option shows NV0003').toBeTruthy();
+      const beta = optionTexts.find(text => text.includes('Lê Minh Bảo'));
+      expect(beta, 'target option shows Lê Minh Bảo').toBeTruthy();
       expect(beta).toContain(ids.rmBeta.slice(0, 8));
       expect(beta).toContain('/80');
       expect(optionTexts.some(text => text.includes(ids.rmBeta)), 'no long UUID in option text').toBe(false);
@@ -195,7 +195,7 @@ test.describe('UC07 S16b data display polish', () => {
       await page.getByRole('button', { name: 'Xác nhận chuyển' }).click();
       const dialog = page.getByRole('dialog', { name: 'Xác nhận chuyển RM' });
       await expect(dialog).toBeVisible();
-      await expect(dialog).toContainText(/NV0002[\s\S]*NV0003/);
+      await expect(dialog).toContainText(/Nguyễn Văn An[\s\S]*Lê Minh Bảo/);
       await expect(dialog).not.toContainText(ids.rmAlpha);
       await expect(dialog).not.toContainText(ids.rmBeta);
       await expect(dialog.locator(`[title="${ids.rmAlpha}"]`).first()).toBeAttached();
@@ -204,7 +204,7 @@ test.describe('UC07 S16b data display polish', () => {
 
     test('AC9 load bar is a progressbar with 2/80 values, level ok and "2/80 khách" text', async ({ page }, testInfo) => {
       await openAssignments(page);
-      const alphaRow = page.getByRole('region', { name: 'Danh sách RM' }).getByRole('row', { name: /NV0002/ });
+      const alphaRow = page.getByRole('region', { name: 'Danh sách RM' }).getByRole('row', { name: /Nguyễn Văn An/ });
       await expect(alphaRow).toContainText('2/80 khách');
       if (testInfo.project.name !== 'desktop') return; // the bar itself is asserted on desktop
       const bar = alphaRow.locator('[role="progressbar"]');
@@ -223,7 +223,7 @@ test.describe('UC07 S16b data display polish', () => {
       for (const [add, total, level] of steps) {
         await addLoad(ids.rmBeta, add, `LD${batch++}`);
         await openAssignments(page);
-        const betaRow = page.getByRole('region', { name: 'Danh sách RM' }).getByRole('row', { name: /NV0003/ });
+        const betaRow = page.getByRole('region', { name: 'Danh sách RM' }).getByRole('row', { name: /Lê Minh Bảo/ });
         await expect(betaRow).toContainText(`${total}/80 khách`);
         const bar = betaRow.locator('[role="progressbar"]');
         await expect(bar).toHaveAttribute('aria-valuenow', String(total));

@@ -14,16 +14,16 @@ describe('S14 W6/FR-04 RM sees cash balance from the P2 investment account', () 
   async function register(cifId: string = actors.customer.cifId, actorId: string = actors.customer.actorId): Promise<Registered> {
     const created = await api.request('/onboarding/requests', {
       method: 'POST', token: await api.tokenFor(), key: `s14-register-${cifId}`,
-      body: { cifRef: cifId, selectedAccountId: eligibleCustomer(cifId).accounts[0].id },
+      body: { cifRef: cifId, selectedCasaNo: eligibleCustomer(cifId).accounts[0].id },
     });
     expect(created.status).toBe(201);
     const challenge = await api.request('/otp/challenges', {
       method: 'POST', token: await api.tokenFor(actorId),
-      body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id },
+      body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId },
     });
     expect(challenge.status).toBe(201);
     const delivery = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const accepted = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, {
+    const accepted = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, {
       method: 'POST', token: await api.tokenFor(actorId), key: `s14-consent-${cifId}`,
       body: { challengeId: delivery.challengeId, code: delivery.code },
     });
@@ -92,10 +92,10 @@ describe('S14 W6/FR-04 RM sees cash balance from the P2 investment account', () 
     });
     const challenge = await api.request('/otp/challenges', {
       method: 'POST', token: await api.tokenFor(actors.customer.actorId),
-      body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.id },
+      body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.draftId },
     });
     const delivery = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    expect((await api.request(`/me/risk-assessments/${draft.body.id}/confirm`, {
+    expect((await api.request(`/me/risk-assessments/${draft.body.draftId}/confirm`, {
       method: 'POST', token: await api.tokenFor(actors.customer.actorId), key: 's14-confirm',
       body: { challengeId: delivery.challengeId, code: delivery.code, expectedCurrentProfileVersion: 0 },
     })).status).toBe(200);

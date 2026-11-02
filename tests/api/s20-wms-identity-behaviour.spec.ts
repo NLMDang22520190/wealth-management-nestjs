@@ -51,7 +51,7 @@ describe('S20 AC4 demo login by employee_code / CIF on wms rows', () => {
     expectApiError(await issue('CIF100802'), 401, 'UNAUTHORIZED');
     api.state.core = eligibleCustomer('CIF100802');
     const created = await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key: 's20-invite',
-      body: { cifRef: 'CIF100802', selectedAccountId: eligibleCustomer('CIF100802').accounts[0].id } });
+      body: { cifRef: 'CIF100802', selectedCasaNo: eligibleCustomer('CIF100802').accounts[0].id } });
     expect(created.status).toBe(201);
     const response = await issue('CIF100802');
     expect(response.status).toBe(200);
@@ -77,10 +77,10 @@ describe('S20 AC6/AC7/AC8/AC9 UC-01, OTP, audit and idempotency on wms', () => {
   test('AC6 UC-01 writes team rows: invitation casa/rm/team, customer identity, WM-numbered account and its ledger account', async () => {
     const first = await registerCustomer(api);
     const second = await registerCustomer(api, { cifId: actors.otherCustomer.cifId, actorId: actors.otherCustomer.actorId });
-    const [request] = await q('SELECT * FROM wms.onboarding_requests WHERE request_id=$1', [first.request.id]);
+    const [request] = await q('SELECT * FROM wms.onboarding_requests WHERE request_id=$1', [first.request.requestId]);
     expect(request).toMatchObject({ cif_id: actors.customer.cifId, selected_casa_no: eligibleCustomer().accounts[0].id, rm_id: actors.rm.rmId, team_id: actors.rm.teamId, status: 'CONFIRMED' });
     const [customer] = await q("SELECT cif_id,iam_subject,full_name,to_char(date_of_birth,'YYYY-MM-DD') AS dob FROM wms.customers WHERE customer_id=$1", [first.customerId]);
-    expect(customer).toEqual({ cif_id: actors.customer.cifId, iam_subject: `cust.${actors.customer.cifId}`, full_name: 'Synthetic Customer', dob: '2008-01-15' });
+    expect(customer).toEqual({ cif_id: actors.customer.cifId, iam_subject: `cust.${actors.customer.cifId.toLowerCase()}`, full_name: 'Synthetic Customer', dob: '2008-01-15' });
     const [account] = await q('SELECT * FROM wms.investment_accounts WHERE account_id=$1', [first.accountId]);
     expect(account).toMatchObject({ account_no: 'WM0000000001', customer_id: first.customerId, cif_id: actors.customer.cifId });
     expect((await q('SELECT account_no FROM wms.investment_accounts WHERE account_id=$1', [second.accountId]))[0].account_no).toBe('WM0000000002');
@@ -94,20 +94,20 @@ describe('S20 AC6/AC7/AC8/AC9 UC-01, OTP, audit and idempotency on wms', () => {
 
   test('AC7 a wrong code increments attempt_count (status ISSUED, challenge stays usable); success sets VERIFIED, consumed_at and receipt_ref', async () => {
     const created = await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key: 's20-otp',
-      body: { cifRef: actors.customer.cifId, selectedAccountId: eligibleCustomer().accounts[0].id } });
+      body: { cifRef: actors.customer.cifId, selectedCasaNo: eligibleCustomer().accounts[0].id } });
     const token = await api.tokenFor(actors.customer.actorId);
-    const issued = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id } });
+    const issued = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId } });
     const otp = api.deliveries.find(item => item.challengeId === issued.body.challengeId)!;
     const row = async () => (await q('SELECT * FROM wms.otp_challenges WHERE challenge_id=$1', [otp.challengeId]))[0];
     expect(await row()).toMatchObject({ status: 'ISSUED', attempt_count: 0, consumed_at: null, receipt_ref: null, actor_id: actors.customer.actorId, purpose: 'SERVICE_CONSENT' });
     expect(new Date((await row()).issued_at).toISOString()).toBe(TEST_NOW);
     expect(new Date((await row()).expires_at).getTime() - new Date(TEST_NOW).getTime()).toBe(120_000);
     for (const attempt of [1, 2]) {
-      expectApiError(await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, { method: 'POST', token, key: `s20-wrong-${attempt}`,
+      expectApiError(await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, { method: 'POST', token, key: `s20-wrong-${attempt}`,
         body: { challengeId: otp.challengeId, code: wrongCode(otp.code) } }), 400, 'OTP_INVALID');
       expect(await row()).toMatchObject({ status: 'ISSUED', attempt_count: attempt, consumed_at: null });
     }
-    expect((await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, { method: 'POST', token, key: 's20-right',
+    expect((await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, { method: 'POST', token, key: 's20-right',
       body: { challengeId: otp.challengeId, code: otp.code } })).status).toBe(200);
     const done = await row();
     expect(done).toMatchObject({ status: 'VERIFIED', attempt_count: 2 });
@@ -118,13 +118,13 @@ describe('S20 AC6/AC7/AC8/AC9 UC-01, OTP, audit and idempotency on wms', () => {
   test('AC8 audit rows carry actor, role, outcome, reference and request metadata, and never an OTP code or token', async () => {
     const created = await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key: 's20-audit',
       headers: { 'x-request-id': rid(61), 'x-device-id': 'dev-s20', 'user-agent': 'S20 agent' },
-      body: { cifRef: actors.customer.cifId, selectedAccountId: eligibleCustomer().accounts[0].id } });
+      body: { cifRef: actors.customer.cifId, selectedCasaNo: eligibleCustomer().accounts[0].id } });
     expect(created.status).toBe(201);
     const [row] = await q("SELECT * FROM wms.audit_logs WHERE action='ONBOARDING_REQUESTED'");
-    expect(row).toMatchObject({ actor_id: actors.rm.actorId, actor_role: 'RM', outcome: 'SUCCESS', reference_type: 'ONBOARDING_REQUEST', reference_id: created.body.id,
+    expect(row).toMatchObject({ actor_id: actors.rm.actorId, actor_role: 'RM', outcome: 'SUCCESS', reference_type: 'ONBOARDING_REQUEST', reference_id: created.body.requestId,
       request_id: rid(61), device_id: 'dev-s20', user_agent: 'S20 agent', ip_address: '127.0.0.1' });
     const token = await api.tokenFor(actors.customer.actorId);
-    const issued = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id } });
+    const issued = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId } });
     const otp = api.deliveries.find(item => item.challengeId === issued.body.challengeId)!;
     expect(JSON.stringify(await q('SELECT * FROM wms.audit_logs'))).not.toContain(otp.code);
     expect(JSON.stringify(await q('SELECT * FROM wms.audit_logs'))).not.toContain(token);
@@ -149,7 +149,7 @@ describe('S20 AC6/AC7/AC8/AC9 UC-01, OTP, audit and idempotency on wms', () => {
     api.state.now = new Date(new Date(TEST_NOW).getTime() + 24 * HOUR + 1000);
     const fresh = await again();
     expect(fresh.status).toBe(201);
-    expect(fresh.body.id, 'after expiry the key starts a new operation').not.toBe(first.id);
+    expect(fresh.body.draftId, 'after expiry the key starts a new operation').not.toBe(first.draftId);
     expect(fresh.body.expiresAt).toBe(new Date(api.state.now.getTime() + DAY).toISOString());
   });
 });

@@ -4,7 +4,7 @@ import type { Allocation } from '../ui';
 import { AlertAction, AllocationSummary, Empty, ErrorAlert, Loading, PageTitle, Panel, useLoad } from '../ui';
 import { Badge } from '@/components/ui/badge';
 
-interface Profile { id: string; version: number; score: number; category: string; maxProductRisk: number; allocation: Allocation; confirmedAt: string; expiresAt: string; valid: boolean }
+interface Profile { riskProfileId: string; version: number; score: number; category: string; maxProductRisk: number; allocation: Allocation; confirmedAt: string; expiresAt: string; valid: boolean }
 interface Overview {
   current: Profile | null;
   holdingsCheck: null | { status: string; asOf: string | null; provenance: string | null; incompatibleHoldings: Array<{ productId: string; productRisk: number; maxProductRisk: number }> };
@@ -46,7 +46,7 @@ export function RiskProfile() {
           {history.data.items.length === 0 ? <Empty>Chưa có lần đánh giá nào.</Empty> : (
             <ul className="m-0 list-none p-0">
               {history.data.items.map(item => (
-                <li key={item.id} className="flex flex-wrap gap-x-4 gap-y-1 border-b py-3 first:pt-0 last:border-b-0 last:pb-0">
+                <li key={item.riskProfileId} className="flex flex-wrap gap-x-4 gap-y-1 border-b py-3 first:pt-0 last:border-b-0 last:pb-0">
                   <strong>Phiên bản {item.version}</strong>
                   <span>{riskLabel(item.category)}</span>
                   <span>{item.score} điểm</span>

@@ -101,16 +101,16 @@ export async function registerCustomer(cifRef: string, customerActorId: string, 
   const lookup = await api('/onboarding/customer-lookup', { token: await tokenFor(rmActorId), body: { cifRef } });
   expect(lookup.status).toBe(200);
   const created = await api('/onboarding/requests', { token: await tokenFor(rmActorId), key: `e2e-invite-${cifRef}-${randomUUID()}`,
-    body: { cifRef, selectedAccountId: lookup.body.accounts[0].id } });
+    body: { cifRef, selectedCasaNo: lookup.body.accounts[0].casaNo } });
   expect(created.status).toBe(201);
   const customerToken = await tokenFor(customerActorId);
-  const challenge = await api('/otp/challenges', { token: customerToken, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id } });
+  const challenge = await api('/otp/challenges', { token: customerToken, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId } });
   expect(challenge.status).toBe(201);
   const code = await demoOtp(customerActorId, challenge.body.challengeId);
-  const confirmed = await api(`/me/onboarding-requests/${created.body.id}/confirm`, { token: customerToken,
+  const confirmed = await api(`/me/onboarding-requests/${created.body.requestId}/confirm`, { token: customerToken,
     key: `e2e-consent-${randomUUID()}`, body: { challengeId: challenge.body.challengeId, code } });
   expect(confirmed.status).toBe(200);
-  return { customerId: confirmed.body.customerId as string, requestId: created.body.id as string };
+  return { customerId: confirmed.body.customerId as string, requestId: created.body.requestId as string };
 }
 
 /** Confirms a risk profile through the public API; optionIndex 0..4 is applied to every question. */
@@ -122,10 +122,10 @@ export async function activateRisk(customerActorId: string, optionIndex: number,
   const draft = await api('/me/risk-assessments', { token, key: `e2e-draft-${randomUUID()}`,
     body: { questionnaireVersion: questionnaire.body.version, answers } });
   expect(draft.status).toBe(201);
-  const challenge = await api('/otp/challenges', { token, body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.id } });
+  const challenge = await api('/otp/challenges', { token, body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.draftId } });
   expect(challenge.status).toBe(201);
   const code = await demoOtp(customerActorId, challenge.body.challengeId);
-  const confirmed = await api(`/me/risk-assessments/${draft.body.id}/confirm`, { token, key: `e2e-risk-${randomUUID()}`,
+  const confirmed = await api(`/me/risk-assessments/${draft.body.draftId}/confirm`, { token, key: `e2e-risk-${randomUUID()}`,
     body: { challengeId: challenge.body.challengeId, code, expectedCurrentProfileVersion: expectedVersion } });
   expect(confirmed.status).toBe(200);
   return confirmed.body;

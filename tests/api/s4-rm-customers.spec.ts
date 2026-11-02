@@ -15,16 +15,16 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
   async function register(cifId: string = actors.customer.cifId, actorId: string = actors.customer.actorId): Promise<Registered> {
     const created = await api.request('/onboarding/requests', {
       method: 'POST', token: await api.tokenFor(), key: `s4-register-${cifId}`,
-      body: { cifRef: cifId, selectedAccountId: eligibleCustomer(cifId).accounts[0].id },
+      body: { cifRef: cifId, selectedCasaNo: eligibleCustomer(cifId).accounts[0].id },
     });
     expect(created.status).toBe(201);
     const challenge = await api.request('/otp/challenges', {
       method: 'POST', token: await api.tokenFor(actorId),
-      body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id },
+      body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId },
     });
     expect(challenge.status).toBe(201);
     const delivery = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const accepted = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, {
+    const accepted = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, {
       method: 'POST', token: await api.tokenFor(actorId), key: `s4-consent-${cifId}`,
       body: { challengeId: delivery.challengeId, code: delivery.code },
     });
@@ -44,11 +44,11 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
     expect(draft.status).toBe(201);
     const challenge = await api.request('/otp/challenges', {
       method: 'POST', token: await api.tokenFor(actorId),
-      body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.id },
+      body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.draftId },
     });
     expect(challenge.status).toBe(201);
     const delivery = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const confirmed = await api.request(`/me/risk-assessments/${draft.body.id}/confirm`, {
+    const confirmed = await api.request(`/me/risk-assessments/${draft.body.draftId}/confirm`, {
       method: 'POST', token: await api.tokenFor(actorId), key: `s4-confirm-${customerId}`,
       body: { challengeId: delivery.challengeId, code: delivery.code, expectedCurrentProfileVersion: 0 },
     });
@@ -68,12 +68,12 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
     expect(list.status, 'current RM list route must be implemented').toBe(200);
     expect(list.body).toEqual(expect.objectContaining({ page: 1, pageSize: 10, total: expect.any(Number), items: expect.any(Array) }));
     expect(list.body.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ customerId: first.customerId, name: expect.any(String), currentAssignment: expect.objectContaining({ rmId: actors.rm.rmId }) }),
+      expect.objectContaining({ customerId: first.customerId, fullName: expect.any(String), currentAssignment: expect.objectContaining({ rmId: actors.rm.rmId }) }),
     ]));
     expect(list.body.items.every((item: any) => item.currentAssignment.rmId === actors.rm.rmId)).toBe(true);
     const detail = await api.request(`/customers/${first.customerId}`, { token: await api.tokenFor() });
     expect(detail.status).toBe(200);
-    expect(detail.body).toEqual(expect.objectContaining({ customerId: first.customerId, name: expect.any(String), serviceStatus: expect.any(String), currentAssignment: expect.objectContaining({ rmId: actors.rm.rmId }) }));
+    expect(detail.body).toEqual(expect.objectContaining({ customerId: first.customerId, fullName: expect.any(String), serviceStatus: expect.any(String), currentAssignment: expect.objectContaining({ rmId: actors.rm.rmId }) }));
     expectApiError(await api.request(`/customers/${first.customerId}`, { token: await api.tokenFor(actors.otherCustomer.actorId) }), 403, 'FORBIDDEN');
   });
 
@@ -88,7 +88,7 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
     expect(sortedPage.body.items[0].customerId).toBe(second.customerId);
     const tie = await api.request('/rm/customers?page=1&pageSize=10&sort=name&direction=asc', { token: await api.tokenFor() });
     expect(tie.status).toBe(200);
-    expect(tie.body.items.map((item: any) => item.customerId)).toEqual([...tie.body.items].sort((a: any, b: any) => a.name.localeCompare(b.name) || a.customerId.localeCompare(b.customerId)).map((item: any) => item.customerId));
+    expect(tie.body.items.map((item: any) => item.customerId)).toEqual([...tie.body.items].sort((a: any, b: any) => a.fullName.localeCompare(b.fullName) || a.customerId.localeCompare(b.customerId)).map((item: any) => item.customerId));
     expect((await api.request('/rm/customers?risk=CONSERVATIVE&serviceStatus=ACTIVE&name=synthetic', { token: await api.tokenFor() })).status).toBe(200);
     expectApiError(await api.request('/rm/customers?page=0', { token: await api.tokenFor() }), 400, 'VALIDATION_ERROR');
     expectApiError(await api.request('/rm/customers?sort=sql-injection', { token: await api.tokenFor() }), 400, 'VALIDATION_ERROR');
@@ -101,7 +101,7 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
     await insertProposal(viaDataSource(api.dataSource), { customerId: registered.customerId, authorRmId: actors.rm.rmId, now: api.state.now }); // category 6
     const detail = await api.request(`/customers/${registered.customerId}`, { token: await api.tokenFor() });
     expect(detail.status).toBe(200);
-    expect(detail.body.currentRisk).toMatchObject({ id: profile.id, valid: true, expiresAt: expect.any(String) });
+    expect(detail.body.currentRisk).toMatchObject({ riskProfileId: profile.riskProfileId, valid: true, expiresAt: expect.any(String) });
     // asOf is the snapshot date (a DATE column: either 2026-01-15 or its midnight timestamp); provenance has no source column and stays a label.
     expect(detail.body.aum).toEqual(expect.objectContaining({ value: '1250000.50', asOf: expect.stringMatching(/^2026-01-15/), provenance: expect.stringMatching(/\S/), dataStatus: 'AVAILABLE' }));
     expect(detail.body.driftAlerts).toEqual(expect.objectContaining({ count: expect.any(Number), asOf: expect.any(String), dataStatus: expect.any(String) }));
@@ -150,6 +150,6 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
     }
     expectApiError(await api.request('/onboarding/customer-lookup', { method: 'POST', token: await api.tokenFor(), body: { cifRef: actors.customer.cifId } }), 429, 'RATE_LIMITED');
     api.state.core = { ...eligibleCustomer('00000999'), dateOfBirth: '2000-02-30' };
-    expectApiError(await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key: 's4-impossible-dob', body: { cifRef: '00000999', selectedAccountId: 'account-00000999' } }), 422, 'CUSTOMER_INELIGIBLE');
+    expectApiError(await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key: 's4-impossible-dob', body: { cifRef: '00000999', selectedCasaNo: 'account-00000999' } }), 422, 'CUSTOMER_INELIGIBLE');
   });
 });

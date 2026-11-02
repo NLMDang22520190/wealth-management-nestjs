@@ -32,13 +32,13 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
   async function register(cifId: string, actorId: string, rmActorId: string = actors.rm.actorId): Promise<string> {
     if (cifId === gamma.cifId) api.state.core = eligibleCustomer(cifId);
     const created = await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(rmActorId), key: `s17-onboard-${cifId}`,
-      body: { cifRef: cifId, selectedAccountId: eligibleCustomer(cifId).accounts[0].id } });
+      body: { cifRef: cifId, selectedCasaNo: eligibleCustomer(cifId).accounts[0].id } });
     expect(created.status).toBe(201);
     const token = await api.tokenFor(actorId);
-    const challenge = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.id } });
+    const challenge = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'SERVICE_CONSENT', operationId: created.body.requestId } });
     expect(challenge.status).toBe(201);
     const otp = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const accepted = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, { method: 'POST', token, key: `s17-consent-${cifId}`,
+    const accepted = await api.request(`/me/onboarding-requests/${created.body.requestId}/confirm`, { method: 'POST', token, key: `s17-consent-${cifId}`,
       body: { challengeId: otp.challengeId, code: otp.code } });
     expect(accepted.status).toBe(200);
     api.tick(); // category 4: chk_rma_period needs valid_to > valid_from for a later transfer
@@ -52,10 +52,10 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
       questionnaireVersion: questionnaire.body.version,
       answers: questionnaire.body.questions.map((q: any) => ({ questionId: q.id, optionId: q.options[2].id })) } });
     expect(draft.status).toBe(201);
-    const challenge = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.id } });
+    const challenge = await api.request('/otp/challenges', { method: 'POST', token, body: { purpose: 'RISK_PROFILE_CONFIRM', operationId: draft.body.draftId } });
     expect(challenge.status).toBe(201);
     const otp = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
-    const confirmed = await api.request(`/me/risk-assessments/${draft.body.id}/confirm`, { method: 'POST', token, key: `s17-confirm-${tag}`,
+    const confirmed = await api.request(`/me/risk-assessments/${draft.body.draftId}/confirm`, { method: 'POST', token, key: `s17-confirm-${tag}`,
       body: { challengeId: otp.challengeId, code: otp.code, expectedCurrentProfileVersion: 0 } });
     expect(confirmed.status).toBe(200);
   }
@@ -210,20 +210,20 @@ describe('S17 transfer precondition and risk-survey reminders on real PostgreSQL
     const listed = await notifications(actors.otherCustomer.actorId);
     expect(listed.status).toBe(200);
     expect(listed.body.items).toHaveLength(2);
-    expect(listed.body.items[0]).toMatchObject({ id: expect.any(String), kind: 'RISK_SURVEY_REMINDER', readAt: null });
+    expect(listed.body.items[0]).toMatchObject({ notificationId: expect.any(String), kind: 'RISK_SURVEY_REMINDER', readAt: null });
     expect(listed.body.items[0].message.length).toBeGreaterThan(0);
     expect(new Date(listed.body.items[0].createdAt).getTime()).toBeGreaterThan(new Date(listed.body.items[1].createdAt).getTime());
     expect((await notifications(gamma.actorId)).body.items).toEqual([]);
     expect((await notifications(actors.customer.actorId)).body.items).toEqual([]);
 
-    const target = listed.body.items[0].id;
+    const target = listed.body.items[0].notificationId;
     expectApiError(await api.request(`/notifications/${target}/read`, { method: 'POST', token: await api.tokenFor(gamma.actorId) }), 404, 'NOT_FOUND');
     expect((await notifications(actors.otherCustomer.actorId)).body.items[0].readAt).toBeNull();
     const read = await api.request(`/notifications/${target}/read`, { method: 'POST', token: await api.tokenFor(actors.otherCustomer.actorId) });
     expect(read.status).toBe(200);
     const after = (await notifications(actors.otherCustomer.actorId)).body.items;
-    expect(after.find((n: any) => n.id === target).readAt).toBe(api.state.now.toISOString());
-    expect(after.find((n: any) => n.id !== target).readAt).toBeNull();
+    expect(after.find((n: any) => n.notificationId === target).readAt).toBe(api.state.now.toISOString());
+    expect(after.find((n: any) => n.notificationId !== target).readAt).toBeNull();
 
     for (const actorId of [actors.rm.actorId, actors.leader.actorId]) expectApiError(await notifications(actorId), 403, 'FORBIDDEN');
   });

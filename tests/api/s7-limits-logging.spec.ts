@@ -14,7 +14,7 @@ describe('S7 B5 error logging level and code', () => {
   afterEach(async () => { await api?.stop(); });
 
   const create = async (key: string, cif: string = actors.customer.cifId) => api.request('/onboarding/requests', {
-    method: 'POST', token: await api.tokenFor(), key, body: { cifRef: cif, selectedAccountId: eligibleCustomer(cif).accounts[0].id } });
+    method: 'POST', token: await api.tokenFor(), key, body: { cifRef: cif, selectedCasaNo: eligibleCustomer(cif).accounts[0].id } });
   const entriesFor = (requestId: string) => api.logEntries.filter(entry => entry.text.includes(requestId));
 
   test('B5 a 409 ApiError is logged at WARN with its real code, not as an ERROR/INTERNAL_ERROR', async () => {
@@ -55,11 +55,11 @@ describe('S7 B5 error logging level and code', () => {
     expect(request.status).toBe(201);
     const customerToken = await api.tokenFor(actors.customer.actorId);
     const challenge = await api.request('/otp/challenges', { method: 'POST', token: customerToken,
-      body: { purpose: 'SERVICE_CONSENT', operationId: request.body.id } });
+      body: { purpose: 'SERVICE_CONSENT', operationId: request.body.requestId } });
     expect(challenge.status).toBe(201);
     const delivery = api.deliveries.find(item => item.challengeId === challenge.body.challengeId)!;
     const wrong = delivery.code === '738291' ? '738292' : '738291';
-    const rejected = await api.request(`/me/onboarding-requests/${request.body.id}/confirm`, { method: 'POST', token: customerToken,
+    const rejected = await api.request(`/me/onboarding-requests/${request.body.requestId}/confirm`, { method: 'POST', token: customerToken,
       key: 's7-confirm', body: { challengeId: delivery.challengeId, code: wrong } });
     expectApiError(rejected, 400, 'OTP_INVALID');
     const entries = entriesFor(rejected.body.requestId);
@@ -80,7 +80,7 @@ describe('S7 B11 invitation creation quota (default 10 per RM per 60s on the inj
   const cif = (index: number) => `0000${String(2000 + index)}`;
   const create = async (index: number, key: string, actorId: string = actors.rm.actorId) => api.request('/onboarding/requests', {
     method: 'POST', token: await api.tokenFor(actorId), key,
-    body: { cifRef: cif(index), selectedAccountId: eligibleCustomer(cif(index)).accounts[0].id } });
+    body: { cifRef: cif(index), selectedCasaNo: eligibleCustomer(cif(index)).accounts[0].id } });
 
   test('B11 the 11th non-replay creation in a window is 429 RATE_LIMITED; replays do not count; other RMs are unaffected; the window resets', async () => {
     const first = await create(1, 's7-key-1');
@@ -162,11 +162,11 @@ describe('S7 B12 configurable limits through the real CLI', () => {
     const token = await rmToken();
     const lookupOne = await post('/onboarding/customer-lookup', token, { cifRef: actors.customer.cifId });
     expect(lookupOne.status).toBe(200);
-    const first = await post('/onboarding/requests', token, { cifRef: actors.customer.cifId, selectedAccountId: lookupOne.body.accounts[0].id }, 's7-cli-1');
+    const first = await post('/onboarding/requests', token, { cifRef: actors.customer.cifId, selectedCasaNo: lookupOne.body.accounts[0].casaNo }, 's7-cli-1');
     expect(first.status).toBe(201);
     const lookupTwo = await post('/onboarding/customer-lookup', token, { cifRef: actors.otherCustomer.cifId });
     expect(lookupTwo.status).toBe(200);
-    const second = await post('/onboarding/requests', token, { cifRef: actors.otherCustomer.cifId, selectedAccountId: lookupTwo.body.accounts[0].id }, 's7-cli-2');
+    const second = await post('/onboarding/requests', token, { cifRef: actors.otherCustomer.cifId, selectedCasaNo: lookupTwo.body.accounts[0].casaNo }, 's7-cli-2');
     expect(second.status).toBe(429);
     expect(second.body.code).toBe('RATE_LIMITED');
   });

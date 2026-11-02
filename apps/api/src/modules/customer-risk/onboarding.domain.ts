@@ -24,8 +24,8 @@ export class CustomerLookupBody {
   @ApiProperty({ description: 'Core banking customer reference; resolved by the server.' }) cifRef!: string;
 }
 export class OnboardingRequestBody extends CustomerLookupBody {
-  static readonly fields = { cifRef: text, selectedAccountId: text };
-  @ApiProperty({ description: 'An active VND account owned by this CIF, supplied by Core lookup.' }) selectedAccountId!: string;
+  static readonly fields = { cifRef: text, selectedCasaNo: text };
+  @ApiProperty({ description: 'CASA number of an active VND account owned by this CIF, supplied by Core lookup (accounts[].casaNo).' }) selectedCasaNo!: string;
 }
 export class ConsentBody {
   static readonly fields = { challengeId: uuid, code: (value: unknown) => typeof value === 'string' && /^\d{6}$/.test(value) };
@@ -67,5 +67,5 @@ export function consentPayloadHash(request: OnboardingRequest): string {
 }
 
 export function requestProjection(request: OnboardingRequest) {
-  return { id: request.request_id, status: request.status, expiresAt: new Date(request.expires_at).toISOString(), termsVersion: request.terms_version };
+  return { requestId: request.request_id, status: request.status, expiresAt: new Date(request.expires_at).toISOString(), termsVersion: request.terms_version };
 }

@@ -179,13 +179,13 @@ describe('S19 AC2 additive patches on real PostgreSQL', () => {
     const alpha = await registerCustomer(api);
     const beta = await registerCustomer(api, { cifId: actors.otherCustomer.cifId, actorId: actors.otherCustomer.actorId });
     const profile = await confirmRisk(api, actors.customer.actorId, 2, 0, 'patch-b');
-    expect(await pgCode(sql('UPDATE wms.wealth_services SET current_risk_profile_id=$2 WHERE customer_id=$1', [beta.customerId, profile.id])),
+    expect(await pgCode(sql('UPDATE wms.wealth_services SET current_risk_profile_id=$2 WHERE customer_id=$1', [beta.customerId, profile.riskProfileId])),
       'wealth_services(current_risk_profile_id, customer_id) -> risk_profiles').toBe('23503');
     const spare = await createDraft(api, actors.customer.actorId, 3, 'patch-b-spare');
     expect(await pgCode(sql(`INSERT INTO wms.risk_profiles(risk_profile_id,customer_id,version,draft_id,questionnaire_version,answers,score,category,max_product_risk,
         allocation,payload_hash,otp_receipt_ref,confirmed_at,expires_at)
       SELECT gen_random_uuid(),$1,1,$3,questionnaire_version,answers,score,category,max_product_risk,allocation,payload_hash,gen_random_uuid(),confirmed_at,expires_at
-      FROM wms.risk_profiles WHERE risk_profile_id=$2`, [beta.customerId, profile.id, spare.id])), 'risk_profiles(draft_id, customer_id) -> drafts').toBe('23503');
+      FROM wms.risk_profiles WHERE risk_profile_id=$2`, [beta.customerId, profile.riskProfileId, spare.draftId])), 'risk_profiles(draft_id, customer_id) -> drafts').toBe('23503');
     expect(alpha.customerId).not.toBe(beta.customerId);
   });
 

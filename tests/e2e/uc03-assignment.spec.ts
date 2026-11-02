@@ -44,8 +44,8 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     await switchRole(page, 'NV0001');
     await goTo(page, 'Phân công RM');
     const directory = page.getByRole('region', { name: 'Danh sách RM' });
-    await expect(directory.getByRole('row', { name: /NV0002/ })).toContainText('2/80');
-    await expect(directory.getByRole('row', { name: /NV0003/ })).toContainText('0/80');
+    await expect(directory.getByRole('row', { name: /Nguyễn Văn An/ })).toContainText('2/80');
+    await expect(directory.getByRole('row', { name: /Lê Minh Bảo/ })).toContainText('0/80');
 
     await loadCustomer(page);
     await expect(page.getByText('Phiên bản phân công: 1')).toBeVisible();
@@ -66,7 +66,7 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     await open.click();
     const dialog = page.getByRole('dialog', { name: 'Xác nhận chuyển RM' });
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText(/NV0002[\s\S]*NV0003/); // current RM -> target RM by name (S16b AC4); full ids live in title attributes
+    await expect(dialog).toContainText(/Nguyễn Văn An[\s\S]*Lê Minh Bảo/); // current RM -> target RM by name (S16b AC4); full ids live in title attributes
     await expect(dialog).toContainText('1 đề xuất đang chờ duyệt sẽ bị hủy'); // N = pending count loaded with the customer
     await dialog.getByRole('button', { name: 'Hủy' }).click();
     await expect(dialog).toBeHidden();
@@ -85,8 +85,8 @@ test.describe('UC03 leader assignment journey (AC07)', () => {
     await expect(page.getByText('Đã chuyển khách hàng')).toBeVisible();
     await expect(page.getByText('đề xuất đang chờ duyệt của khách đã bị hủy', { exact: false })).toBeVisible();
     await expect(page.getByText('1 đề xuất đang chờ duyệt của khách đã bị hủy', { exact: false })).toBeVisible(); // exact server count (category 6: 3 -> 1)
-    await expect(directory.getByRole('row', { name: /NV0002/ })).toContainText('1/80');
-    await expect(directory.getByRole('row', { name: /NV0003/ })).toContainText('1/80');
+    await expect(directory.getByRole('row', { name: /Nguyễn Văn An/ })).toContainText('1/80');
+    await expect(directory.getByRole('row', { name: /Lê Minh Bảo/ })).toContainText('1/80');
     const current = await sql<{ rm_id: string; reason: string }>('SELECT rm_id,reason FROM wms.rm_assignments WHERE customer_id=$1 AND valid_to IS NULL', [alphaId]);
     expect(current).toEqual([{ rm_id: ids.rmBeta, reason: 'Cân đối tải công việc giữa các RM' }]);
     expect(await sql("SELECT proposal_id FROM wms.proposals WHERE customer_id=$1 AND status='PENDING_APPROVAL'", [alphaId])).toHaveLength(0);

@@ -91,20 +91,20 @@ describe('S5a AC01/AC07 real CLI synthetic demo runtime', () => {
     for (const [index, customer] of coreCustomers.entries()) {
       const byCif = await request('/onboarding/customer-lookup', { token, body: { cifRef: customer.cif } });
       expect(byCif.status).toBe(200); // Baseline valid RED: actual main returns CORE_UNAVAILABLE/503.
-      expect(byCif.body).toMatchObject({ cifRef: customer.cif, active: true, eligible: true, name: expect.any(String) });
-      expect(byCif.body.name.trim().length).toBeGreaterThan(0);
-      if (customer.name) expect(byCif.body.name).toBe(customer.name);
+      expect(byCif.body).toMatchObject({ cifRef: customer.cif, active: true, eligible: true, fullName: expect.any(String) });
+      expect(byCif.body.fullName.trim().length).toBeGreaterThan(0);
+      if (customer.name) expect(byCif.body.fullName).toBe(customer.name);
       expect(byCif.body.dateOfBirth).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(new Date(`${byCif.body.dateOfBirth}T00:00:00Z`).toISOString().slice(0, 10)).toBe(byCif.body.dateOfBirth);
       if (customer.dateOfBirth) expect(byCif.body.dateOfBirth).toBe(customer.dateOfBirth);
-      expect(byCif.body.accounts).toContainEqual(expect.objectContaining({ id: expect.any(String), currency: 'VND' }));
-      if (customer.casa) expect(byCif.body.accounts).toContainEqual(expect.objectContaining({ id: customer.casa, currency: 'VND' }));
+      expect(byCif.body.accounts).toContainEqual(expect.objectContaining({ casaNo: expect.any(String), currency: 'VND' }));
+      if (customer.casa) expect(byCif.body.accounts).toContainEqual(expect.objectContaining({ casaNo: customer.casa, currency: 'VND' }));
       const created = await request('/onboarding/requests', { token, key: `s5a-core-${index}`,
-        body: { cifRef: customer.cif, selectedAccountId: byCif.body.accounts.find((a: any) => a.currency === 'VND').id } });
+        body: { cifRef: customer.cif, selectedCasaNo: byCif.body.accounts.find((a: any) => a.currency === 'VND').casaNo } });
       expect(created.status).toBe(201); // Own-account validation is exercised at the real business boundary.
       const inbox = await request('/me/onboarding-requests', { token: await tokenFor(customer.cif) }); // customers log in by CIF (AC4)
       expect(inbox.status).toBe(200);
-      expect(inbox.body.items).toContainEqual(expect.objectContaining({ id: created.body.id }));
+      expect(inbox.body.items).toContainEqual(expect.objectContaining({ requestId: created.body.requestId }));
     }
     const unknown = await request('/onboarding/customer-lookup', { token, body: { cifRef: 'synthetic-unknown-cif' } });
     expect(unknown.status).toBe(404);
@@ -137,19 +137,19 @@ describe('S5a AC01/AC07 real CLI synthetic demo runtime', () => {
     const lookup = await request('/onboarding/customer-lookup', { token, body: { cifRef: 'CIF100006' } });
     expect(lookup.status).toBe(200);
     const created = await request('/onboarding/requests', { token, key: 's5a-user-created-request',
-      body: { cifRef: 'CIF100006', selectedAccountId: lookup.body.accounts[0].id } });
+      body: { cifRef: 'CIF100006', selectedCasaNo: lookup.body.accounts[0].casaNo } });
     expect(created.status).toBe(201);
     await sql.query("INSERT INTO wms.staff_users(iam_subject,employee_code,full_name,role,team_id,is_active) VALUES('user-owned-subject','NV9999','User owned staff','RM',$1,false)", [actors.rm.teamId]);
-    const before = (await sql.query('SELECT * FROM wms.onboarding_requests WHERE request_id=$1', [created.body.id])).rows;
-    const reserved = (await sql.query('SELECT * FROM wms.rm_capacity_reservations WHERE request_id=$1', [created.body.id])).rows;
+    const before = (await sql.query('SELECT * FROM wms.onboarding_requests WHERE request_id=$1', [created.body.requestId])).rows;
+    const reserved = (await sql.query('SELECT * FROM wms.rm_capacity_reservations WHERE request_id=$1', [created.body.requestId])).rows;
     expect(before).toHaveLength(1);
     expect(reserved).toHaveLength(1);
     for (let repeat = 0; repeat < 2; repeat++) {
       const result = await seed();
       expect(result.code).toBe(0);
       assertSanitized(result.output);
-      expect((await sql.query('SELECT * FROM wms.onboarding_requests WHERE request_id=$1', [created.body.id])).rows).toEqual(before);
-      expect((await sql.query('SELECT * FROM wms.rm_capacity_reservations WHERE request_id=$1', [created.body.id])).rows).toEqual(reserved);
+      expect((await sql.query('SELECT * FROM wms.onboarding_requests WHERE request_id=$1', [created.body.requestId])).rows).toEqual(before);
+      expect((await sql.query('SELECT * FROM wms.rm_capacity_reservations WHERE request_id=$1', [created.body.requestId])).rows).toEqual(reserved);
       expect((await sql.query("SELECT * FROM wms.staff_users WHERE employee_code='NV9999'")).rows).toContainEqual(expect.objectContaining({ is_active: false, iam_subject: 'user-owned-subject' }));
       expect((await sql.query("SELECT * FROM wms.staff_users WHERE employee_code <> 'NV9999' ORDER BY employee_code")).rows).toEqual(trusted);
     }

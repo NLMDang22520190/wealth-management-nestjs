@@ -67,7 +67,7 @@ export class NotificationsService {
         WHERE w.customer_id=n.customer_id AND r.expires_at>$2))
       ORDER BY n.created_at DESC,n.notification_id DESC LIMIT 100`, [customer.id, this.options.clock.now()]);
     return { items: rows.map((row: { id: string; kind: string; message: string; created_at: Date; read_at: Date | null }) => ({
-      id: row.id, kind: row.kind, message: row.message, createdAt: row.created_at.toISOString(),
+      notificationId: row.id, kind: row.kind, message: row.message, createdAt: row.created_at.toISOString(),
       readAt: row.read_at ? row.read_at.toISOString() : null })) };
   }
 
@@ -78,6 +78,6 @@ export class NotificationsService {
       [id, customer.id, this.options.clock.now()]);
     const updated = result?.[0];
     if (!updated) throw new ApiError(404, 'NOT_FOUND', 'Resource not found');
-    return { id: updated.id, readAt: updated.read_at.toISOString() };
+    return { notificationId: updated.id, readAt: updated.read_at.toISOString() };
   }
 }

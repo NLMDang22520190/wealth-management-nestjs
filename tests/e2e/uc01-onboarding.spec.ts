@@ -42,7 +42,7 @@ test.describe('UC01 onboarding journey (AC07 + AC02)', () => {
   test('AC07/AC02 customer reads terms, requests OTP, rejects a wrong OTP, then confirms explicitly with the demo OTP', async ({ page }) => {
     const rmToken = await tokenFor('NV0002');
     const created = await api('/onboarding/requests', { token: rmToken, key: 'e2e-uc01-setup',
-      body: { cifRef: 'CIF100001', selectedAccountId: '0011000123451' } });
+      body: { cifRef: 'CIF100001', selectedCasaNo: '0011000123451' } });
     expect(created.status).toBe(201);
 
     await openApp(page);

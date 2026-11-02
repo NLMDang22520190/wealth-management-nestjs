@@ -51,9 +51,9 @@ export function startRuntimeProcess(args: string[], environment: Record<string, 
   }
   return {
     get output() { return output; },
-    async waitForExit() { return finishWithin(15_000); },
+    async waitForExit() { return finishWithin(60_000); },
     async waitUntilReady(baseUrl: string) {
-      const deadline = Date.now() + 15_000;
+      const deadline = Date.now() + 60_000;
       while (Date.now() < deadline) {
         if (exited) throw new Error('Owned runtime CLI exited before HTTP readiness');
         try {

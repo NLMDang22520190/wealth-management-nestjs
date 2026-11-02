@@ -38,10 +38,10 @@ describe('S8 B4 Vietnamese risk questionnaire published as a new immutable versi
   }
   async function register() {
     const request = await api.request('/onboarding/requests', { method: 'POST', token: await api.tokenFor(), key: 's8-registration',
-      body: { cifRef: actors.customer.cifId, selectedAccountId: eligibleCustomer().accounts[0].id } });
+      body: { cifRef: actors.customer.cifId, selectedCasaNo: eligibleCustomer().accounts[0].id } });
     expect(request.status).toBe(201);
-    const otp = await challenge(request.body.id, 'SERVICE_CONSENT');
-    const response = await api.request(`/me/onboarding-requests/${request.body.id}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
+    const otp = await challenge(request.body.requestId, 'SERVICE_CONSENT');
+    const response = await api.request(`/me/onboarding-requests/${request.body.requestId}/confirm`, { method: 'POST', token: await api.tokenFor(actors.customer.actorId),
       key: 's8-consent', body: { challengeId: otp.challengeId, code: otp.code } });
     expect(response.status).toBe(200);
     return response.body as { customerId: string };
@@ -129,9 +129,9 @@ describe('S8 B4 Vietnamese risk questionnaire published as a new immutable versi
     const token = await api.tokenFor(actors.customer.actorId);
     const profile = await api.request('/me/risk-profile', { token });
     expect(profile.status).toBe(200);
-    expect(profile.body.current).toMatchObject({ id: profileId, questionnaireVersion: V1, score: 30, category: 'BALANCED' });
+    expect(profile.body.current).toMatchObject({ riskProfileId: profileId, questionnaireVersion: V1, score: 30, category: 'BALANCED' });
     const history = await api.request('/me/risk-profile/history?page=1&pageSize=10', { token });
-    expect(history.body.items).toContainEqual(expect.objectContaining({ id: profileId, questionnaireVersion: V1 }));
+    expect(history.body.items).toContainEqual(expect.objectContaining({ riskProfileId: profileId, questionnaireVersion: V1 }));
     const [v1] = await api.dataSource.query('SELECT * FROM wms.risk_questionnaire_versions WHERE version=$1', [V1]);
     expect(v1.questions).toEqual(v1Expected);
     expect(v1.status, 'v1 stays referenced by history but must no longer be the active questionnaire').toBe('RETIRED');

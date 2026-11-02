@@ -4,7 +4,7 @@ import type { DataSource } from 'typeorm';
  * Single place for fixture actors (R9, team schema `wms`).
  * Staff log in by `staff_users.employee_code`, customers by CIF; JWT `sub` = `iam_subject`
  * (staff) or `'cust.' || lower(cif)` (customers). Fixture codes are synthetic and do not collide with the
- * team demo seed (NV0001..NV0005, CIF100001..CIF100005); API tests never load that seed.
+ * team demo seed (NV0001..NV0005); customer fixtures reuse CIF1000xx codes known to the Core mock (CIF100006 eligible); API tests never load that seed.
  * A customer exists in `wms.customers` only after UC-01 confirm, but may log in as soon as an
  * onboarding request exists for its CIF (AC4). A customer that must log in without any invitation needs
  * `insertCustomerRow` (used for `otherCustomer` in s1 and for `customer` in s0).
@@ -39,17 +39,17 @@ export const actors = {
     rmId: null, teamId: TEAM_A,
   },
   customer: {
-    actorId: '00000101', subjectId: 'cust.00000101', role: 'CUSTOMER',
-    cifId: '00000101', rmId: null, teamId: null,
+    actorId: 'CIF100006', subjectId: 'cust.cif100006', role: 'CUSTOMER',
+    cifId: 'CIF100006', rmId: null, teamId: null,
   },
   otherCustomer: {
-    actorId: '00000102', subjectId: 'cust.00000102', role: 'CUSTOMER',
-    cifId: '00000102', rmId: null, teamId: null,
+    actorId: 'CIF100002', subjectId: 'cust.cif100002', role: 'CUSTOMER',
+    cifId: 'CIF100002', rmId: null, teamId: null,
   },
 } as const;
 
 /** A third customer used by tests that need a foreign-team customer (logs in via its invitation). */
-export const gamma = { actorId: '00000103', subjectId: 'cust.00000103', role: 'CUSTOMER', cifId: '00000103', rmId: null, teamId: null } as const;
+export const gamma = { actorId: 'CIF100003', subjectId: 'cust.cif100003', role: 'CUSTOMER', cifId: 'CIF100003', rmId: null, teamId: null } as const;
 
 const staffActor = (actorId: string, rmId: string, teamId: string): Identity => ({ actorId, subjectId: `iam.${actorId.toLowerCase()}`, role: 'RM', cifId: null, rmId, teamId });
 /** Extra staff, inserted on demand with `insertStaff`. `leader` staff ids are listed in `leaderStaffIds`. */

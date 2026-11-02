@@ -24,9 +24,9 @@ async function createInvite(cif: string, rmActor = 'NV0002') {
   const lookup = await api('/onboarding/customer-lookup', { token, body: { cifRef: cif } });
   expect(lookup.status).toBe(200);
   const created = await api('/onboarding/requests', { token, key: `e2e-r8-invite-${cif}-${Math.random()}`,
-    body: { cifRef: cif, selectedAccountId: lookup.body.accounts[0].id } });
+    body: { cifRef: cif, selectedCasaNo: lookup.body.accounts[0].casaNo } });
   expect(created.status).toBe(201);
-  return created.body.id as string;
+  return created.body.requestId as string;
 }
 
 /** Focus is not on <body> and sits on a tabindex=-1 / status / alert element inside the result region. */
