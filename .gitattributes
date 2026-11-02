@@ -1,0 +1,3 @@
+# Vendored team SQL is pinned by sha256 in tests: never convert line endings on Windows checkouts.
+apps/api/src/database/team/*.sql -text
+scripts/team-seed/*.sql -text

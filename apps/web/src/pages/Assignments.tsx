@@ -179,7 +179,7 @@ export function Assignments() {
   const message = typeof failure === 'string' ? failure : failure ? describe(failure) : null;
   const rms = team.data?.items ?? [];
   const nameOf = (id: string) => rmText(id, rms.find(rm => rm.rmId === id)?.rmName);
-  const headClass = 'h-auto px-4 py-3 text-[0.78rem] text-muted-foreground';
+  const headClass = 'h-auto px-2 py-3 sm:px-4 text-[0.78rem] text-muted-foreground';
 
   return (
     <>

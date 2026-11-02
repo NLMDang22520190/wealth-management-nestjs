@@ -27,7 +27,7 @@ export function formatCompactVnd(value: string): string {
 const timeFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 export function formatTime(date: Date): string { return timeFormat.format(date); }
 
-const provenanceLabels: Record<string, string> = { SYNTHETIC_P3_READ_BRIDGE: 'Dữ liệu tổng hợp (demo)' };
+const provenanceLabels: Record<string, string> = { SYNTHETIC_P3_READ_BRIDGE: 'Dữ liệu tổng hợp (demo)', P3_PORTFOLIO_SNAPSHOT: 'Dữ liệu tổng hợp (demo)' };
 export function provenanceLabel(code: string): string { return provenanceLabels[code] ?? code; }
 
 /** First 8 characters of an id: enough to tell RMs apart without printing a whole UUID. */
