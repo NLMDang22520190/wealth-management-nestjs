@@ -15,7 +15,7 @@ export interface CoreCustomer {
 export interface CoreBanking { lookup(reference: string): Promise<CoreCustomer | null>; }
 
 export interface OnboardingRequest {
-  id: string; cif_id: string; customer_name: string; selected_account_id: string; rm_id: string; team_id: string;
+  request_id: string; cif_id: string; customer_name: string; selected_casa_no: string; rm_id: string; team_id: string;
   status: string; terms_version: string; terms_hash: string; expires_at: Date;
 }
 
@@ -63,9 +63,9 @@ export function requireUnexpired(request: OnboardingRequest, now: Date): void {
 }
 
 export function consentPayloadHash(request: OnboardingRequest): string {
-  return hash(JSON.stringify([request.id, request.cif_id, request.selected_account_id, request.terms_version, request.terms_hash]));
+  return hash(JSON.stringify([request.request_id, request.cif_id, request.selected_casa_no, request.terms_version, request.terms_hash]));
 }
 
 export function requestProjection(request: OnboardingRequest) {
-  return { id: request.id, status: request.status, expiresAt: new Date(request.expires_at).toISOString(), termsVersion: request.terms_version };
+  return { id: request.request_id, status: request.status, expiresAt: new Date(request.expires_at).toISOString(), termsVersion: request.terms_version };
 }

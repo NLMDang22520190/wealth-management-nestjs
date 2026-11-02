@@ -10,12 +10,12 @@ export interface RiskResult {
   allocation: { cash: number; deposit: number; bond: number; fund: number };
 }
 export interface RiskDraftRow {
-  id: string; customer_id: string; questionnaire_version: string; answers: RiskAnswer[];
+  draft_id: string; customer_id: string; questionnaire_version: string; answers: RiskAnswer[];
   score: number; category: RiskCategory; max_product_risk: number; allocation: RiskResult['allocation'];
   expected_current_profile_version: number; payload_hash: string; created_at: Date; expires_at: Date;
 }
 export interface RiskProfileRow extends Omit<RiskDraftRow, 'expected_current_profile_version' | 'created_at'> {
-  draft_id: string; version: number; confirmed_at: Date; otp_receipt_ref: string;
+  risk_profile_id: string; version: number; confirmed_at: Date; otp_receipt_ref: string;
 }
 
 function validAnswers(value: unknown): boolean {
@@ -56,14 +56,14 @@ export function scoreAnswers(questions: RiskQuestion[], answers: RiskAnswer[]): 
 }
 
 export function draftProjection(row: RiskDraftRow) {
-  return { id: row.id, questionnaireVersion: row.questionnaire_version, answers: row.answers,
+  return { id: row.draft_id, questionnaireVersion: row.questionnaire_version, answers: row.answers,
     score: row.score, category: row.category, maxProductRisk: row.max_product_risk, allocation: row.allocation,
     expectedCurrentProfileVersion: row.expected_current_profile_version, payloadHash: row.payload_hash,
     expiresAt: new Date(row.expires_at).toISOString() };
 }
 
 export function profileProjection(row: RiskProfileRow, now: Date) {
-  return { id: row.id, draftId: row.draft_id, customerId: row.customer_id, version: row.version,
+  return { id: row.risk_profile_id, draftId: row.draft_id, customerId: row.customer_id, version: row.version,
     questionnaireVersion: row.questionnaire_version, answers: row.answers, score: row.score, category: row.category,
     maxProductRisk: row.max_product_risk, allocation: row.allocation,
     confirmedAt: new Date(row.confirmed_at).toISOString(), expiresAt: new Date(row.expires_at).toISOString(),
