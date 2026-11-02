@@ -70,7 +70,9 @@ export async function startApiFixture(configuration: { environment?: 'test' | 'p
       expect(response.status).toBe(200);
       return response.body.accessToken;
     };
-    return { ...application!, state, deliveries, logs, logEntries, request, tokenFor,
+    /** Moves the injected clock forward. R9 category 4: `chk_rma_period` needs valid_to > valid_from, so a transfer must not happen at the instant of onboarding. */
+    const tick = (milliseconds = 1000) => { state.now = new Date(state.now.getTime() + milliseconds); };
+    return { ...application!, state, deliveries, logs, logEntries, request, tokenFor, tick,
       async stop() { try { await application?.app.close(); } finally { await database.stop(); } } };
   } catch (error) {
     try { await application?.app.close(); } finally { await database.stop(); }

@@ -1,15 +1,15 @@
 import { createHmac } from 'node:crypto';
 import pg from 'pg';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { actors } from '../helpers/actors.js';
+import { actors, insertStaff, staff, viaPg } from '../helpers/actors.js';
 import { startTestDatabase } from '../helpers/postgres.js';
 import { ownedEnvironmentFile, reserveHttpPort, runtimeEnvironment, runtimeSecret, startRuntimeProcess } from '../helpers/runtime.js';
 
 // These stable, explicitly synthetic references are the public demo/README contract.
 const identities = ['synthetic-identity-reference-101', 'synthetic-identity-reference-102'];
-const rmBeta = { actorId: 'rm-beta', subjectId: 'mock-rm-beta', role: 'RM', cifId: null,
-  rmId: '22222222-2222-4222-8222-222222222222', teamId: actors.rm.teamId };
-const registry = [...Object.values(actors), rmBeta];
+// R9: staff are trusted wms.staff_users rows; customers log in by CIF through their invitation, so only staff are registry rows.
+const rmBeta = staff.replacement;
+const registry = [actors.rm, actors.leader, rmBeta];
 const mainCommand = ['apps/api/dist/main.js'];
 // Public seed command is pinned in 02-tests-S5a.md: npm run seed:demo -> node scripts/seed-demo.mjs.
 const seedCommand = ['scripts/seed-demo.mjs'];
@@ -67,10 +67,7 @@ describe('S5a AC01/AC07 real CLI synthetic demo runtime', () => {
   }
   async function fixtureActors() {
     // Test SQL seeds only trusted identity rows; no Core adapter/callback is injected into the CLI.
-    for (const actor of registry) {
-      await sql.query(`INSERT INTO mock_actors(actor_id,subject_id,role,cif_id,rm_id,team_id,active)
-        VALUES($1,$2,$3,$4,$5,$6,true)`, [actor.actorId, actor.subjectId, actor.role, actor.cifId, actor.rmId, actor.teamId]);
-    }
+    for (const actor of registry) await insertStaff(viaPg(sql), actor);
   }
   async function seed(overrides: Record<string, string> = {}) {
     return cli(seedCommand, overrides).waitForExit();
@@ -112,15 +109,21 @@ describe('S5a AC01/AC07 real CLI synthetic demo runtime', () => {
     assertSanitized(child.output);
   });
 
-  test('AC01 seed CLI migrates empty PostgreSQL and repeats without deleting or replacing user business or unrelated actors', async () => {
+  // S1 scope of the seed command: it migrates an empty database to the wms schema and stays idempotent without touching user
+  // data. The team seed content itself (staff NV0001.., customers CIF100001..) is S2; the old mock_actors registry assertions
+  // are replaced by the staff_users equivalents on fixture rows (category 1).
+  test('AC01 seed CLI migrates empty PostgreSQL and repeats without deleting or replacing user business or unrelated staff', async () => {
     expect(await tables()).toEqual([]);
     const first = await seed();
     expect(first.code).toBe(0);
     assertSanitized(first.output);
-    expect(await tables()).toContainEqual({ table_name: 'migrations' });
-    const trusted = (await sql.query('SELECT * FROM mock_actors ORDER BY actor_id')).rows;
-    for (const actor of registry) expect(trusted).toContainEqual(expect.objectContaining({ actor_id: actor.actorId,
-      subject_id: actor.subjectId, role: actor.role, cif_id: actor.cifId, rm_id: actor.rmId, team_id: actor.teamId, active: true }));
+    // R9 AC1: only the TypeORM bookkeeping table stays in public; the P1 tables live in schema wms.
+    expect(await tables()).toEqual([{ table_name: 'migrations' }]);
+    expect((await sql.query("SELECT table_name FROM information_schema.tables WHERE table_schema='wms' AND table_name='staff_users'")).rows).toHaveLength(1);
+    await fixtureActors();
+    const trusted = (await sql.query('SELECT * FROM wms.staff_users ORDER BY employee_code')).rows;
+    for (const actor of registry) expect(trusted).toContainEqual(expect.objectContaining({ employee_code: actor.actorId,
+      iam_subject: actor.subjectId, role: actor.role, staff_id: actor.rmId ?? expect.any(String), team_id: actor.teamId, is_active: true }));
     const child = await ready();
     for (const actor of registry) {
       const me = await request('/auth/me', { token: await tokenFor(actor.actorId) });
@@ -133,19 +136,19 @@ describe('S5a AC01/AC07 real CLI synthetic demo runtime', () => {
     const created = await request('/onboarding/requests', { token, key: 's5a-user-created-request',
       body: { cifRef: actors.customer.cifId, selectedAccountId: lookup.body.accounts[0].id } });
     expect(created.status).toBe(201);
-    await sql.query("INSERT INTO mock_actors(actor_id,subject_id,role,cif_id,active) VALUES('user-owned-actor','user-owned-subject','CUSTOMER','00000999',false)");
-    const before = (await sql.query('SELECT * FROM onboarding_requests WHERE id=$1', [created.body.id])).rows;
-    const reserved = (await sql.query('SELECT * FROM rm_capacity_reservations WHERE onboarding_request_id=$1', [created.body.id])).rows;
+    await sql.query("INSERT INTO wms.staff_users(iam_subject,employee_code,full_name,role,team_id,is_active) VALUES('user-owned-subject','NV9999','User owned staff','RM',$1,false)", [actors.rm.teamId]);
+    const before = (await sql.query('SELECT * FROM wms.onboarding_requests WHERE request_id=$1', [created.body.id])).rows;
+    const reserved = (await sql.query('SELECT * FROM wms.rm_capacity_reservations WHERE request_id=$1', [created.body.id])).rows;
     expect(before).toHaveLength(1);
     expect(reserved).toHaveLength(1);
     for (let repeat = 0; repeat < 2; repeat++) {
       const result = await seed();
       expect(result.code).toBe(0);
       assertSanitized(result.output);
-      expect((await sql.query('SELECT * FROM onboarding_requests WHERE id=$1', [created.body.id])).rows).toEqual(before);
-      expect((await sql.query('SELECT * FROM rm_capacity_reservations WHERE onboarding_request_id=$1', [created.body.id])).rows).toEqual(reserved);
-      expect((await sql.query("SELECT * FROM mock_actors WHERE actor_id='user-owned-actor'")).rows).toContainEqual(expect.objectContaining({ active: false, subject_id: 'user-owned-subject' }));
-      expect((await sql.query("SELECT * FROM mock_actors WHERE actor_id <> 'user-owned-actor' ORDER BY actor_id")).rows).toEqual(trusted);
+      expect((await sql.query('SELECT * FROM wms.onboarding_requests WHERE request_id=$1', [created.body.id])).rows).toEqual(before);
+      expect((await sql.query('SELECT * FROM wms.rm_capacity_reservations WHERE request_id=$1', [created.body.id])).rows).toEqual(reserved);
+      expect((await sql.query("SELECT * FROM wms.staff_users WHERE employee_code='NV9999'")).rows).toContainEqual(expect.objectContaining({ is_active: false, iam_subject: 'user-owned-subject' }));
+      expect((await sql.query("SELECT * FROM wms.staff_users WHERE employee_code <> 'NV9999' ORDER BY employee_code")).rows).toEqual(trusted);
     }
     assertSanitized(child.output);
   }, 60_000);

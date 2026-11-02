@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { actors } from '../helpers/actors.js';
 import { eligibleCustomer, expectApiError, startApiFixture, TEST_NOW } from '../helpers/application.js';
+import { rid } from '../helpers/wms.js';
 
 type Fixture = Awaited<ReturnType<typeof startApiFixture>>;
 const HOUR = 3_600_000;
@@ -49,11 +50,11 @@ describe('S1a AC03/AC08 complete onboarding contract', () => {
     });
   }
   async function count(table: string) {
-    const [row] = await api.dataSource.query(`SELECT count(*)::integer AS count FROM ${table}`);
+    const [row] = await api.dataSource.query(`SELECT count(*)::integer AS count FROM wms.${table}`);
     return row.count as number;
   }
   async function noRegistration() {
-    for (const table of ['wealth_services', 'investment_accounts', 'service_consents', 'rm_assignment_history']) {
+    for (const table of ['wealth_services', 'investment_accounts', 'service_consents', 'rm_assignments']) {
       expect(await count(table), `${table} must remain empty`).toBe(0);
     }
   }
@@ -100,8 +101,8 @@ describe('S1a AC03/AC08 complete onboarding contract', () => {
     } finally { gate.release(); }
     expectApiError(await response, 410, 'ONBOARDING_EXPIRED');
     await noRegistration();
-    expect((await api.dataSource.query("SELECT * FROM audit_events WHERE action='SERVICE_REGISTERED' AND outcome='SUCCESS'")).length).toBe(0);
-    expect((await api.dataSource.query("SELECT * FROM outbox_events WHERE event_type='ServiceRegistered'")).length).toBe(0);
+    expect((await api.dataSource.query("SELECT * FROM wms.audit_logs WHERE action='SERVICE_REGISTERED' AND outcome='SUCCESS'")).length).toBe(0);
+    expect((await api.dataSource.query("SELECT * FROM wms.outbox_events WHERE event_type='ServiceRegistered'")).length).toBe(0);
   });
 
   test('AC03 identity reference resolves to canonical CIF with DOB and active status and registers the canonical customer', async () => {
@@ -122,42 +123,42 @@ describe('S1a AC03/AC08 complete onboarding contract', () => {
     expect(detail.status).toBe(200);
     const registered = await confirm(created.body.id, await otp(created.body.id));
     expect(registered.status).toBe(200);
-    const [customer] = await api.dataSource.query('SELECT * FROM customers WHERE id=$1', [registered.body.customerId]);
+    const [customer] = await api.dataSource.query('SELECT * FROM wms.customers WHERE customer_id=$1', [registered.body.customerId]);
     expect(customer.cif_id).toBe(actors.customer.cifId);
     expect(JSON.stringify([detail.body, registered.body])).not.toContain(identityRef);
   });
 
   describe('safe audit records share the business commit', () => {
     test('AC08 request, OTP issue and consent persist actor/time/correlation/device and filtered before-after without authentication secrets', async () => {
-      const created = await create('audited-request', actors.customer.cifId, 's1a-audit-request');
+      const created = await create('audited-request', actors.customer.cifId, rid(11));
       expect(created.status).toBe(201);
-      const issued = await issue(created.body.id, 's1a-audit-otp');
+      const issued = await issue(created.body.id, rid(12));
       expect(issued.status).toBe(201);
       const delivery = api.deliveries.find(item => item.challengeId === issued.body.challengeId)!;
       const customerToken = await api.tokenFor(actors.customer.actorId);
       const accepted = await api.request(`/me/onboarding-requests/${created.body.id}/confirm`, {
-        method: 'POST', token: customerToken, key: 'audited-consent', headers: { 'user-agent': DEVICE, 'x-request-id': 's1a-audit-consent' },
+        method: 'POST', token: customerToken, key: 'audited-consent', headers: { 'user-agent': DEVICE, 'x-request-id': rid(13) },
         body: { challengeId: delivery.challengeId, code: delivery.code },
       });
       expect(accepted.status).toBe(200);
       const expected = [
-        { action: 'ONBOARDING_REQUESTED', actor: actors.rm.actorId, requestId: 's1a-audit-request', before: null,
+        { action: 'ONBOARDING_REQUESTED', actor: actors.rm.actorId, role: 'RM', requestId: rid(11), before: null,
           after: { id: created.body.id, status: 'PENDING_CONSENT', termsVersion: created.body.termsVersion } },
-        { action: 'OTP_ISSUED', actor: actors.customer.actorId, requestId: 's1a-audit-otp', before: null,
+        { action: 'OTP_ISSUED', actor: actors.customer.actorId, role: 'CUSTOMER', requestId: rid(12), before: null,
           after: { challengeId: issued.body.challengeId, purpose: 'SERVICE_CONSENT', operationId: created.body.id } },
-        { action: 'SERVICE_REGISTERED', actor: actors.customer.actorId, requestId: 's1a-audit-consent',
+        { action: 'SERVICE_REGISTERED', actor: actors.customer.actorId, role: 'CUSTOMER', requestId: rid(13),
           before: { requestId: created.body.id, status: 'PENDING_CONSENT' },
           after: { requestId: created.body.id, status: 'PENDING_RISK_ASSESSMENT', serviceId: accepted.body.serviceId } },
       ];
       for (const event of expected) {
-        const rows = await api.dataSource.query('SELECT * FROM audit_events WHERE action=$1 AND outcome=$2', [event.action, 'SUCCESS']);
+        const rows = await api.dataSource.query('SELECT * FROM wms.audit_logs WHERE action=$1 AND outcome=$2', [event.action, 'SUCCESS']);
         expect(rows, `${event.action} must be audited exactly once`).toHaveLength(1);
         const row = rows[0];
         expect(row.actor_id).toBe(event.actor);
         expect(new Date(row.created_at).toISOString()).toBe(TEST_NOW);
-        expect(row.metadata).toMatchObject({ requestId: event.requestId, ip: '127.0.0.1', device: DEVICE });
-        expect(row.metadata.before).toEqual(event.before === null ? null : expect.objectContaining(event.before));
-        expect(row.metadata.after).toEqual(expect.objectContaining(event.after));
+        expect(row).toMatchObject({ request_id: event.requestId, ip_address: '127.0.0.1', user_agent: DEVICE, actor_role: event.role });
+        expect(row.old_value).toEqual(event.before === null ? null : expect.objectContaining(event.before));
+        expect(row.new_value).toEqual(expect.objectContaining(event.after));
         const serialized = JSON.stringify(row);
         for (const forbidden of [delivery.code, customerToken, eligibleCustomer().name, eligibleCustomer().dateOfBirth]) {
           expect(serialized, `${event.action} must filter sensitive boundary data`).not.toContain(forbidden);
@@ -173,14 +174,14 @@ describe('S1a AC03/AC08 complete onboarding contract', () => {
       const tables = operation === 'request' ? ['onboarding_requests', 'rm_capacity_reservations'] : ['otp_challenges'];
       const before = await Promise.all(tables.map(table => count(table)));
       const deliveriesBefore = api.deliveries.length;
-      await api.dataSource.query('ALTER TABLE audit_events ADD CONSTRAINT s1a_audit_failure CHECK (false) NOT VALID');
+      await api.dataSource.query('ALTER TABLE wms.audit_logs ADD CONSTRAINT s1a_audit_failure CHECK (false) NOT VALID');
       try {
         const response = operation === 'request' ? await create('audit-rollback') : await issue(request!.id);
         expectApiError(response, 500, 'INTERNAL_ERROR');
         for (let index = 0; index < tables.length; index++) expect(await count(tables[index]), `${tables[index]} atomic rollback`).toBe(before[index]);
         expect(api.deliveries.length).toBe(deliveriesBefore);
         await noRegistration();
-      } finally { await api.dataSource.query('ALTER TABLE audit_events DROP CONSTRAINT s1a_audit_failure'); }
+      } finally { await api.dataSource.query('ALTER TABLE wms.audit_logs DROP CONSTRAINT s1a_audit_failure'); }
       const retried = operation === 'request' ? await create('audit-rollback') : await issue(request!.id);
       expect(retried.status).toBe(201);
       for (let index = 0; index < tables.length; index++) expect(await count(tables[index]), `${tables[index]} retry writes once`).toBe(before[index] + 1);

@@ -1,19 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { actors } from '../helpers/actors.js';
+import { actors, insertStaff, staff, viaDataSource } from '../helpers/actors.js';
 import { eligibleCustomer, startApiFixture } from '../helpers/application.js';
 
 type Fixture = Awaited<ReturnType<typeof startApiFixture>>;
 
-const replacement = { actorId: 'rm-s15-replacement', rmId: '66666666-6666-4666-8666-666666666666' };
+const replacement = staff.replacement;
 
-/** S15 AC4 (API part): team/rms and team/customers expose rmName = mock_actors.actor_id of the RM. */
+/** S15 AC4 (API part): team/rms and team/customers expose rmName = staff_users.employee_code of the RM (S3 renames it to rmFullName). */
 describe('S15 AC4 rmName on leader team endpoints', () => {
   let api: Fixture;
   beforeEach(async () => {
     api = await startApiFixture();
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,true)',
-      [replacement.actorId, `mock-${replacement.actorId}`, 'RM', replacement.rmId, actors.rm.teamId]);
+    await insertStaff(viaDataSource(api.dataSource), replacement);
   });
   afterEach(async () => { await api?.stop(); });
 
@@ -33,7 +32,7 @@ describe('S15 AC4 rmName on leader team endpoints', () => {
   }
   const leaderToken = () => api.tokenFor(actors.leader.actorId);
 
-  test('AC4 team/rms items carry rmName equal to each RM actor_id', async () => {
+  test('AC4 team/rms items carry rmName equal to each RM employee_code', async () => {
     const response = await api.request('/team/rms', { token: await leaderToken() });
     expect(response.status).toBe(200);
     const byRm = (rmId: string) => response.body.items.find((item: any) => item.rmId === rmId);
@@ -53,17 +52,19 @@ describe('S15 AC4 rmName on leader team endpoints', () => {
     const customerId = await registerCustomer();
     const list = async () => (await api.request('/team/customers', { token: await leaderToken() })).body.items.find((item: any) => item.customerId === customerId);
     expect(await list()).toMatchObject({ customerId, rmId: actors.rm.rmId, assignmentVersion: 1, rmName: actors.rm.actorId });
-    await api.dataSource.query('UPDATE rm_assignment_history SET rm_id=$2 WHERE customer_id=$1 AND valid_to IS NULL', [customerId, replacement.rmId]);
+    await api.dataSource.query('UPDATE wms.rm_assignments SET rm_id=$2 WHERE customer_id=$1 AND valid_to IS NULL', [customerId, replacement.rmId]);
     expect(await list()).toMatchObject({ customerId, rmId: replacement.rmId, rmName: replacement.actorId });
   });
 
-  test('AC4 team/customers rmName is null when the assigned RM has no actor row', async () => {
+  // Category 4: rm_assignments.rm_id is a FK to staff_users, so "an assigned RM without an actor row" is no longer a reachable
+  // state; the database refuses it, hence rmName can never be null.
+  test('AC4 an assignment to an RM without a staff row is refused by the database (rmName is never null)', async () => {
     const customerId = await registerCustomer();
     const orphan = randomUUID();
-    await api.dataSource.query('UPDATE rm_assignment_history SET rm_id=$2 WHERE customer_id=$1 AND valid_to IS NULL', [customerId, orphan]);
+    await expect(api.dataSource.query('UPDATE wms.rm_assignments SET rm_id=$2 WHERE customer_id=$1 AND valid_to IS NULL', [customerId, orphan]))
+      .rejects.toMatchObject({ code: '23503' });
     const body = (await api.request('/team/customers', { token: await leaderToken() })).body;
     const row = body.items.find((item: any) => item.customerId === customerId);
-    expect(row).toMatchObject({ customerId, rmId: orphan });
-    expect(row.rmName).toBeNull();
+    expect(row).toMatchObject({ customerId, rmId: actors.rm.rmId, rmName: actors.rm.actorId });
   });
 });

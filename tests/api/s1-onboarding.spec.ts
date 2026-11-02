@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { actors } from '../helpers/actors.js';
+import { actors, insertCustomerRow, viaDataSource } from '../helpers/actors.js';
 import { eligibleCustomer, expectApiError, startApiFixture, TEST_NOW } from '../helpers/application.js';
 import type { CoreCustomer } from '../helpers/application.js';
 
 type Fixture = Awaited<ReturnType<typeof startApiFixture>>;
 const HOUR = 3_600_000;
 const TABLES = ['customers', 'onboarding_requests', 'rm_capacity_reservations', 'wealth_services',
-  'investment_accounts', 'service_consents', 'rm_assignment_history', 'audit_events', 'outbox_events'] as const;
+  'investment_accounts', 'service_consents', 'rm_assignments', 'audit_logs', 'outbox_events'] as const;
 
 describe('S1 AC03/AC08 onboarding and consent', () => {
   let api: Fixture;
@@ -54,14 +54,14 @@ describe('S1 AC03/AC08 onboarding and consent', () => {
   async function counts() {
     const result: Record<string, number> = {};
     for (const table of TABLES) {
-      const [row] = await api.dataSource.query(`SELECT count(*)::integer AS count FROM ${table}`);
+      const [row] = await api.dataSource.query(`SELECT count(*)::integer AS count FROM wms.${table}`);
       result[table] = row.count;
     }
     return result;
   }
   async function expectNoService() {
-    for (const table of ['wealth_services', 'investment_accounts', 'service_consents', 'rm_assignment_history']) {
-      const [row] = await api.dataSource.query(`SELECT count(*)::integer AS count FROM ${table}`);
+    for (const table of ['wealth_services', 'investment_accounts', 'service_consents', 'rm_assignments']) {
+      const [row] = await api.dataSource.query(`SELECT count(*)::integer AS count FROM wms.${table}`);
       expect(row.count, `${table} must remain empty before valid consent`).toBe(0);
     }
   }
@@ -72,7 +72,7 @@ describe('S1 AC03/AC08 onboarding and consent', () => {
     expect(customer.accounts).toContainEqual(expect.objectContaining({ id: eligibleCustomer().accounts[0].id, currency: 'VND' }));
     const request = await createRequest();
     expect(request.expiresAt).toBe(new Date(new Date(TEST_NOW).getTime() + 72 * HOUR).toISOString());
-    const [reservation] = await api.dataSource.query('SELECT * FROM rm_capacity_reservations WHERE onboarding_request_id=$1', [request.id]);
+    const [reservation] = await api.dataSource.query('SELECT * FROM wms.rm_capacity_reservations WHERE request_id=$1', [request.id]);
     expect(reservation).toMatchObject({ rm_id: actors.rm.rmId, status: 'ACTIVE' });
     await expectNoService();
     const detail = await api.request(`/me/onboarding-requests/${request.id}`, { token: await api.tokenFor(actors.customer.actorId) });
@@ -82,6 +82,8 @@ describe('S1 AC03/AC08 onboarding and consent', () => {
     expect(detail.body.terms.length).toBeGreaterThan(0);
     const rm = await api.tokenFor();
     const own = await api.tokenFor(actors.customer.actorId);
+    // R9 AC4: otherCustomer has no invitation here, so it can authenticate only through a wms.customers fixture row.
+    await insertCustomerRow(viaDataSource(api.dataSource), actors.otherCustomer);
     expectApiError(await api.request('/onboarding/customer-lookup', { method: 'POST', token: own, body: { cifRef: actors.customer.cifId } }), 403, 'FORBIDDEN');
     expectApiError(await api.request('/onboarding/requests', { method: 'POST', token: own, key: 'forbidden', body: { cifRef: customer.cifRef, selectedAccountId: customer.accounts[0].id } }), 403, 'FORBIDDEN');
     expectApiError(await api.request(`/me/onboarding-requests/${request.id}/confirm`, { method: 'POST', token: rm, key: 'forbidden', body: { challengeId: request.id, code: '123456' } }), 403, 'FORBIDDEN');
@@ -91,20 +93,20 @@ describe('S1 AC03/AC08 onboarding and consent', () => {
     const accepted = await confirm(request.id, otp);
     expect(accepted.status).toBe(200);
     expect(accepted.body).toEqual(expect.objectContaining({ requestId: request.id, customerId: expect.any(String), serviceId: expect.any(String), accountId: expect.any(String), status: 'PENDING_RISK_ASSESSMENT' }));
-    const [service] = await api.dataSource.query('SELECT * FROM wealth_services WHERE id=$1', [accepted.body.serviceId]);
-    const [account] = await api.dataSource.query('SELECT * FROM investment_accounts WHERE id=$1', [accepted.body.accountId]);
-    const [consent] = await api.dataSource.query('SELECT * FROM service_consents WHERE request_id=$1', [request.id]);
-    const assignments = await api.dataSource.query('SELECT * FROM rm_assignment_history WHERE customer_id=$1 AND valid_to IS NULL', [accepted.body.customerId]);
-    expect(service).toMatchObject({ customer_id: accepted.body.customerId, status: 'PENDING_RISK_ASSESSMENT', linked_payment_account_id: customer.accounts[0].id, current_risk_profile_id: null, consent_id: consent.id });
-    expect(account).toMatchObject({ customer_id: accepted.body.customerId, balance: '0', currency: 'VND' });
+    const [service] = await api.dataSource.query('SELECT * FROM wms.wealth_services WHERE service_id=$1', [accepted.body.serviceId]);
+    const [account] = await api.dataSource.query('SELECT * FROM wms.investment_accounts WHERE account_id=$1', [accepted.body.accountId]);
+    const [consent] = await api.dataSource.query('SELECT * FROM wms.service_consents WHERE request_id=$1', [request.id]);
+    const assignments = await api.dataSource.query('SELECT * FROM wms.rm_assignments WHERE customer_id=$1 AND valid_to IS NULL', [accepted.body.customerId]);
+    expect(service).toMatchObject({ customer_id: accepted.body.customerId, status: 'PENDING_RISK_ASSESSMENT', linked_payment_account_no: customer.accounts[0].id, current_risk_profile_id: null, consent_id: consent.consent_id });
+    expect(account).toMatchObject({ customer_id: accepted.body.customerId, balance: '0.00', currency: 'VND' });
     expect(consent).toMatchObject({ customer_id: accepted.body.customerId, terms_version: request.termsVersion, otp_receipt_ref: expect.any(String) });
     expect(consent.terms_hash).toEqual(expect.stringMatching(/^[a-f0-9]{64}$/));
     expect(assignments).toHaveLength(1);
     expect(assignments[0]).toMatchObject({ rm_id: actors.rm.rmId, provisional: true });
-    const [consumed] = await api.dataSource.query('SELECT status FROM rm_capacity_reservations WHERE onboarding_request_id=$1', [request.id]);
+    const [consumed] = await api.dataSource.query('SELECT status FROM wms.rm_capacity_reservations WHERE request_id=$1', [request.id]);
     expect(consumed.status).toBe('CONSUMED');
-    expect((await api.dataSource.query("SELECT * FROM outbox_events WHERE event_type='ServiceRegistered'")).length).toBe(1);
-    expect((await api.dataSource.query("SELECT * FROM audit_events WHERE action='SERVICE_REGISTERED' AND outcome='SUCCESS'")).length).toBe(1);
+    expect((await api.dataSource.query("SELECT * FROM wms.outbox_events WHERE event_type='ServiceRegistered'")).length).toBe(1);
+    expect((await api.dataSource.query("SELECT * FROM wms.audit_logs WHERE action='SERVICE_REGISTERED' AND outcome='SUCCESS'")).length).toBe(1);
     const publicOutput = JSON.stringify([accepted.body, detail.body, ...api.logs]);
     expect(publicOutput).not.toContain(otp.code);
     expect(publicOutput).not.toContain(own);
@@ -170,7 +172,7 @@ describe('S1 AC03/AC08 onboarding and consent', () => {
     expectApiError(await confirm(winner.body.id, otp, 'fresh-replay'), 409, 'OTP_ALREADY_USED');
     expectApiError(await make('registered-again'), 409, 'SERVICE_EXISTS');
     const after = await counts();
-    for (const table of ['wealth_services', 'investment_accounts', 'service_consents', 'rm_assignment_history', 'outbox_events']) expect(after[table], table).toBe(1);
+    for (const table of ['wealth_services', 'investment_accounts', 'service_consents', 'rm_assignments', 'outbox_events']) expect(after[table], table).toBe(1);
   });
 
   test('AC03/AC08 OTP is bound to customer, purpose and immutable request; wrong/expired/exact72h OTP cannot register', async () => {
@@ -186,7 +188,7 @@ describe('S1 AC03/AC08 onboarding and consent', () => {
     expect(inbox.body).toEqual({ challengeId: otp.challengeId, code: otp.code, expiresAt: otp.expiresAt });
     expectApiError(await api.request(inboxPath, { token: await api.tokenFor() }), 403, 'FORBIDDEN');
     expectApiError(await api.request(inboxPath, { token: foreign }), 403, 'FORBIDDEN');
-    const [storedOtp] = await api.dataSource.query('SELECT * FROM otp_challenges WHERE id=$1', [otp.challengeId]);
+    const [storedOtp] = await api.dataSource.query('SELECT * FROM wms.otp_challenges WHERE challenge_id=$1', [otp.challengeId]);
     expect(storedOtp.code_hash).toEqual(expect.stringMatching(/^[a-f0-9]{64}$/));
     expect(storedOtp.code).toBeUndefined();
     expect(storedOtp.raw_code).toBeUndefined();
@@ -221,26 +223,26 @@ describe('S1 AC03/AC08 onboarding and consent', () => {
   });
 
   describe('local transaction rollback', () => {
-    test.each(['investment_accounts', 'service_consents', 'rm_assignment_history', 'audit_events', 'outbox_events'] as const)('AC08 a real %s constraint failure rolls back every local consent write and permits safe retry', async table => {
+    test.each(['investment_accounts', 'service_consents', 'rm_assignments', 'audit_logs', 'outbox_events'] as const)('AC08 a real %s constraint failure rolls back every local consent write and permits safe retry', async table => {
       const request = await createRequest();
       const otp = await challenge(request.id);
       const before = await counts();
       // A genuine PostgreSQL constraint at the persisted boundary, not a private-method mock.
-      await api.dataSource.query(`ALTER TABLE ${table} ADD CONSTRAINT s1_injected_failure CHECK (false) NOT VALID`);
+      await api.dataSource.query(`ALTER TABLE wms.${table} ADD CONSTRAINT s1_injected_failure CHECK (false) NOT VALID`);
       const response = await confirm(request.id, otp, 'rollback-confirm');
       expectApiError(response, 500, 'INTERNAL_ERROR');
       await expectNoService();
       const after = await counts();
-      for (const name of TABLES.filter(name => name !== 'audit_events')) expect(after[name], `${name} rollback`).toBe(before[name]);
-      expect((await api.dataSource.query("SELECT * FROM audit_events WHERE action='SERVICE_REGISTERED' AND outcome='SUCCESS'")).length).toBe(0);
-      const [persisted] = await api.dataSource.query('SELECT status FROM onboarding_requests WHERE id=$1', [request.id]);
-      const [reservation] = await api.dataSource.query('SELECT status FROM rm_capacity_reservations WHERE onboarding_request_id=$1', [request.id]);
+      for (const name of TABLES.filter(name => name !== 'audit_logs')) expect(after[name], `${name} rollback`).toBe(before[name]);
+      expect((await api.dataSource.query("SELECT * FROM wms.audit_logs WHERE action='SERVICE_REGISTERED' AND outcome='SUCCESS'")).length).toBe(0);
+      const [persisted] = await api.dataSource.query('SELECT status FROM wms.onboarding_requests WHERE request_id=$1', [request.id]);
+      const [reservation] = await api.dataSource.query('SELECT status FROM wms.rm_capacity_reservations WHERE request_id=$1', [request.id]);
       expect(persisted.status).toBe('PENDING_CONSENT');
       expect(reservation.status).toBe('ACTIVE');
-      await api.dataSource.query(`ALTER TABLE ${table} DROP CONSTRAINT s1_injected_failure`);
+      await api.dataSource.query(`ALTER TABLE wms.${table} DROP CONSTRAINT s1_injected_failure`);
       expect((await confirm(request.id, otp, 'rollback-confirm')).status).toBe(200);
       const completed = await counts();
-      for (const name of ['wealth_services', 'investment_accounts', 'service_consents', 'rm_assignment_history', 'outbox_events']) expect(completed[name], `${name} safe retry`).toBe(1);
+      for (const name of ['wealth_services', 'investment_accounts', 'service_consents', 'rm_assignments', 'outbox_events']) expect(completed[name], `${name} safe retry`).toBe(1);
     });
   });
 });

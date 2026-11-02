@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { actors } from '../helpers/actors.js';
+import { actors, insertStaff, staff, viaDataSource } from '../helpers/actors.js';
 import { eligibleCustomer, expectApiError, startApiFixture } from '../helpers/application.js';
+import { insertProposal, insertSnapshot } from '../helpers/wms.js';
 
 type Fixture = Awaited<ReturnType<typeof startApiFixture>>;
 type Registered = { customerId: string; serviceId: string; accountId: string };
@@ -29,6 +29,7 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
       body: { challengeId: delivery.challengeId, code: delivery.code },
     });
     expect(accepted.status).toBe(200);
+    api.tick(); // category 4: chk_rma_period needs valid_to > valid_from for a later transfer
     return accepted.body;
   }
 
@@ -55,10 +56,9 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
     return confirmed.body;
   }
 
-  async function addHolding(customerId: string, productId: string, marketValue: string, asOf: string, provenance = 'SYNTHETIC_P3_READ_BRIDGE') {
-    await api.dataSource.query(`INSERT INTO holdings_read_snapshots
-      (id,customer_id,product_id,product_risk,asset_class,quantity,market_value,as_of,provenance)
-      VALUES($1,$2,$3,3,'FUND',1,$4,$5,$6)`, [randomUUID(), customerId, productId, marketValue, asOf, provenance]);
+  // Category 1: AUM is the latest portfolio_snapshots row (aum, snapshot_date); the per-product holdings snapshot table is gone.
+  async function addSnapshot(customerId: string, date: string, aum: string) {
+    await insertSnapshot(viaDataSource(api.dataSource), { customerId, date, aum });
   }
 
   test('AC06 current RM list and detail return only current assignments and ignore injected rmId scope', async () => {
@@ -80,8 +80,8 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
   test('AC06 filters, bounded paging, stable id ties and AUM sort use the full authorized set before paging', async () => {
     const first = await register();
     const second = await register(actors.otherCustomer.cifId, actors.otherCustomer.actorId);
-    await addHolding(first.customerId, 's4-aum-low', '100.00', '2026-01-15T04:00:00.000Z');
-    await addHolding(second.customerId, 's4-aum-high', '900.00', '2026-01-15T04:00:00.000Z');
+    await addSnapshot(first.customerId, '2026-01-15', '100.00');
+    await addSnapshot(second.customerId, '2026-01-15', '900.00');
     const sortedPage = await api.request('/rm/customers?page=1&pageSize=1&sort=aum&direction=desc', { token: await api.tokenFor() });
     expect(sortedPage.status).toBe(200);
     expect(sortedPage.body.items).toHaveLength(1);
@@ -97,13 +97,13 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
   test('AC06 P3/P4 summaries preserve unavailable versus known zero and expose asOf/provenance', async () => {
     const registered = await register();
     const profile = await activateRisk(actors.customer.actorId, registered.customerId);
-    await addHolding(registered.customerId, 's4-fund', '1250000.50', '2026-01-15T04:59:00.000Z');
-    await api.dataSource.query(`INSERT INTO proposals(id,customer_id,author_rm_id,status,created_at,updated_at)
-      VALUES($1,$2,$3,'PENDING_APPROVAL',$4,$4)`, [randomUUID(), registered.customerId, actors.rm.rmId, api.state.now]);
+    await addSnapshot(registered.customerId, '2026-01-15', '1250000.50');
+    await insertProposal(viaDataSource(api.dataSource), { customerId: registered.customerId, authorRmId: actors.rm.rmId, now: api.state.now }); // category 6
     const detail = await api.request(`/customers/${registered.customerId}`, { token: await api.tokenFor() });
     expect(detail.status).toBe(200);
     expect(detail.body.currentRisk).toMatchObject({ id: profile.id, valid: true, expiresAt: expect.any(String) });
-    expect(detail.body.aum).toEqual(expect.objectContaining({ value: '1250000.50', asOf: '2026-01-15T04:59:00.000Z', provenance: 'SYNTHETIC_P3_READ_BRIDGE', dataStatus: 'AVAILABLE' }));
+    // asOf is the snapshot date (a DATE column: either 2026-01-15 or its midnight timestamp); provenance has no source column and stays a label.
+    expect(detail.body.aum).toEqual(expect.objectContaining({ value: '1250000.50', asOf: expect.stringMatching(/^2026-01-15/), provenance: expect.stringMatching(/\S/), dataStatus: 'AVAILABLE' }));
     expect(detail.body.driftAlerts).toEqual(expect.objectContaining({ count: expect.any(Number), asOf: expect.any(String), dataStatus: expect.any(String) }));
     expect(detail.body.pendingProposals).toEqual(expect.objectContaining({ count: 1, asOf: expect.any(String), dataStatus: 'AVAILABLE' }));
     const empty = await register(actors.otherCustomer.cifId, actors.otherCustomer.actorId);
@@ -117,11 +117,10 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
   test('AC05/AC06 current assignment revocation removes old RM list/detail access immediately after transfer', async () => {
     const registered = await register();
     await activateRisk(actors.customer.actorId, registered.customerId); // S3 transfer contract requires an ACTIVE service
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,true)',
-      ['rm-s4-replacement', 'mock-rm-s4-replacement', 'RM', '22222222-2222-4222-8222-222222222222', actors.rm.teamId]);
+    await insertStaff(viaDataSource(api.dataSource), staff.replacement);
     const moved = await api.request(`/customers/${registered.customerId}/rm-assignment`, {
       method: 'POST', token: await api.tokenFor(actors.leader.actorId), key: 's4-transfer',
-      body: { targetRmId: '22222222-2222-4222-8222-222222222222', reason: 'S4 ownership test', expectedAssignmentVersion: 1 },
+      body: { targetRmId: staff.replacement.rmId, reason: 'S4 ownership test', expectedAssignmentVersion: 1 },
     });
     expect(moved.status).toBe(200);
     // D-S4-list: list is derived from current assignments only; an RM with none gets 200 + empty list. Detail stays 403.
@@ -131,22 +130,20 @@ describe('S4 AC06/AC02 scoped RM customer summaries over real PostgreSQL', () =>
     expect(oldRmList.body.items).toHaveLength(0);
     expect(oldRmList.body.total).toBe(0);
     expectApiError(await api.request(`/customers/${registered.customerId}`, { token: await api.tokenFor(actors.rm.actorId) }), 403, 'FORBIDDEN');
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,true)',
-      ['rm-s4-empty', 'mock-rm-s4-empty', 'RM', '55555555-5555-4555-8555-555555555555', actors.rm.teamId]);
-    const emptyRmList = await api.request('/rm/customers', { token: await api.tokenFor('rm-s4-empty') });
+    await insertStaff(viaDataSource(api.dataSource), staff.idle);
+    const emptyRmList = await api.request('/rm/customers', { token: await api.tokenFor(staff.idle.actorId) });
     expect(emptyRmList.status, 'active RM with no assignments must get 200 empty list').toBe(200);
     expect(emptyRmList.body.items).toHaveLength(0);
     expect(emptyRmList.body.total).toBe(0);
-    const replacementList = await api.request('/rm/customers', { token: await api.tokenFor('rm-s4-replacement') });
+    const replacementList = await api.request('/rm/customers', { token: await api.tokenFor(staff.replacement.actorId) });
     expect(replacementList.status).toBe(200);
     expect(replacementList.body.items).toEqual(expect.arrayContaining([expect.objectContaining({ customerId: registered.customerId })]));
   });
 
   test('AC02 registered Core lookup checks current RM permission, deterministic rate limit, and impossible calendar DOB', async () => {
     await register();
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,true)',
-      ['rm-s4-foreign', 'mock-rm-s4-foreign', 'RM', '44444444-4444-4444-8444-444444444444', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']);
-    expectApiError(await api.request('/onboarding/customer-lookup', { method: 'POST', token: await api.tokenFor('rm-s4-foreign'), body: { cifRef: actors.customer.cifId } }), 403, 'FORBIDDEN');
+    await insertStaff(viaDataSource(api.dataSource), staff.foreign);
+    expectApiError(await api.request('/onboarding/customer-lookup', { method: 'POST', token: await api.tokenFor(staff.foreign.actorId), body: { cifRef: actors.customer.cifId } }), 403, 'FORBIDDEN');
     for (let attempt = 0; attempt < 30; attempt++) {
       const response = await api.request('/onboarding/customer-lookup', { method: 'POST', token: await api.tokenFor(), body: { cifRef: actors.customer.cifId } });
       expect(response.status).toBe(200);

@@ -1,12 +1,12 @@
 import pg from 'pg';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { actors } from '../helpers/actors.js';
+import { actors, insertCustomerRow, insertStaff, staff, viaDataSource, viaPg } from '../helpers/actors.js';
 import { eligibleCustomer, expectApiError, startApiFixture } from '../helpers/application.js';
 import { startTestDatabase } from '../helpers/postgres.js';
 import { reserveHttpPort, runtimeEnvironment, startRuntimeProcess } from '../helpers/runtime.js';
 
 type Fixture = Awaited<ReturnType<typeof startApiFixture>>;
-const rmBeta = { actorId: 'rm-s7-beta', subjectId: 'mock-rm-s7-beta', role: 'RM', rmId: '77777777-7777-4777-8777-777777777777', teamId: actors.rm.teamId };
+const rmBeta = staff.third;
 
 describe('S7 B5 error logging level and code', () => {
   let api: Fixture;
@@ -32,6 +32,8 @@ describe('S7 B5 error logging level and code', () => {
     api.state.core = null;
     const missing = await create('s7-missing');
     expectApiError(missing, 404, 'CUSTOMER_NOT_FOUND');
+    // R9 AC4: no invitation exists here, so the customer authenticates through a wms.customers fixture row.
+    await insertCustomerRow(viaDataSource(api.dataSource), actors.customer);
     const forbidden = await api.request('/rm/customers', { token: await api.tokenFor(actors.customer.actorId) });
     expect(forbidden.status).toBe(403);
     for (const [response, code] of [[missing, 'CUSTOMER_NOT_FOUND'], [forbidden, 'FORBIDDEN']] as const) {
@@ -72,8 +74,7 @@ describe('S7 B11 invitation creation quota (default 10 per RM per 60s on the inj
   beforeEach(async () => {
     api = await startApiFixture();
     api.state.coreLookup = async reference => eligibleCustomer(reference);
-    await api.dataSource.query('INSERT INTO mock_actors(actor_id,subject_id,role,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,true)',
-      [rmBeta.actorId, rmBeta.subjectId, rmBeta.role, rmBeta.rmId, rmBeta.teamId]);
+    await insertStaff(viaDataSource(api.dataSource), rmBeta);
   });
   afterEach(async () => { await api?.stop(); });
   const cif = (index: number) => `0000${String(2000 + index)}`;
@@ -100,7 +101,7 @@ describe('S7 B11 invitation creation quota (default 10 per RM per 60s on the inj
     // A different RM has its own quota.
     expect((await create(12, 's7-beta-1', rmBeta.actorId)).status).toBe(201);
     // Nothing was created for the rejected attempt.
-    const [{ count }] = await api.dataSource.query('SELECT count(*)::int AS count FROM onboarding_requests WHERE cif_id=$1', [cif(11)]);
+    const [{ count }] = await api.dataSource.query('SELECT count(*)::int AS count FROM wms.onboarding_requests WHERE cif_id=$1', [cif(11)]);
     expect(count).toBe(0);
     // After the 60-second window passes on the injected clock, creation works again.
     api.state.now = new Date(api.state.now.getTime() + 60_000);
@@ -137,8 +138,7 @@ describe('S7 B12 configurable limits through the real CLI', () => {
     return { status: response.status, body: await response.json() };
   }
   async function rmToken() {
-    await sql.query('INSERT INTO mock_actors(actor_id,subject_id,role,cif_id,rm_id,team_id,active) VALUES($1,$2,$3,$4,$5,$6,true)',
-      [actors.rm.actorId, actors.rm.subjectId, actors.rm.role, null, actors.rm.rmId, actors.rm.teamId]);
+    await insertStaff(viaPg(sql), actors.rm);
     const issued = await post('/mock-auth/token', '', { actorId: actors.rm.actorId });
     expect(issued.status).toBe(200);
     return issued.body.accessToken as string;
