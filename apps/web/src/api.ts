@@ -3,7 +3,7 @@ let accessToken: string | null = null;
 export function setToken(token: string | null): void { accessToken = token; }
 
 export class ApiFailure extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) { super(message); }
+  constructor(readonly status: number, readonly code: string, message: string, readonly details?: unknown) { super(message); }
 }
 
 interface Options { method?: string; body?: unknown; key?: string; signal?: AbortSignal; auth?: boolean }
@@ -28,8 +28,8 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   let parsed: unknown = null;
   try { parsed = raw ? JSON.parse(raw) : null; } catch { parsed = null; }
   if (!response.ok) {
-    const body = (parsed ?? {}) as { code?: string; message?: string };
-    throw new ApiFailure(response.status, body.code ?? 'UNKNOWN', body.message ?? 'error');
+    const body = (parsed ?? {}) as { code?: string; message?: string; details?: unknown };
+    throw new ApiFailure(response.status, body.code ?? 'UNKNOWN', body.message ?? 'error', body.details);
   }
   return parsed as T;
 }
@@ -81,6 +81,15 @@ const messages: Record<string, string> = {
   RATE_LIMITED: 'Bạn tra cứu quá nhiều lần. Hãy thử lại sau ít phút.',
   CORE_UNAVAILABLE: 'Hệ thống lõi ngân hàng tạm thời không khả dụng. Hãy thử lại sau.',
   UNAVAILABLE: 'Dịch vụ tạm thời không khả dụng. Hãy thử lại sau.',
+  ACCOUNT_NOT_FOUND: 'Không tìm thấy tài khoản đầu tư',
+  ACCOUNT_NOT_ACTIVE: 'Tài khoản đầu tư đang không hoạt động',
+  CASA_NOT_ELIGIBLE: 'Tài khoản thanh toán không đủ điều kiện',
+  AMOUNT_BELOW_MINIMUM: 'Số tiền thấp hơn mức tối thiểu',
+  DAILY_LIMIT_EXCEEDED: 'Vượt hạn mức trong ngày',
+  INSUFFICIENT_AVAILABLE_BALANCE: 'Số dư khả dụng không đủ',
+  TXN_NOT_CONFIRMABLE: 'Lệnh này không còn xác nhận được',
+  TXN_NOT_RESOLVABLE: 'Giao dịch này không còn chờ Back-office xử lý',
+  JOB_RUNNING: 'Một tác vụ khác đang chạy. Hãy thử lại sau ít phút.',
 };
 
 /** Vietnamese message for an error; `overrides` lets a screen say something more specific for a code or status. */

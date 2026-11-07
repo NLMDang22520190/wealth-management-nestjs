@@ -1,4 +1,4 @@
-export type ActorRole = 'RM' | 'LEADER' | 'CUSTOMER';
+export type ActorRole = 'RM' | 'LEADER' | 'CUSTOMER' | 'BACK_OFFICE';
 export interface Actor {
   /** Login id: staff `employee_code` or customer CIF. */
   actorId: string;

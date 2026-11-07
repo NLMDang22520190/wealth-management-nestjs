@@ -4,7 +4,7 @@ import { DataSource } from 'typeorm';
 import type { ApplicationOptions } from '../application.js';
 import { ApiError } from '../platform/http.js';
 import { RUNTIME_OPTIONS } from '../platform/runtime.module.js';
-import type { Actor } from './actor.js';
+import type { Actor, ActorRole } from './actor.js';
 
 const ISSUER = 'wealth-management-mock';
 const AUDIENCE = 'wealth-management-api';
@@ -27,8 +27,8 @@ export class AuthService {
     if (staff.length > 0 && customers.length > 0) throw unauthorized();
     if (staff.length > 0) {
       const member = staff[0]!;
-      if (staff.length !== 1 || !member.is_active || (member.role !== 'RM' && member.role !== 'LEADER')) throw unauthorized();
-      return { actorId: member.employee_code, subjectId: member.iam_subject, role: member.role, cifId: null,
+      if (staff.length !== 1 || !member.is_active || !['RM', 'LEADER', 'BACK_OFFICE'].includes(member.role)) throw unauthorized();
+      return { actorId: member.employee_code, subjectId: member.iam_subject, role: member.role as ActorRole, cifId: null,
         rmId: member.role === 'RM' ? member.staff_id : null, teamId: member.team_id, staffId: member.staff_id };
     }
     let cifs = customers.map(row => row.cif_id);

@@ -27,6 +27,8 @@ Object.assign(process.env, {
   JWT_SECRET: 'e2e-synthetic-only-signing-key-at-least-32-characters',
   // Generous limits: the whole E2E suite shares one RM actor and the real clock (backlog B12).
   LOOKUP_RATE_LIMIT_PER_MINUTE: '1000', INVITE_RATE_LIMIT_PER_MINUTE: '1000',
+  // Scenarios press the job buttons themselves; a background run would change results mid-test.
+  CASH_JOBS_ENABLED: 'false',
 });
 // Public seed command: builds the API, migrates the empty database and seeds the synthetic demo actors.
 const seeded = spawnSync('npm run seed:demo', { cwd: root, shell: true, stdio: 'inherit', env: process.env });

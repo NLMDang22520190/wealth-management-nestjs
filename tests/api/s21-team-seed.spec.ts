@@ -209,13 +209,14 @@ describe('S21 R9-S2 vendored team seed, demo login and Core mock', () => {
     expect(await identity('CIF100005')).toMatchObject({ actorId: 'CIF100005', role: 'CUSTOMER', cifId: 'CIF100005', subjectId: 'cust.cif100005' });
   }, 90_000);
 
-  test('AC4 after seeding, BACK_OFFICE staff, the old demo ids and unknown ids are 401 UNAUTHORIZED', async () => {
+  test('AC4 after seeding, NV0004 logs in as BACK_OFFICE; BACK_OFFICE_MANAGER, the old demo ids and unknown ids are 401 UNAUTHORIZED', async () => {
     expect((await seed()).code).toBe(0);
     // Guard: the refused staff really exist and are active in the seeded DB, so the 401 is the role rule and not a missing row.
     expect((await rows("SELECT employee_code, role, is_active FROM wms.staff_users WHERE employee_code IN ('NV0004','NV0005') ORDER BY employee_code")))
       .toEqual([{ employee_code: 'NV0004', role: 'BACK_OFFICE', is_active: true }, { employee_code: 'NV0005', role: 'BACK_OFFICE_MANAGER', is_active: true }]);
     await ready();
-    for (const actorId of ['NV0004', 'NV0005', 'rm-alpha', 'customer-alpha', 'leader-alpha', 'NV0099', 'CIF100099', 'cif100001']) {
+    expect((await request('/mock-auth/token', { body: { actorId: 'NV0004' } })).status, 'NV0004 logs in for P2').toBe(200);
+    for (const actorId of ['NV0005', 'rm-alpha','customer-alpha', 'leader-alpha', 'NV0099', 'CIF100099', 'cif100001']) {
       const refused = await request('/mock-auth/token', { body: { actorId } });
       expect(refused.status, `${actorId} must not log in`).toBe(401);
       expect(refused.body.code).toBe('UNAUTHORIZED');

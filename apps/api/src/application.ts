@@ -18,6 +18,8 @@ import { CustomerNotifications1791763200007 } from './database/migrations/179176
 import { TeamSchemaWms1791763200008 } from './database/migrations/1791763200008-team-schema-wms.js';
 import { CustomerRiskModule } from './modules/customer-risk/onboarding.module.js';
 import type { CoreBanking } from './modules/customer-risk/onboarding.domain.js';
+import { CashModule } from './modules/accounts-ledger/cash.module.js';
+import type { CoreLedger } from './modules/accounts-ledger/core-ledger.js';
 import type { OtpDelivery } from './platform/otp.service.js';
 import { validateConfiguration } from './platform/configuration.js';
 import { ApiErrorFilter, requestContext } from './platform/http.js';
@@ -39,6 +41,9 @@ export interface ApplicationOptions {
   /** OTP lifetime in seconds, integer 1..120 (team chk_otp_ttl; default 120). */
   otpTtlSeconds?: number;
   coreBanking?: CoreBanking;
+  coreLedger?: CoreLedger;
+  /** Runs the reconciliation and maturity schedule in this process; off unless the entry point enables it. */
+  cashJobsEnabled?: boolean;
   otpDelivery?: (delivery: OtpDelivery) => void | Promise<void>;
 }
 
@@ -65,7 +70,7 @@ export async function createApplication(options: ApplicationOptions): Promise<Ap
     await dataSource.runMigrations({ transaction: 'all' });
     app = await NestFactory.create({
       module: ApplicationModule,
-      imports: [RuntimeModule.register(options), DatabaseModule.register(dataSource), AuthModule, PlatformModule, CustomerRiskModule, BusinessRoutesModule],
+      imports: [RuntimeModule.register(options), DatabaseModule.register(dataSource), AuthModule, PlatformModule, CustomerRiskModule, BusinessRoutesModule, CashModule],
     }, { logger: options.logger });
     app.setGlobalPrefix('api/v1');
     app.use(requestContext);

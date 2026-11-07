@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { createApplication } from './application.js';
 import type { ApplicationOptions } from './application.js';
 import { ConfigurationError } from './platform/configuration.js';
-import { demoCoreBanking } from './platform/demo-core.js';
+import { demoCoreBanking, demoCoreLedger } from './platform/demo-core.js';
 
 const logger = new Logger('Bootstrap');
 async function bootstrap(): Promise<void> {
@@ -21,6 +21,8 @@ async function bootstrap(): Promise<void> {
   const lookupRateLimitPerMinute = limit('LOOKUP_RATE_LIMIT_PER_MINUTE');
   const inviteRateLimitPerMinute = limit('INVITE_RATE_LIMIT_PER_MINUTE');
   const otpTtlSeconds = limit('OTP_TTL_SECONDS');
+  const cashJobsSetting = process.env.CASH_JOBS_ENABLED ?? 'true';
+  if (!['true', 'false'].includes(cashJobsSetting)) throw new ConfigurationError();
   const { app } = await createApplication({
     databaseUrl: process.env.DATABASE_URL ?? '',
     environment: environment as ApplicationOptions['environment'],
@@ -30,7 +32,8 @@ async function bootstrap(): Promise<void> {
     ...(lookupRateLimitPerMinute !== undefined ? { lookupRateLimitPerMinute } : {}),
     ...(otpTtlSeconds !== undefined ? { otpTtlSeconds } : {}),
     ...(inviteRateLimitPerMinute !== undefined ? { inviteRateLimitPerMinute } : {}),
-    ...(environment !== 'production' && mockSetting === 'true' ? { coreBanking: demoCoreBanking } : {}),
+    ...(environment !== 'production' && mockSetting === 'true' ? { coreBanking: demoCoreBanking, coreLedger: demoCoreLedger } : {}),
+    cashJobsEnabled: cashJobsSetting === 'true',
   });
   app.enableShutdownHooks();
   try { await app.listen(port, '127.0.0.1'); }

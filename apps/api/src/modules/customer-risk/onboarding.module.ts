@@ -123,5 +123,6 @@ class OtpController {
 
 @Module({ imports: [AuthModule, AccountsLedgerModule, ProposalCancellationModule], controllers: [OnboardingController, OtpController],
   providers: [OnboardingService, OtpService, RiskService, CustomerAccess, RiskHoldingsRead, RmAssignmentService, RmCustomersService, NotificationsService],
-  exports: [RiskService, CustomerAccess, RmAssignmentService, RmCustomersService, NotificationsService] })
+  // OtpService is exported so P2 shares this instance: the demo inbox lives in it.
+  exports: [RiskService, CustomerAccess, RmAssignmentService, RmCustomersService, NotificationsService, OtpService] })
 export class CustomerRiskModule {}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, describe } from '../api';
 import { formatCompactVnd, formatDate, formatTime, formatVnd, provenanceLabel, riskLabel } from '../format';
 import { AlertAction, Empty, ErrorAlert, Field, Loading, PageTitle, Panel, RiskChip, useLoad } from '../ui';
+import { CashHistory } from './Cash';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -189,6 +190,7 @@ export function CustomerDetail({ customerId }: { customerId: string }) {
             <p>Đề xuất chờ duyệt: {customer.pendingProposals.count}</p>
             <p>Kiểm tra danh mục chờ: {customer.driftAlerts.count}</p>
           </Panel>
+          <Panel title="Lịch sử giao dịch"><CashHistory basePath={`/customers/${customerId}/cash-transactions`} /></Panel>
         </>
       ) : null}
     </>

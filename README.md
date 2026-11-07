@@ -21,7 +21,7 @@ Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một �
 | Phân công | Trách nhiệm | Trạng thái trong repo |
 |---|---|---|
 | **Phần 1 — Customer & Risk** | UC01 đăng ký dịch vụ · UC02 đánh giá rủi ro · UC03 phân công RM · UC04 danh sách khách của RM | ✅ Backend + giao diện + test |
-| Phần 2 — Accounts & Ledger | Tài khoản đầu tư, nạp/rút, lịch sử, đáo hạn (UC05–08) | Bridge mở tài khoản VND số dư 0 |
+| **Phần 2 — Accounts & Ledger** | Nạp tiền · rút tiền · lịch sử và sổ cái · đối soát · tất toán tiền gửi (UC05–08) | ✅ Backend + giao diện + test, xem [tài liệu Phần 2](docs/part2/01-overview.vi.md) |
 | Phần 3 — Portfolio & Valuation | Sản phẩm, NAV, danh mục/AUM, drift (UC09–12) | Bridge đọc holdings có nguồn và thời điểm |
 | Phần 4 — Advisory & Trading | Đề xuất, duyệt/từ chối, thực thi (UC13–16) | Bridge hủy proposal nguyên tử khi chuyển RM |
 
@@ -97,8 +97,9 @@ Mở `http://127.0.0.1:5173`, chọn **Vai trò demo** rồi bấm **Chuyển va
 | `NV0002` (RM An), `NV0003` (RM Bảo) | Tra cứu CIF `CIF100006` (đủ điều kiện) để tạo lời mời; `CIF100007` (danh sách đen), `CIF100008` (nhóm nợ 3), `CIF100009` (dưới 18 tuổi) bị từ chối; xem khách phụ trách |
 | `CIF100001` … `CIF100004` (Khách: Mai, Huy, Tâm, Yến) | Xem hồ sơ, khảo sát rủi ro (CIF100004 chưa khảo sát và nhận lời nhắc). Mã OTP xem ở nút **Xem hộp thư OTP demo** |
 | `NV0001` (Trưởng nhóm) | Xem tải RM, chuyển khách giữa `NV0002` và `NV0003` |
+| `NV0004` (Back-office) | Chốt giao dịch tiền bị treo, chạy đối soát và tất toán demo, xem báo cáo tất toán |
 
-Mã đăng nhập demo là `employee_code` (nhân viên) hoặc mã CIF (khách). Nhân viên back office `NV0004`/`NV0005` có trong dữ liệu mẫu nhưng không đăng nhập được vào Phân hệ 1. CIF100005 chỉ có lời mời đang chờ ký. Tên trường JSON của API theo tên cột của nhóm (`requestId`, `fullName`, `rmFullName`, `selectedCasaNo`…), xem [bản đồ tên trường](docs/part1/05-api-json-names.vi.md).
+Mã đăng nhập demo là `employee_code` (nhân viên) hoặc mã CIF (khách). `NV0005` (quản lý back office) có trong dữ liệu mẫu nhưng chưa đăng nhập được. CIF100005 chỉ có lời mời đang chờ ký. Tên trường JSON của API theo tên cột của nhóm (`requestId`, `fullName`, `rmFullName`, `selectedCasaNo`…), xem [bản đồ tên trường](docs/part1/05-api-json-names.vi.md).
 
 Mock auth, Core mô phỏng và hộp thư OTP demo **chỉ bật khi `NODE_ENV` là development/test và `MOCK_AUTH_ENABLED=true`**; cấu hình production kèm mock bị từ chối khi khởi động.
 
