@@ -30,13 +30,15 @@ describe('S20 AC4 demo login by employee_code / CIF on wms rows', () => {
     expect(me.body).toEqual(actor);
   });
 
-  test('AC4 BACK_OFFICE_MANAGER, inactive staff and unknown ids are 401 UNAUTHORIZED; BACK_OFFICE logs in for P2', async () => {
+  test('AC4 inactive staff and unknown ids are 401 UNAUTHORIZED; BACK_OFFICE and BACK_OFFICE_MANAGER log in', async () => {
     await sql()("INSERT INTO wms.staff_users(iam_subject,employee_code,full_name,role) VALUES('iam.bo','NV0190','Back office','BACK_OFFICE'),('iam.bom','NV0191','BO manager','BACK_OFFICE_MANAGER')");
     await insertStaff(sql(), staff.inactive, { active: false });
     expect((await issue('NV0190')).status).toBe(200);
-    for (const id of ['NV0191', staff.inactive.actorId, 'NV0000', 'rm-alpha']) expectApiError(await issue(id), 401, 'UNAUTHORIZED');
-    // A valid token of an inactive or back-office manager subject is refused as well.
-    for (const sub of ['iam.bom', staff.inactive.subjectId]) expectApiError(await api.request('/auth/me', { token: signed(sub) }), 401, 'UNAUTHORIZED');
+    expect((await issue('NV0191')).status, 'P3 price approvals need the manager').toBe(200);
+    for (const id of [staff.inactive.actorId, 'NV0000', 'rm-alpha']) expectApiError(await issue(id), 401, 'UNAUTHORIZED');
+    // A valid token of an inactive subject is refused as well.
+    expectApiError(await api.request('/auth/me', { token: signed(staff.inactive.subjectId) }), 401, 'UNAUTHORIZED');
+    expect((await api.request('/auth/me', { token: signed('iam.bom') })).body).toMatchObject({ actorId: 'NV0191', role: 'BACK_OFFICE_MANAGER', rmId: null });
   });
 
   test('AC4 a customer in wms.customers logs in by CIF; sub is customers.iam_subject, resolved from the row', async () => {

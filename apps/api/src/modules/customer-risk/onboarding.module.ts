@@ -7,6 +7,7 @@ import { ApiError, auditContext } from '../../platform/http.js';
 import type { ApiRequest } from '../../platform/http.js';
 import { OtpService } from '../../platform/otp.service.js';
 import { OtpChallengeBody } from '../../platform/validation.js';
+import { PortfolioScanModule } from '../portfolio-valuation/portfolio-scan.module.js';
 import { AccountsLedgerModule } from '../accounts-ledger/account-bootstrap.js';
 import { ConsentBody, CustomerLookupBody, OnboardingRequestBody } from './onboarding.domain.js';
 import { OnboardingService } from './onboarding.service.js';
@@ -121,7 +122,7 @@ class OtpController {
   }
 }
 
-@Module({ imports: [AuthModule, AccountsLedgerModule, ProposalCancellationModule], controllers: [OnboardingController, OtpController],
+@Module({ imports: [AuthModule, AccountsLedgerModule, ProposalCancellationModule, PortfolioScanModule], controllers: [OnboardingController, OtpController],
   providers: [OnboardingService, OtpService, RiskService, CustomerAccess, RiskHoldingsRead, RmAssignmentService, RmCustomersService, NotificationsService],
   // OtpService is exported so P2 shares this instance: the demo inbox lives in it.
   exports: [RiskService, CustomerAccess, RmAssignmentService, RmCustomersService, NotificationsService, OtpService] })

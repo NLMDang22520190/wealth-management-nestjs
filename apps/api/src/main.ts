@@ -22,7 +22,8 @@ async function bootstrap(): Promise<void> {
   const inviteRateLimitPerMinute = limit('INVITE_RATE_LIMIT_PER_MINUTE');
   const otpTtlSeconds = limit('OTP_TTL_SECONDS');
   const cashJobsSetting = process.env.CASH_JOBS_ENABLED ?? 'true';
-  if (!['true', 'false'].includes(cashJobsSetting)) throw new ConfigurationError();
+  const portfolioJobsSetting = process.env.PORTFOLIO_JOBS_ENABLED ?? 'true';
+  if (!['true', 'false'].includes(cashJobsSetting) || !['true', 'false'].includes(portfolioJobsSetting)) throw new ConfigurationError();
   const { app } = await createApplication({
     databaseUrl: process.env.DATABASE_URL ?? '',
     environment: environment as ApplicationOptions['environment'],
@@ -34,6 +35,7 @@ async function bootstrap(): Promise<void> {
     ...(inviteRateLimitPerMinute !== undefined ? { inviteRateLimitPerMinute } : {}),
     ...(environment !== 'production' && mockSetting === 'true' ? { coreBanking: demoCoreBanking, coreLedger: demoCoreLedger } : {}),
     cashJobsEnabled: cashJobsSetting === 'true',
+    portfolioJobsEnabled: portfolioJobsSetting === 'true',
   });
   app.enableShutdownHooks();
   try { await app.listen(port, '127.0.0.1'); }

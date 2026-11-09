@@ -16,10 +16,12 @@ import { RmAssignment1791763200005 } from './database/migrations/1791763200005-r
 import { VietnameseQuestionnaire1791763200006 } from './database/migrations/1791763200006-vietnamese-questionnaire.js';
 import { CustomerNotifications1791763200007 } from './database/migrations/1791763200007-customer-notifications.js';
 import { TeamSchemaWms1791763200008 } from './database/migrations/1791763200008-team-schema-wms.js';
+import { SnapshotKind1791763200009 } from './database/migrations/1791763200009-snapshot-kind.js';
 import { CustomerRiskModule } from './modules/customer-risk/onboarding.module.js';
 import type { CoreBanking } from './modules/customer-risk/onboarding.domain.js';
 import { CashModule } from './modules/accounts-ledger/cash.module.js';
 import type { CoreLedger } from './modules/accounts-ledger/core-ledger.js';
+import { PortfolioModule } from './modules/portfolio-valuation/portfolio.module.js';
 import type { OtpDelivery } from './platform/otp.service.js';
 import { validateConfiguration } from './platform/configuration.js';
 import { ApiErrorFilter, requestContext } from './platform/http.js';
@@ -44,6 +46,8 @@ export interface ApplicationOptions {
   coreLedger?: CoreLedger;
   /** Runs the reconciliation and maturity schedule in this process; off unless the entry point enables it. */
   cashJobsEnabled?: boolean;
+  /** Runs the 17:00 valuation snapshot and drift scan in this process; off unless the entry point enables it. */
+  portfolioJobsEnabled?: boolean;
   otpDelivery?: (delivery: OtpDelivery) => void | Promise<void>;
 }
 
@@ -61,7 +65,7 @@ export async function createApplication(options: ApplicationOptions): Promise<Ap
     type: 'postgres', url: options.databaseUrl, synchronize: false,
     migrations: [MockActors1791763200000, Onboarding1791763200001, AuditMetadata1791763200002, RiskProfiles1791763200003,
       QuestionnaireRetirement1791763200004, RmAssignment1791763200005,
-      VietnameseQuestionnaire1791763200006, CustomerNotifications1791763200007, TeamSchemaWms1791763200008], migrationsTableName: 'migrations',
+      VietnameseQuestionnaire1791763200006, CustomerNotifications1791763200007, TeamSchemaWms1791763200008, SnapshotKind1791763200009], migrationsTableName: 'migrations',
     logging: false,
   });
   let app: INestApplication | undefined;
@@ -70,7 +74,7 @@ export async function createApplication(options: ApplicationOptions): Promise<Ap
     await dataSource.runMigrations({ transaction: 'all' });
     app = await NestFactory.create({
       module: ApplicationModule,
-      imports: [RuntimeModule.register(options), DatabaseModule.register(dataSource), AuthModule, PlatformModule, CustomerRiskModule, BusinessRoutesModule, CashModule],
+      imports: [RuntimeModule.register(options), DatabaseModule.register(dataSource), AuthModule, PlatformModule, CustomerRiskModule, BusinessRoutesModule, CashModule, PortfolioModule],
     }, { logger: options.logger });
     app.setGlobalPrefix('api/v1');
     app.use(requestContext);

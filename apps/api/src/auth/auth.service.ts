@@ -27,7 +27,7 @@ export class AuthService {
     if (staff.length > 0 && customers.length > 0) throw unauthorized();
     if (staff.length > 0) {
       const member = staff[0]!;
-      if (staff.length !== 1 || !member.is_active || !['RM', 'LEADER', 'BACK_OFFICE'].includes(member.role)) throw unauthorized();
+      if (staff.length !== 1 || !member.is_active || !['RM', 'LEADER', 'BACK_OFFICE', 'BACK_OFFICE_MANAGER'].includes(member.role)) throw unauthorized();
       return { actorId: member.employee_code, subjectId: member.iam_subject, role: member.role as ActorRole, cifId: null,
         rmId: member.role === 'RM' ? member.staff_id : null, teamId: member.team_id, staffId: member.staff_id };
     }

@@ -22,7 +22,7 @@ Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một �
 |---|---|---|
 | **Phần 1 — Customer & Risk** | UC01 đăng ký dịch vụ · UC02 đánh giá rủi ro · UC03 phân công RM · UC04 danh sách khách của RM | ✅ Backend + giao diện + test |
 | **Phần 2 — Accounts & Ledger** | Nạp tiền · rút tiền · lịch sử và sổ cái · đối soát · tất toán tiền gửi (UC05–08) | ✅ Backend + giao diện + test, xem [tài liệu Phần 2](docs/part2/01-overview.vi.md) |
-| Phần 3 — Portfolio & Valuation | Sản phẩm, NAV, danh mục/AUM, drift (UC09–12) | Bridge đọc holdings có nguồn và thời điểm |
+| **Phần 3 — Portfolio & Valuation** | Danh mục sản phẩm · giá, NAV, lãi suất có duyệt 2 lớp · định giá danh mục · cảnh báo lệch tỷ trọng (UC09–12) | ✅ Backend + giao diện + test, xem [tài liệu Phần 3](docs/part3/01-overview.vi.md) |
 | Phần 4 — Advisory & Trading | Đề xuất, duyệt/từ chối, thực thi (UC13–16) | Bridge hủy proposal nguyên tử khi chuyển RM |
 
 ## Luồng Phần 1
@@ -97,9 +97,10 @@ Mở `http://127.0.0.1:5173`, chọn **Vai trò demo** rồi bấm **Chuyển va
 | `NV0002` (RM An), `NV0003` (RM Bảo) | Tra cứu CIF `CIF100006` (đủ điều kiện) để tạo lời mời; `CIF100007` (danh sách đen), `CIF100008` (nhóm nợ 3), `CIF100009` (dưới 18 tuổi) bị từ chối; xem khách phụ trách |
 | `CIF100001` … `CIF100004` (Khách: Mai, Huy, Tâm, Yến) | Xem hồ sơ, khảo sát rủi ro (CIF100004 chưa khảo sát và nhận lời nhắc). Mã OTP xem ở nút **Xem hộp thư OTP demo** |
 | `NV0001` (Trưởng nhóm) | Xem tải RM, chuyển khách giữa `NV0002` và `NV0003` |
-| `NV0004` (Back-office) | Chốt giao dịch tiền bị treo, chạy đối soát và tất toán demo, xem báo cáo tất toán |
+| `NV0004` (Back-office) | Chốt giao dịch tiền bị treo, chạy đối soát và tất toán demo, xem báo cáo tất toán; quản lý sản phẩm, nhập giá và NAV, chụp danh mục demo |
+| `NV0005` (Quản lý Back-office) | Duyệt hoặc từ chối giá biến động trên 20% |
 
-Mã đăng nhập demo là `employee_code` (nhân viên) hoặc mã CIF (khách). `NV0005` (quản lý back office) có trong dữ liệu mẫu nhưng chưa đăng nhập được. CIF100005 chỉ có lời mời đang chờ ký. Tên trường JSON của API theo tên cột của nhóm (`requestId`, `fullName`, `rmFullName`, `selectedCasaNo`…), xem [bản đồ tên trường](docs/part1/05-api-json-names.vi.md).
+Mã đăng nhập demo là `employee_code` (nhân viên) hoặc mã CIF (khách). CIF100005 chỉ có lời mời đang chờ ký. Tên trường JSON của API theo tên cột của nhóm (`requestId`, `fullName`, `rmFullName`, `selectedCasaNo`…), xem [bản đồ tên trường](docs/part1/05-api-json-names.vi.md).
 
 Mock auth, Core mô phỏng và hộp thư OTP demo **chỉ bật khi `NODE_ENV` là development/test và `MOCK_AUTH_ENABLED=true`**; cấu hình production kèm mock bị từ chối khi khởi động.
 
@@ -174,7 +175,7 @@ GitHub Actions (`.github/workflows/ci.yml`) chạy build, lint, typecheck và te
 ## Giới hạn đã biết
 
 - Bộ câu hỏi khảo sát được lưu theo phiên bản: phiên bản tiếng Việt `demo-risk-v2-vi` đang dùng, phiên bản đầu `demo-risk-v1` (tiếng Anh) được giữ nguyên ở trạng thái ngừng dùng cho lịch sử. Bản nháp làm trên phiên bản đã ngừng không xác nhận được.
-- "Kiểm tra danh mục chờ" là số yêu cầu kiểm tra holdings đang mở do hạ mức rủi ro; engine định giá và drift đầy đủ thuộc Phần 3.
+- "Kiểm tra danh mục chờ" là số yêu cầu kiểm tra holdings đang mở do hạ mức rủi ro. Cảnh báo lệch tỷ trọng là mục riêng, ở màn hình `Cảnh báo lệch`.
 - Tên RM hiển thị là `full_name` trong `staff_users` (ví dụ `Nguyễn Văn An`) kèm 8 ký tự đầu của mã RM; vì dữ liệu mẫu dùng UUID cố định, hai RM demo có cùng 8 ký tự đầu.
 - Lời nhắc khảo sát là thông báo trong ứng dụng; chưa gửi email/SMS và chưa có nhắc tự động khi hồ sơ sắp hết hạn.
 - Giới hạn tần suất (cấu hình bằng `LOOKUP_RATE_LIMIT_PER_MINUTE`, `INVITE_RATE_LIMIT_PER_MINUTE`, mặc định 30 và 10) được giữ trong bộ nhớ của một tiến trình API.

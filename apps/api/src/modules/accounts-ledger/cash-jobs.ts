@@ -3,6 +3,7 @@ import type { OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import type { ApplicationOptions } from '../../application.js';
 import { ApiError } from '../../platform/http.js';
+import { withJobLock } from '../../platform/job-lock.js';
 import { RUNTIME_OPTIONS } from '../../platform/runtime.module.js';
 import { vietnamDate, vietnamMinutesOfDay } from './cash.domain.js';
 import { MaturityService } from './maturity.service.js';
@@ -11,6 +12,7 @@ import { ReconciliationService } from './reconciliation.service.js';
 const TICK_MS = 60_000;
 const RECONCILIATION_EVERY_MS = 5 * 60_000;
 const MATURITY_AFTER_MINUTES = 30;
+const JOB_LOCK = 'cash-jobs';
 
 /** In-process schedule (no scheduler dependency). A session-level advisory lock on a dedicated connection keeps jobs to one instance at a time. */
 @Injectable()
@@ -53,19 +55,5 @@ export class CashJobs implements OnApplicationBootstrap, OnModuleDestroy {
     return outcome.value;
   }
 
-  private async withJobLock<T>(work: () => Promise<T>): Promise<{ value: T } | undefined> {
-    const session = this.database.createQueryRunner();
-    await session.connect();
-    try {
-      const [row] = await session.query("SELECT pg_try_advisory_lock(hashtextextended('cash-jobs',0)) AS locked");
-      if (!row.locked) return undefined;
-      try {
-        return { value: await work() };
-      } finally {
-        await session.query("SELECT pg_advisory_unlock(hashtextextended('cash-jobs',0))");
-      }
-    } finally {
-      await session.release();
-    }
-  }
+  private withJobLock<T>(work: () => Promise<T>): Promise<{ value: T } | undefined> { return withJobLock(this.database, JOB_LOCK, work); }
 }

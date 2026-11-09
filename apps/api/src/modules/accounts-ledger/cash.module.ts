@@ -6,6 +6,7 @@ import { Public, Roles } from '../../auth/guards.js';
 import { auditContext } from '../../platform/http.js';
 import type { ApiRequest } from '../../platform/http.js';
 import { CustomerRiskModule } from '../customer-risk/onboarding.module.js';
+import { PortfolioScanModule } from '../portfolio-valuation/portfolio-scan.module.js';
 import { TermDepositMaturity } from '../portfolio-valuation/term-deposit-maturity.js';
 import { CashConfirmBody, DepositBody, forbidden, MaturityJobBody, parseHistoryQuery, ResolveBody, WithdrawalBody } from './cash.domain.js';
 import { CashHistoryService } from './cash-history.service.js';
@@ -152,6 +153,6 @@ class DemoJobsController {
   }
 }
 
-@Module({ imports: [AuthModule, CustomerRiskModule], controllers: [CustomerCashController, StaffCashController, BackOfficeCashController, DemoJobsController],
+@Module({ imports: [AuthModule, CustomerRiskModule, PortfolioScanModule], controllers: [CustomerCashController, StaffCashController, BackOfficeCashController, DemoJobsController],
   providers: [LedgerService, CashSettlement, CashOrderService, ReconciliationService, TermDepositMaturity, MaturityService, CashHistoryService, CashJobs] })
 export class CashModule {}

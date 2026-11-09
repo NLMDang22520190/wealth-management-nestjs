@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import type { ApplicationOptions } from '../../application.js';
 import { RUNTIME_OPTIONS } from '../../platform/runtime.module.js';
 import { appendAudit, appendSuccess } from '../../platform/transactions.js';
+import { DriftScanner } from '../portfolio-valuation/drift-scanner.js';
 import { TermDepositMaturity } from '../portfolio-valuation/term-deposit-maturity.js';
 import { JOB_CONTEXT, MATURITY_ACTOR, vietnamDate } from './cash.domain.js';
 import { lockAccount, nextRefNo } from './cash-store.js';
@@ -15,20 +16,25 @@ const RUN_ACTION = 'MATURITY_RUN_COMPLETED';
 /** UC-08. Money moves inside WMS only, so Core is not called; each deposit has its own transaction, so one failure stops only itself. */
 @Injectable()
 export class MaturityService {
-  constructor(private readonly database: DataSource, private readonly ledger: LedgerService, private readonly deposits: TermDepositMaturity,
+  constructor(private readonly database: DataSource, private readonly ledger: LedgerService, private readonly deposits: TermDepositMaturity, private readonly scanner: DriftScanner,
     @Inject(RUNTIME_OPTIONS) private readonly options: ApplicationOptions) {}
 
   async run(asOf: string = vietnamDate(this.options.clock.now())): Promise<MaturityRun> {
     const result: MaturityRun = { asOf, settled: 0, skipped: 0, failed: [] };
+    const settledAccounts = new Set<string>();
     for (const deposit of await this.deposits.due(this.database, asOf)) {
       try {
-        if (await this.settle(deposit.holding_id, deposit.account_id)) result.settled += 1;
+        if (await this.settle(deposit.holding_id, deposit.account_id)) {
+          result.settled += 1;
+          settledAccounts.add(deposit.account_id);
+        }
         else result.skipped += 1;
       } catch {
         this.options.logger.error({ code: 'SETTLEMENT_FAILED', holdingId: deposit.holding_id });
         result.failed.push({ holdingId: deposit.holding_id, code: 'SETTLEMENT_FAILED' });
       }
     }
+    if (settledAccounts.size > 0) await this.scanner.scanAccounts([...settledAccounts], asOf);
     await this.database.transaction(manager => appendAudit(manager, MATURITY_ACTOR, { type: 'MATURITY_RUN', id: randomUUID() }, RUN_ACTION, result,
       this.options.clock.now(), { ...JOB_CONTEXT, before: null, after: result }));
     return result;
