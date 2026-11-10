@@ -119,4 +119,28 @@ test.describe('UC13 P3 products, prices and portfolio', () => {
     await expect(page.getByTestId('snapshot-result')).toContainText('1 khách');
     await expect.poll(async () => (await sql<{ aum: string }>("SELECT aum::text AS aum FROM wms.portfolio_snapshots WHERE snapshot_kind='DAILY'")).map(row => row.aum)).toEqual(['2050000.00']);
   });
+
+  test('the RM asks for a rebalancing proposal from an alert: it leaves the open list and the request is recorded for P4', async ({ page }) => {
+    await openApp(page);
+    await switchRole(page, BACK_OFFICE);
+    await addFund(page, 'FUND-REB');
+    await hold(customerId, 'FUND-REB', '10000');
+    await goTo(page, 'Giá và NAV');
+    await page.getByRole('button', { name: 'Chạy chụp danh mục' }).click();
+    await expect(page.getByTestId('snapshot-result')).toContainText('1 khách');
+
+    await switchRole(page, actors.rmAlpha);
+    await goTo(page, 'Cảnh báo lệch');
+    const alerts = page.getByRole('region', { name: 'Cảnh báo lệch tỷ trọng' });
+    const fundAlert = alerts.getByRole('listitem').filter({ hasText: 'Chứng chỉ quỹ' });
+    await expect(fundAlert).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await fundAlert.getByRole('button', { name: /^Tạo đề xuất tái cân bằng: .*Chứng chỉ quỹ$/ }).click();
+    await expect(page.getByRole('status').filter({ hasText: /^Đã tạo đề xuất tái cân bằng: .*Chứng chỉ quỹ$/ })).toBeVisible();
+    await expect(alerts.getByRole('listitem').filter({ hasText: 'Chứng chỉ quỹ' })).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+
+    expect(await sql<{ status: string }>("SELECT status::text AS status FROM wms.drift_alerts WHERE allocation_class='MUTUAL_FUND'")).toEqual([{ status: 'ACTIONED' }]);
+    expect(await sql<{ n: number }>("SELECT count(*)::int AS n FROM wms.outbox_events WHERE event_type='RebalanceProposalRequested'")).toEqual([{ n: 1 }]);
+  });
 });
