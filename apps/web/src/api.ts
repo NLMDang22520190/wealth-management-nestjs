@@ -67,6 +67,7 @@ const messages: Record<string, string> = {
   PRICE_NOT_FOUND: 'Không tìm thấy giá.',
   MAKER_CHECKER_VIOLATION: 'Người nhập giá không được tự duyệt giá của mình.',
   ALERT_NOT_FOUND: 'Không tìm thấy cảnh báo.',
+  ALERT_NOT_OPEN: 'Cảnh báo này đã được xử lý hoặc không còn lệch.',
   VALIDATION_ERROR: 'Dữ liệu chưa hợp lệ. Kiểm tra lại các trường đã nhập.',
   OTP_INVALID: 'Mã OTP không đúng. Kiểm tra lại mã rồi nhập lại.',
   OTP_PURPOSE_MISMATCH: 'Mã OTP không dùng cho thao tác này. Hãy gửi mã mới.',

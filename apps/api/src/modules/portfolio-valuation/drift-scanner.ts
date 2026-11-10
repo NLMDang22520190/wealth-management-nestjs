@@ -93,6 +93,9 @@ export class DriftScanner {
       await manager.query('INSERT INTO wms.rebalance_suggestions(alert_id,allocation_class,direction,adjust_amount) VALUES($1,$2,$3,$4)',
         [alertId, row.allocationClass, row.direction, row.suggestedAmount]);
     }
+    // D-R10-5: "RM nhận thông báo" without a staff notification table: the event is the notification, written in the alert's own transaction.
+    await manager.query(`INSERT INTO wms.outbox_events(event_id,event_type,aggregate_type,aggregate_id,payload,created_at) VALUES($1,'DriftAlertCreated','DRIFT_ALERT',$2,$3,$4)`,
+      [randomUUID(), alertId, JSON.stringify({ alertId, customerId: valuation.customerId, rmId, allocationClass: row.allocationClass, deviation: row.deviation }), now]);
   }
 
   /** A failed scan never undoes the operation that asked for it: the 17:00 run catches up. */

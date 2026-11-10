@@ -114,6 +114,12 @@ class PortfolioController {
   @ApiHeader({ name: 'Idempotency-Key', required: true }) @ApiResponse({ status: 404, description: 'ALERT_NOT_FOUND' })
   read(@Req() request: ApiRequest, @Param('id', uuidParam()) id: string) { return this.reads.markRead(request.actor!, id, key(request), auditContext(request)); }
 
+  @Roles('RM') @Post('rm/drift-alerts/:id/rebalance-proposal') @HttpCode(200)
+  @ApiOperation({ summary: 'UC-12 step 5: ask for a rebalancing proposal. The alert becomes ACTIONED and P4 gets a RebalanceProposalRequested event' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  @ApiResponse({ status: 404, description: 'ALERT_NOT_FOUND' }) @ApiResponse({ status: 409, description: 'ALERT_NOT_OPEN' }) @ApiResponse({ status: 403, description: 'FORBIDDEN (audited DENIED)' })
+  rebalanceProposal(@Req() request: ApiRequest, @Param('id', uuidParam()) id: string) { return this.reads.requestRebalanceProposal(request.actor!, id, key(request), auditContext(request)); }
+
   @Roles('RM') @Get('rm/product-risk-warnings')
   @ApiOperation({ summary: 'UC-09: customers of this RM holding a product above their maximum risk' })
   warnings(@Req() request: ApiRequest) { return this.catalog.riskWarnings(request.actor!); }
