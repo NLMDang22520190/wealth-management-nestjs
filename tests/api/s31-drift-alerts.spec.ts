@@ -149,6 +149,40 @@ describe('S31 UC-12 drift scan', () => {
     expect((await runSnapshot(api, backOffice)).body).toEqual(expect.objectContaining({ snapshots: 1, failed: 0 }));
   });
 
+  /** D-R10-5: the team DDL has no staff notification table, so "RM nhận thông báo" is an outbox event written with the alert. */
+  const created = () => api.dataSource.query("SELECT aggregate_type,aggregate_id::text,payload FROM wms.outbox_events WHERE event_type='DriftAlertCreated' ORDER BY created_at") as Promise<Array<{
+    aggregate_type: string; aggregate_id: string; payload: { alertId: string; customerId: string; rmId: string; allocationClass: string; deviation: string } }>>;
+
+  test('a new alert writes DriftAlertCreated for the RM; a refresh with the same numbers writes none; a replaced alert writes one more', async () => {
+    const { unit } = await boundaryPortfolio();
+    await runSnapshot(api, backOffice);
+    const [alert] = await api.dataSource.query("SELECT alert_id FROM wms.drift_alerts WHERE status='NEW'");
+    expect(await created()).toEqual([{ aggregate_type: 'DRIFT_ALERT', aggregate_id: alert.alert_id,
+      payload: { alertId: alert.alert_id, customerId, rmId: actors.rm.rmId, allocationClass: 'CASH', deviation: '5.00' } }]);
+    await runSnapshot(api, backOffice);
+    api.tick();
+    await submitPrice(api, backOffice, unit.assetId, '100');
+    expect(await created()).toHaveLength(1);
+    await fund(api, '10000000');
+    api.tick();
+    await submitPrice(api, backOffice, unit.assetId, '100');
+    const cash = (await created()).filter(event => event.payload.allocationClass === 'CASH');
+    expect(cash.map(event => event.payload.deviation)).toEqual(['5.00', '13.18']);
+    expect(cash[1]!.aggregate_id).not.toBe(alert.alert_id);
+  });
+
+  test('the event is written in the alert transaction: when it fails, no alert and no snapshot remain, and the next run catches up', async () => {
+    await boundaryPortfolio();
+    await api.dataSource.query(`CREATE FUNCTION wms.test_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'boom'; END $$;
+      CREATE TRIGGER test_fail BEFORE INSERT ON wms.outbox_events FOR EACH ROW WHEN (NEW.event_type='DriftAlertCreated') EXECUTE FUNCTION wms.test_fail()`);
+    expect((await runSnapshot(api, backOffice)).body).toEqual(expect.objectContaining({ snapshots: 0, failed: 1 }));
+    expect(await alerts(api)).toEqual([]);
+    expect(await snapshots(api)).toEqual([]);
+    await api.dataSource.query('DROP TRIGGER test_fail ON wms.outbox_events');
+    expect((await runSnapshot(api, backOffice)).body).toEqual(expect.objectContaining({ snapshots: 1, failed: 0 }));
+    expect(await created()).toHaveLength(1);
+  });
+
   test('RM endpoints: open alerts of own customers with the suggestion; read marks READ', async () => {
     await boundaryPortfolio();
     await runSnapshot(api, backOffice);
