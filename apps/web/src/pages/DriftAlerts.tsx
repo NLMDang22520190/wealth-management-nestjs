@@ -12,8 +12,9 @@ export interface DriftAlert {
 }
 interface RiskWarning { customerId: string; fullName: string; assetId: string; assetCode: string; assetName: string; riskLevel: number; maxProductRisk: number }
 
-function AlertCard({ alert, onRead }: { alert: DriftAlert; onRead: () => void }) {
+function AlertCard({ alert, onRead, onActioned }: { alert: DriftAlert; onRead: () => void; onActioned: (alert: DriftAlert) => void }) {
   const [busy, setBusy] = useState(false);
+  const [proposing, setProposing] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
   const read = async () => {
     setBusy(true); setFailure(null);
@@ -23,6 +24,16 @@ function AlertCard({ alert, onRead }: { alert: DriftAlert; onRead: () => void })
       intentDone(name);
       onRead();
     } catch (error) { setFailure(error); } finally { setBusy(false); }
+  };
+  /** UC-12 step 5. The alert becomes ACTIONED on the server; P4 (UC-13) takes the request from there, so no order is placed here. */
+  const propose = async () => {
+    setProposing(true); setFailure(null);
+    const name = `drift-proposal-${alert.alertId}`;
+    try {
+      await api(`/rm/drift-alerts/${alert.alertId}/rebalance-proposal`, { method: 'POST', key: intentKey(name, alert.alertId) });
+      intentDone(name);
+      onActioned(alert);
+    } catch (error) { setFailure(error); } finally { setProposing(false); }
   };
   return (
     <li className="rounded-lg border bg-card px-3.5 py-3">
@@ -38,14 +49,18 @@ function AlertCard({ alert, onRead }: { alert: DriftAlert; onRead: () => void })
         <Fact label="Gợi ý">{alert.adjustAmount ? `${alert.direction === 'INCREASE' ? 'Tăng' : 'Giảm'} ${money(alert.adjustAmount)}` : 'Không có'}</Fact>
         <Fact label="Tạo lúc">{formatDateTime(alert.createdAt)}</Fact>
       </Facts>
-      {alert.status === 'NEW' ? <BusyButton type="button" variant="outline" busy={busy} aria-label={`Đánh dấu đã đọc: ${alert.fullName}, ${classLabels[alert.allocationClass]}`} onClick={() => void read()}>Đánh dấu đã đọc</BusyButton> : null}
+      <div className="flex flex-wrap gap-2">
+        {alert.status === 'NEW' ? <BusyButton type="button" variant="outline" busy={busy} disabled={proposing} aria-label={`Đánh dấu đã đọc: ${alert.fullName}, ${classLabels[alert.allocationClass]}`} onClick={() => void read()}>Đánh dấu đã đọc</BusyButton> : null}
+        <BusyButton type="button" busy={proposing} disabled={busy} aria-label={`Tạo đề xuất tái cân bằng: ${alert.fullName}, ${classLabels[alert.allocationClass]}`} onClick={() => void propose()}>Tạo đề xuất tái cân bằng</BusyButton>
+      </div>
       {failure ? <ErrorAlert>{describe(failure)}</ErrorAlert> : null}
     </li>
   );
 }
 
-/** UC-12 for the RM. Nothing here places an order; the rebalancing proposal itself belongs to UC-13. */
+/** UC-12 for the RM. Nothing here places an order; the button only asks for the proposal, which UC-13 (P4) builds. */
 export function DriftAlerts() {
+  const [notice, setNotice] = useState('');
   const alerts = useLoad(signal => api<{ items: DriftAlert[] }>('/rm/drift-alerts', { signal }), []);
   const warnings = useLoad(signal => api<{ items: RiskWarning[] }>('/rm/product-risk-warnings', { signal }), []);
   return (
@@ -55,7 +70,15 @@ export function DriftAlerts() {
         {alerts.loading && !alerts.data ? <Loading /> : null}
         {alerts.error ? <ErrorAlert>{describe(alerts.error)} <AlertAction onClick={alerts.reload}>Thử lại</AlertAction></ErrorAlert> : null}
         {alerts.data && alerts.data.items.length === 0 ? <Empty>Không có cảnh báo nào đang mở.</Empty> : null}
-        {alerts.data && alerts.data.items.length > 0 ? <ul className="m-0 grid list-none gap-2 p-0">{alerts.data.items.map(alert => <AlertCard key={alert.alertId} alert={alert} onRead={alerts.reload} />)}</ul> : null}
+        <p role="status" className="m-0 mb-2 min-h-6 font-semibold text-ok">{notice}</p>
+        {alerts.data && alerts.data.items.length > 0 ? (
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {alerts.data.items.map(alert => (
+              <AlertCard key={alert.alertId} alert={alert} onRead={alerts.reload}
+                onActioned={done => { setNotice(`Đã tạo đề xuất tái cân bằng: ${done.fullName}, ${classLabels[done.allocationClass]}`); alerts.reload(); }} />
+            ))}
+          </ul>
+        ) : null}
       </Panel>
       <Panel title="Sản phẩm vượt mức rủi ro">
         {warnings.error ? <ErrorAlert>{describe(warnings.error)}</ErrorAlert> : null}
