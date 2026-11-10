@@ -13,7 +13,7 @@ const MAX_KEY_LENGTH = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Who acts, for audit rows: the login id and the role (`wms.actor_role`). */
-export interface AuditActor { actorId: string; role: ActorRole; }
+export interface AuditActor { actorId: string; role: ActorRole | 'SYSTEM_JOB'; }
 /** What the audit row and the outbox event are about. */
 export interface Reference { type: string; id: string; }
 

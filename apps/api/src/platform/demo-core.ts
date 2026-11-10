@@ -1,3 +1,4 @@
+import type { CoreLedger, CoreLedgerRequest, CorePosting } from '../modules/accounts-ledger/core-ledger.js';
 import type { CoreBanking, CoreCustomer } from '../modules/customer-risk/onboarding.domain.js';
 
 // Explicitly synthetic local fixtures: these references never contact a bank or represent real customers.
@@ -26,4 +27,31 @@ export const demoCoreBanking: CoreBanking = {
     const found = references.get(reference);
     return found ? structuredClone(found) : null;
   },
+};
+
+/** Refs posted by this process; a restart forgets them, and status then answers by the amount's scenario. */
+const postedRefs = new Set<string>();
+const DEMO_CASA_BALANCE = '5000000000.00';
+const REJECTED_AMOUNT = '1000111.00';
+const NO_ANSWER_THEN_POSTED = '1000222.00';
+const NO_ANSWER_THEN_NOT_POSTED = '1000333.00';
+const NEVER_ANSWERS = '1000444.00';
+const noAnswer = () => new Error('Synthetic Core timeout');
+
+async function demoPost({ refNo, amount }: CoreLedgerRequest): Promise<CorePosting> {
+  if (amount === REJECTED_AMOUNT) return { outcome: 'REJECTED', reason: 'DEMO_REJECTED' };
+  if ([NO_ANSWER_THEN_POSTED, NO_ANSWER_THEN_NOT_POSTED, NEVER_ANSWERS].includes(amount)) throw noAnswer();
+  postedRefs.add(refNo);
+  return { outcome: 'POSTED', coreRef: `CORE-${refNo}` };
+}
+
+/** Wired only with `demoCoreBanking`. Special amounts pick a failure scenario so demos and E2E stay deterministic; CASA balances are fixed, never debited. */
+export const demoCoreLedger: CoreLedger = {
+  debit: demoPost,
+  credit: demoPost,
+  async status({ refNo, amount }) {
+    if (amount === NEVER_ANSWERS) throw noAnswer();
+    return postedRefs.has(refNo) || amount === NO_ANSWER_THEN_POSTED ? { outcome: 'POSTED', coreRef: `CORE-${refNo}` } : { outcome: 'NOT_POSTED' };
+  },
+  async casaBalance() { return DEMO_CASA_BALANCE; },
 };

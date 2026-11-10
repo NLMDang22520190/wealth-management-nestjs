@@ -13,7 +13,10 @@ export type CoreCustomer = {
   accounts: Array<{ id: string; ownerCifId: string; currency: string; active: boolean }>;
 };
 export type OtpDelivery = { challengeId: string; actorId: string; purpose: string; operationId: string; code: string; expiresAt: string };
-export type HttpResponse = { status: number; body: any; headers: Headers };
+export type CoreLedgerRequest = { refNo: string; casaNo: string; amount: string };
+export type CorePosting = { outcome: 'POSTED'; coreRef: string } | { outcome: 'REJECTED'; reason: string };
+export type CoreStatus = { outcome: 'POSTED'; coreRef: string } | { outcome: 'NOT_POSTED' };
+export type HttpResponse ={ status: number; body: any; headers: Headers };
 
 export function eligibleCustomer(cifId: string = actors.customer.cifId): CoreCustomer {
   return { cifId, name: 'Synthetic Customer', dateOfBirth: '2008-01-15', active: true, kycVerified: true,
@@ -25,7 +28,11 @@ export async function startApiFixture(configuration: { environment?: 'test' | 'p
   const database = await startTestDatabase();
   const state = { now: new Date(TEST_NOW), core: eligibleCustomer() as CoreCustomer | null, coreFailure: false,
     coreLookup: undefined as ((reference: string) => Promise<CoreCustomer | null>) | undefined,
-    otpDelivery: undefined as ((delivery: OtpDelivery) => Promise<void>) | undefined };
+    otpDelivery: undefined as ((delivery: OtpDelivery) => Promise<void>) | undefined,
+    corePosting: undefined as ((kind: 'DEBIT' | 'CREDIT', request: CoreLedgerRequest) => Promise<CorePosting>) | undefined,
+    coreStatus: undefined as ((request: CoreLedgerRequest) => Promise<CoreStatus>) | undefined,
+    coreCalls: [] as Array<{ kind: 'DEBIT' | 'CREDIT' | 'STATUS'; request: CoreLedgerRequest }> };
+  const posted = (request: CoreLedgerRequest) => ({ outcome: 'POSTED' as const, coreRef: `CORE-${request.refNo}` });
   const deliveries: OtpDelivery[] = [];
   const logs: string[] = [];
   const logEntries: Array<{ level: string; text: string }> = [];
@@ -51,6 +58,12 @@ export async function startApiFixture(configuration: { environment?: 'test' | 'p
         return state.core ? structuredClone(state.core) : null;
       } },
       otpDelivery: async (delivery: OtpDelivery) => { await state.otpDelivery?.(delivery); deliveries.push({ ...delivery }); },
+      coreLedger: {
+        debit: async (request: CoreLedgerRequest) => { state.coreCalls.push({ kind: 'DEBIT', request }); return state.corePosting ? state.corePosting('DEBIT', request) : posted(request); },
+        credit: async (request: CoreLedgerRequest) => { state.coreCalls.push({ kind: 'CREDIT', request }); return state.corePosting ? state.corePosting('CREDIT', request) : posted(request); },
+        status: async (request: CoreLedgerRequest) => { state.coreCalls.push({ kind: 'STATUS', request }); return state.coreStatus ? state.coreStatus(request) : posted(request); },
+        casaBalance: async () => '10000000000.00',
+      },
     });
     await seedTestActors(application!.dataSource);
     await application!.app.listen(0, '127.0.0.1');

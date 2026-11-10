@@ -5,8 +5,8 @@ import { goTo, openApp, switchRole } from './support/ui';
 /**
  * R9 S2 (AC4 web part): the demo role picker offers the team's actors from the vendored seed
  * (staff by employee_code NV0001 leader, NV0002 / NV0003 RM; customers by CIF) and shows `Đang dùng vai: <actorId>`.
- * The old ids rm-alpha / rm-beta / leader-alpha / customer-alpha / customer-beta are gone. BACK_OFFICE staff cannot log in
- * (401), so they are not offered. Named options are asserted, not an exact count.
+ * The old ids rm-alpha / rm-beta / leader-alpha / customer-alpha / customer-beta are gone. NV0004 (BACK_OFFICE) runs the P2 screens;
+ * NV0005 (BACK_OFFICE_MANAGER) approves prices (P3). Named options are asserted, not an exact count.
  */
 const STAFF = ['NV0001', 'NV0002', 'NV0003'];
 const CUSTOMERS = ['CIF100001', 'CIF100002', 'CIF100003', 'CIF100004'];
@@ -15,7 +15,7 @@ const OLD_IDS = ['rm-alpha', 'rm-beta', 'leader-alpha', 'customer-alpha', 'custo
 test.describe('UC11 R9 team demo roles in the UI (AC4 web)', () => {
   test.beforeEach(async () => { await resetBusinessState(); });
 
-  test('AC4 the Vai trò demo select offers the team staff and customers by code and none of the old demo ids or BACK_OFFICE staff', async ({ page }) => {
+  test('AC4 the Vai trò demo select offers the team staff, NV0004, NV0005 and customers by code and none of the old demo ids', async ({ page }) => {
     await openApp(page);
     const picker = page.getByLabel('Vai trò demo');
     const options = await picker.evaluate(select => [...(select as HTMLSelectElement).options].map(option => ({ value: option.value, text: option.textContent ?? '' })));
@@ -25,7 +25,8 @@ test.describe('UC11 R9 team demo roles in the UI (AC4 web)', () => {
       expect(options.find(option => option.value === code)!.text, `label of ${code} shows the code`).toContain(code);
     }
     for (const old of OLD_IDS) expect(values, `old id ${old} removed`).not.toContain(old);
-    for (const backOffice of ['NV0004', 'NV0005']) expect(values, `${backOffice} cannot log in, so it is not offered`).not.toContain(backOffice);
+    expect(values, 'NV0004 runs the P2 back-office screens').toContain('NV0004');
+    expect(values, 'NV0005 approves P3 prices').toContain('NV0005');
     for (const old of OLD_IDS) expect(options.map(option => option.text).join('|'), `old label ${old} removed`).not.toContain(old);
   });
 

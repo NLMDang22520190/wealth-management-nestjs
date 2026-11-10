@@ -168,7 +168,8 @@ describe('S21 R9-S2 vendored team seed, demo login and Core mock', () => {
       await same('risk_profiles', `SELECT (to_jsonb(t) - 'created_at' - 'updated_at')::text AS r FROM wms.risk_profiles t ORDER BY risk_profile_id`);
       await same('wealth_services', `SELECT (to_jsonb(t) - 'created_at' - 'updated_at')::text AS r FROM wms.wealth_services t ORDER BY service_id`);
       await same('confirmed onboarding requests', "SELECT (to_jsonb(t) - 'created_at' - 'updated_at')::text AS r FROM wms.onboarding_requests t WHERE status='CONFIRMED' ORDER BY request_id");
-      await same('portfolio_snapshots', `SELECT (to_jsonb(t) - 'created_at' - 'updated_at')::text AS r FROM wms.portfolio_snapshots t ORDER BY snapshot_id`);
+      // snapshot_kind comes from migration 009, on top of the team DDL; seed rows take its default.
+      await same('portfolio_snapshots', `SELECT (to_jsonb(t) - 'created_at' - 'updated_at' - 'snapshot_kind')::text AS r FROM wms.portfolio_snapshots t ORDER BY snapshot_id`);
     } finally { await referenceClient.end(); }
   }, 120_000);
 
@@ -209,13 +210,15 @@ describe('S21 R9-S2 vendored team seed, demo login and Core mock', () => {
     expect(await identity('CIF100005')).toMatchObject({ actorId: 'CIF100005', role: 'CUSTOMER', cifId: 'CIF100005', subjectId: 'cust.cif100005' });
   }, 90_000);
 
-  test('AC4 after seeding, BACK_OFFICE staff, the old demo ids and unknown ids are 401 UNAUTHORIZED', async () => {
+  test('AC4 after seeding, NV0004 and NV0005 log in with their roles; the old demo ids and unknown ids are 401 UNAUTHORIZED', async () => {
     expect((await seed()).code).toBe(0);
-    // Guard: the refused staff really exist and are active in the seeded DB, so the 401 is the role rule and not a missing row.
+    // Guard: both back-office staff exist and are active in the seeded DB.
     expect((await rows("SELECT employee_code, role, is_active FROM wms.staff_users WHERE employee_code IN ('NV0004','NV0005') ORDER BY employee_code")))
       .toEqual([{ employee_code: 'NV0004', role: 'BACK_OFFICE', is_active: true }, { employee_code: 'NV0005', role: 'BACK_OFFICE_MANAGER', is_active: true }]);
     await ready();
-    for (const actorId of ['NV0004', 'NV0005', 'rm-alpha', 'customer-alpha', 'leader-alpha', 'NV0099', 'CIF100099', 'cif100001']) {
+    expect((await request('/mock-auth/token', { body: { actorId: 'NV0004' } })).status, 'NV0004 logs in for P2').toBe(200);
+    expect((await request('/mock-auth/token', { body: { actorId: 'NV0005' } })).status, 'NV0005 approves prices for P3').toBe(200);
+    for (const actorId of ['rm-alpha','customer-alpha', 'leader-alpha', 'NV0099', 'CIF100099', 'cif100001']) {
       const refused = await request('/mock-auth/token', { body: { actorId } });
       expect(refused.status, `${actorId} must not log in`).toBe(401);
       expect(refused.body.code).toBe('UNAUTHORIZED');

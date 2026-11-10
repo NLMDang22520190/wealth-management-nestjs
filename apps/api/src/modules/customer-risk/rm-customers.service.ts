@@ -14,7 +14,7 @@ const SORT_SQL = { name: 's.name', aum: 'aum.value', riskExpiresAt: 'rp.expires_
 
 /**
  * Set-based read model: scope, P2 balance, P3 snapshot and P4 proposal counts are joined once, never per customer.
- * Cash is v_account_balance.available_balance; AUM is the latest portfolio_snapshots row (as-of = its snapshot date).
+ * Cash is v_account_balance.available_balance; AUM is the latest portfolio_snapshots row of any kind (as-of = its snapshot date).
  */
 const SELECT = `
   SELECT s.id AS customer_id, s.name, s.status AS service_status, s.rm_id, s.team_id, s.version AS assignment_version,
@@ -27,7 +27,7 @@ const SELECT = `
   LEFT JOIN wms.v_account_balance ia ON ia.customer_id=s.id
   LEFT JOIN (SELECT DISTINCT ON (customer_id) customer_id, aum AS value, to_char(snapshot_date,'YYYY-MM-DD') AS snapshot_date
     FROM wms.portfolio_snapshots WHERE customer_id IN (SELECT id FROM scope)
-    ORDER BY customer_id,snapshot_date DESC) aum ON aum.customer_id=s.id
+    ORDER BY customer_id,snapshot_date DESC,created_at DESC) aum ON aum.customer_id=s.id
   LEFT JOIN (SELECT customer_id, count(*) AS count FROM wms.proposals WHERE status='PENDING_APPROVAL'
     AND customer_id IN (SELECT id FROM scope) GROUP BY customer_id) pp ON pp.customer_id=s.id
   LEFT JOIN (SELECT aggregate_id, count(*) AS count FROM wms.outbox_events WHERE event_type='RiskHoldingsCheckRequested'
