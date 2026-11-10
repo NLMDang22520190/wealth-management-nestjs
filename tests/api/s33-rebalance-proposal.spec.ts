@@ -28,7 +28,8 @@ describe('S33 UC-12 rebalance proposal request', () => {
   }, 120_000);
   afterEach(async () => { await api?.stop(); });
 
-  const propose = (id = alertId, token = rm, key: string | undefined = nextKey('rebalance')) =>
+  /** `key` null sends no Idempotency-Key (undefined would pick the default). */
+  const propose = (id = alertId, token = rm, key: string | null = nextKey('rebalance')) =>
     api.request(`/rm/drift-alerts/${id}/rebalance-proposal`, { method: 'POST', token, ...(key ? { key } : {}) });
   const events = (type = EVENT) => api.dataSource.query('SELECT event_type,aggregate_type,aggregate_id::text,payload,published_at FROM wms.outbox_events WHERE event_type=$1 ORDER BY created_at', [type]);
   const statusOf = async (id = alertId) => (await api.dataSource.query('SELECT status::text AS status,actioned_at FROM wms.drift_alerts WHERE alert_id=$1', [id]))[0] as { status: string; actioned_at: Date | null };
@@ -64,7 +65,7 @@ describe('S33 UC-12 rebalance proposal request', () => {
     expect(await events()).toHaveLength(1);
     expect(await audit(api, ACTION)).toHaveLength(1);
     const other = (await api.request('/rm/drift-alerts', { token: rm })).body.items[0].alertId;
-    expectApiError(await propose(other, rm, undefined), 400, 'VALIDATION_ERROR');
+    expectApiError(await propose(other, rm, null), 400, 'VALIDATION_ERROR');
     expect((await statusOf(other)).status).toBe('NEW');
   });
 
