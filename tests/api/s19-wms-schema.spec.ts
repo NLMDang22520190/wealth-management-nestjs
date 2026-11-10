@@ -28,6 +28,9 @@ const OLD_MIGRATION_SHA256: Record<string, string> = {
   '1791763200006-vietnamese-questionnaire.ts': 'dc58b7c886d389333c05d1a478089df7d560ded3c245d87eb7db7096c23118c6',
   '1791763200007-customer-notifications.ts': '3989728e057d7920cfcd7cc1f2753272849b86a6afc929b5a8c7649756543b55',
 };
+/** Migration 009 (P3): the one declared change to the team DDL. A daily snapshot stays unique per customer through a partial index; event snapshots are not limited. */
+const SNAPSHOT_KIND_COLUMN = 'portfolio_snapshots.snapshot_kind';
+const SNAPSHOT_DAILY_UNIQUE = 'portfolio_snapshots.portfolio_snapshots_customer_id_snapshot_date_key';
 const JWT_SECRET = 'wms-test-only-secret-at-least-32-characters';
 
 async function pgCode(work: Promise<unknown>): Promise<string | undefined> {
@@ -115,7 +118,9 @@ describe('S19 AC1 migration 008 builds the vendored team DDL in schema wms', () 
 
   test('AC1 every column of the DDL exists in wms with the same type, nullability, default, identity and generation', () => {
     expect(Object.keys(referenceSnap.columns).length, 'reference DDL must have built tables').toBeGreaterThan(100);
-    expect(migratedSnap.columns).toEqual(referenceSnap.columns);
+    const { [SNAPSHOT_KIND_COLUMN]: snapshotKind, ...teamColumns } = migratedSnap.columns;
+    expect(snapshotKind, 'migration 009 adds this column').toContain('notnull=true');
+    expect(teamColumns).toEqual(referenceSnap.columns);
   });
 
   test.each(['enums', 'domains', 'constraints', 'indexes', 'views', 'triggers', 'functions'] as const)('AC1 every %s object of the DDL exists in wms', kind => {
@@ -124,7 +129,7 @@ describe('S19 AC1 migration 008 builds the vendored team DDL in schema wms', () 
     expect(Object.keys(expected).length, `reference ${kind}`).toBeGreaterThan(0);
     // Patches may only ADD objects; the questionnaire guard (patch d) may be redefined, but it must still exist.
     const redefinable = ['risk_questionnaire_versions.trg_questionnaire_guard', 'fn_questionnaire_guard()'];
-    const wrong = Object.keys(expected).filter(key => !(key in actual) || (actual[key] !== expected[key] && !redefinable.includes(key)));
+    const wrong = Object.keys(expected).filter(key => key !== SNAPSHOT_DAILY_UNIQUE && (!(key in actual) || (actual[key] !== expected[key] && !redefinable.includes(key))));
     expect(wrong.slice(0, 15), `${wrong.length} ${kind} missing or different`).toEqual([]);
   });
 

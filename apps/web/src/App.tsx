@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { FormEvent } from 'react';
-import { ArrowLeftRight, Bell, ClipboardCheck, Mail, ShieldCheck, UserPlus, Users } from 'lucide-react';
+import { ArrowLeftRight, Bell, ChartPie, CircleCheck, ClipboardCheck, ClipboardList, Mail, Package, ShieldCheck, Tags, TriangleAlert, UserPlus, Users, Wallet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api, describe, setToken } from './api';
 import { Assignments } from './pages/Assignments';
+import { BackOffice } from './pages/BackOffice';
+import { Cash } from './pages/Cash';
 import { CustomerDetail, CustomerList } from './pages/Customers';
+import { DriftAlerts } from './pages/DriftAlerts';
 import { Invitations } from './pages/Invitations';
 import { Onboarding } from './pages/Onboarding';
+import { Portfolio, TeamCustomerPortfolio } from './pages/Portfolio';
+import { PriceApprovals } from './pages/PriceApprovals';
+import { Prices } from './pages/Prices';
+import { Products } from './pages/Products';
 import { RiskProfile } from './pages/RiskProfile';
 import { RiskSurvey } from './pages/RiskSurvey';
 import { ErrorAlert, useLoad } from './ui';
@@ -15,7 +22,7 @@ import { Card } from '@/components/ui/card';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { cn } from '@/lib/utils';
 
-type Role = 'RM' | 'LEADER' | 'CUSTOMER';
+type Role = 'RM' | 'LEADER' | 'CUSTOMER' | 'BACK_OFFICE' | 'BACK_OFFICE_MANAGER';
 interface Session { actorId: string; role: Role; serial: number }
 
 // Trusted demo actors seeded by `seed:demo`; the server remains the only authority on what each may do.
@@ -23,6 +30,8 @@ const demoActors = [
   { id: 'NV0001', label: 'NV0001 (Trưởng nhóm)' },
   { id: 'NV0002', label: 'NV0002 (RM)' },
   { id: 'NV0003', label: 'NV0003 (RM)' },
+  { id: 'NV0004', label: 'NV0004 (Back-office)' },
+  { id: 'NV0005', label: 'NV0005 (Quản lý Back-office)' },
   { id: 'CIF100001', label: 'CIF100001 (Khách hàng)' },
   { id: 'CIF100002', label: 'CIF100002 (Khách hàng)' },
   { id: 'CIF100003', label: 'CIF100003 (Khách hàng)' },
@@ -34,6 +43,7 @@ const roleCards = [
   { actorId: 'NV0002', title: 'Chuyên viên quan hệ khách hàng', body: 'Tra cứu khách trên hệ thống lõi, gửi lời mời dịch vụ và theo dõi danh mục khách đang phụ trách.' },
   { actorId: 'CIF100001', title: 'Khách hàng', body: 'Đồng ý điều khoản, làm khảo sát khẩu vị rủi ro và xác nhận hồ sơ bằng mã OTP.' },
   { actorId: 'NV0001', title: 'Trưởng nhóm', body: 'Xem tải của từng chuyên viên và chuyển khách giữa các chuyên viên trong nhóm.' },
+  { actorId: 'NV0004', title: 'Back-office', body: 'Chốt giao dịch tiền bị treo sau đối soát và theo dõi kết quả tất toán tiền gửi.' },
 ];
 
 const icons: Record<string, LucideIcon> = {
@@ -43,13 +53,22 @@ const icons: Record<string, LucideIcon> = {
   '#/risk-survey': ClipboardCheck,
   '#/risk-profile': ShieldCheck,
   '#/assignments': ArrowLeftRight,
+  '#/cash': Wallet,
+  '#/back-office': ClipboardList,
+  '#/portfolio': ChartPie,
+  '#/rm/drift-alerts': TriangleAlert,
+  '#/products': Package,
+  '#/prices': Tags,
+  '#/price-approvals': CircleCheck,
 };
 
 const navigation: Record<Role, Array<{ path: string; label: string }>> = {
-  RM: [{ path: '#/onboarding', label: 'Đăng ký khách hàng' }, { path: '#/rm/customers', label: 'Khách phụ trách' }],
+  RM: [{ path: '#/onboarding', label: 'Đăng ký khách hàng' }, { path: '#/rm/customers', label: 'Khách phụ trách' }, { path: '#/rm/drift-alerts', label: 'Cảnh báo lệch' }],
   CUSTOMER: [{ path: '#/invitations', label: 'Lời mời dịch vụ' }, { path: '#/risk-survey', label: 'Khảo sát rủi ro' },
-    { path: '#/risk-profile', label: 'Hồ sơ rủi ro' }],
+    { path: '#/risk-profile', label: 'Hồ sơ rủi ro' }, { path: '#/cash', label: 'Tài khoản đầu tư' }, { path: '#/portfolio', label: 'Danh mục' }],
   LEADER: [{ path: '#/assignments', label: 'Phân công RM' }],
+  BACK_OFFICE: [{ path: '#/back-office', label: 'Giao dịch cần xử lý' }, { path: '#/products', label: 'Sản phẩm' }, { path: '#/prices', label: 'Giá và NAV' }],
+  BACK_OFFICE_MANAGER: [{ path: '#/price-approvals', label: 'Duyệt giá' }],
 };
 
 function useHash(): string {
@@ -116,19 +135,32 @@ function NotificationBanner({ onDismissed }: { onDismissed: () => void }) {
 function Screen({ session, hash }: { session: Session; hash: string }) {
   const route = hash.replace(/^#/, '') || '/';
   const detail = /^\/rm\/customers\/([^/]+)$/.exec(route);
+  const teamCustomer = /^\/team\/customers\/([^/]+)$/.exec(route);
   switch (session.role) {
     case 'RM':
       if (route === '/onboarding') return <Onboarding />;
       if (route === '/rm/customers') return <CustomerList />;
       if (detail) return <CustomerDetail customerId={detail[1]!} />;
+      if (route === '/rm/drift-alerts') return <DriftAlerts />;
       break;
     case 'CUSTOMER':
       if (route === '/invitations') return <Invitations />;
       if (route === '/risk-survey') return <RiskSurvey />;
       if (route === '/risk-profile') return <RiskProfile />;
+      if (route === '/cash') return <Cash />;
+      if (route === '/portfolio') return <Portfolio />;
       break;
     case 'LEADER':
       if (route === '/assignments') return <Assignments />;
+      if (teamCustomer) return <TeamCustomerPortfolio customerId={teamCustomer[1]!} />;
+      break;
+    case 'BACK_OFFICE':
+      if (route === '/back-office') return <BackOffice />;
+      if (route === '/products') return <Products />;
+      if (route === '/prices') return <Prices />;
+      break;
+    case 'BACK_OFFICE_MANAGER':
+      if (route === '/price-approvals') return <PriceApprovals />;
       break;
   }
   const first = navigation[session.role][0]!;

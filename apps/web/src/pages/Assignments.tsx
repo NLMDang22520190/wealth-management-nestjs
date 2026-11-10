@@ -57,7 +57,11 @@ export function Assignments() {
   const [rosterTick, setRosterTick] = useState(0);
 
   useEffect(() => {
-    const timer = setTimeout(() => { setTerm(search.trim()); setRosterPage(1); }, 300);
+    const timer = setTimeout(() => {
+      // Only a changed term restarts paging: this also fires once after mount, and must not undo a click on the load-more button.
+      const next = search.trim();
+      if (next !== term) { setTerm(next); setRosterPage(1); }
+    }, 300);
     return () => clearTimeout(timer);
   }, [search]);
 
@@ -286,6 +290,7 @@ export function Assignments() {
             <Fact label="Hồ sơ rủi ro">{customer.currentRisk ? riskLabel(customer.currentRisk.category) : 'Chưa có'}</Fact>
             <Fact label="Đề xuất chờ duyệt">{customer.pendingProposals.count}</Fact>
           </Facts>
+          <p className="mb-3"><a href={`#/team/customers/${customer.customerId}`}>Xem danh mục của khách</a></p>
           {surveyMissing ? <p id="transfer-blocked-reason" className="mb-3 font-semibold text-wait">Khách chưa hoàn thành khảo sát rủi ro. Chỉ chuyển RM được khi khách có hồ sơ rủi ro còn hiệu lực.</p> : null}
           <Field label="RM nhận" htmlFor="target-rm" error={errorFor('target-rm')}>
             <NativeSelect id="target-rm" disabled={surveyMissing} {...invalidProps('target-rm-error', errorFor('target-rm'), surveyMissing ? 'transfer-blocked-reason' : undefined)} value={target} onChange={event => { setTarget(event.target.value); setFieldError(null); }}>

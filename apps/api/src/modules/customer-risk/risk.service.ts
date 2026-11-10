@@ -10,6 +10,7 @@ import { OtpService } from '../../platform/otp.service.js';
 import { RUNTIME_OPTIONS } from '../../platform/runtime.module.js';
 import { apiErrorCode, appendAudit, appendSuccess, hash, idempotent, lockCustomer, recordOutcome } from '../../platform/transactions.js';
 import { RiskHoldingsRead } from '../portfolio-valuation/risk-holdings-read.js';
+import { DriftScanner } from '../portfolio-valuation/drift-scanner.js';
 import { CustomerAccess } from './customer-access.service.js';
 import { draftProjection, profileExpiry, profileProjection, riskDraftUnexpired, scoreAnswers } from './risk.domain.js';
 import type { RiskConfirmBody, RiskDraftBody, RiskDraftRow, RiskProfileRow, RiskQuestion } from './risk.domain.js';
@@ -19,7 +20,7 @@ const CONFIRM_PURPOSE = 'RISK_PROFILE_CONFIRM';
 @Injectable()
 export class RiskService {
   constructor(private readonly database: DataSource, private readonly otp: OtpService,
-    private readonly access: CustomerAccess, private readonly holdings: RiskHoldingsRead,
+    private readonly access: CustomerAccess, private readonly holdings: RiskHoldingsRead, private readonly scanner: DriftScanner,
     @Inject(RUNTIME_OPTIONS) private readonly options: ApplicationOptions) {}
 
   async questionnaire(actor: Actor) {
@@ -103,7 +104,11 @@ export class RiskService {
   async confirm(actor: Actor, id: string, body: RiskConfirmBody, key: string | undefined, context: AuditContext) {
     const initialDraft = await this.ownDraft(this.database.manager, actor, id);
     try {
-      return await this.confirmTransaction(actor, id, body, key, context, initialDraft);
+      let confirmed = false;
+      const result = await this.confirmTransaction(actor, id, body, key, context, initialDraft, () => { confirmed = true; });
+      // A replay changed nothing, so it has nothing to rescan.
+      if (confirmed) await this.scanner.scanQuietly(initialDraft.customer_id, 'RISK');
+      return result;
     } catch (error) {
       if (apiErrorCode(error) === 'OTP_INVALID') {
         await recordOutcome(this.database, 'FAILURE', actor, { type: 'RISK_DRAFT', id }, 'RISK_PROFILE_CONFIRM', 'OTP_INVALID', this.options.clock.now(), context);
@@ -114,9 +119,10 @@ export class RiskService {
   }
 
   private confirmTransaction(actor: Actor, id: string, body: RiskConfirmBody, key: string | undefined, context: AuditContext,
-    initialDraft: { cif_id: string }) {
+    initialDraft: { cif_id: string }, onConfirmed: () => void) {
     return this.database.transaction(manager => idempotent(manager, actor.actorId, CONFIRM_PURPOSE, id, key, body,
       this.options.clock.now(), async () => {
+        onConfirmed();
         await lockCustomer(manager, initialDraft.cif_id, []);
         const draft = await this.ownDraft(manager, actor, id);
         const now = this.options.clock.now();

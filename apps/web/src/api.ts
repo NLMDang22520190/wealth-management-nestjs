@@ -3,7 +3,7 @@ let accessToken: string | null = null;
 export function setToken(token: string | null): void { accessToken = token; }
 
 export class ApiFailure extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) { super(message); }
+  constructor(readonly status: number, readonly code: string, message: string, readonly details?: unknown) { super(message); }
 }
 
 interface Options { method?: string; body?: unknown; key?: string; signal?: AbortSignal; auth?: boolean }
@@ -28,8 +28,8 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   let parsed: unknown = null;
   try { parsed = raw ? JSON.parse(raw) : null; } catch { parsed = null; }
   if (!response.ok) {
-    const body = (parsed ?? {}) as { code?: string; message?: string };
-    throw new ApiFailure(response.status, body.code ?? 'UNKNOWN', body.message ?? 'error');
+    const body = (parsed ?? {}) as { code?: string; message?: string; details?: unknown };
+    throw new ApiFailure(response.status, body.code ?? 'UNKNOWN', body.message ?? 'error', body.details);
   }
   return parsed as T;
 }
@@ -58,6 +58,16 @@ const messages: Record<string, string> = {
   FORBIDDEN: 'Bạn không có quyền thực hiện thao tác này',
   NOT_FOUND: 'Không tìm thấy dữ liệu yêu cầu',
   CUSTOMER_NOT_FOUND: 'Không tìm thấy khách hàng',
+  PRODUCT_CODE_EXISTS: 'Mã sản phẩm đã tồn tại.',
+  BOND_MATURITY_PASSED: 'Ngày đáo hạn của trái phiếu đã qua.',
+  ASSET_NOT_FOUND: 'Không tìm thấy sản phẩm.',
+  PRICE_PENDING_EXISTS: 'Sản phẩm này đang có giá chờ duyệt.',
+  PRICE_NOT_LATEST: 'Đã có giá mới hơn ngày hiệu lực này.',
+  PRICE_NOT_PENDING: 'Giá này không còn chờ duyệt.',
+  PRICE_NOT_FOUND: 'Không tìm thấy giá.',
+  MAKER_CHECKER_VIOLATION: 'Người nhập giá không được tự duyệt giá của mình.',
+  ALERT_NOT_FOUND: 'Không tìm thấy cảnh báo.',
+  ALERT_NOT_OPEN: 'Cảnh báo này đã được xử lý hoặc không còn lệch.',
   VALIDATION_ERROR: 'Dữ liệu chưa hợp lệ. Kiểm tra lại các trường đã nhập.',
   OTP_INVALID: 'Mã OTP không đúng. Kiểm tra lại mã rồi nhập lại.',
   OTP_PURPOSE_MISMATCH: 'Mã OTP không dùng cho thao tác này. Hãy gửi mã mới.',
@@ -81,6 +91,15 @@ const messages: Record<string, string> = {
   RATE_LIMITED: 'Bạn tra cứu quá nhiều lần. Hãy thử lại sau ít phút.',
   CORE_UNAVAILABLE: 'Hệ thống lõi ngân hàng tạm thời không khả dụng. Hãy thử lại sau.',
   UNAVAILABLE: 'Dịch vụ tạm thời không khả dụng. Hãy thử lại sau.',
+  ACCOUNT_NOT_FOUND: 'Không tìm thấy tài khoản đầu tư',
+  ACCOUNT_NOT_ACTIVE: 'Tài khoản đầu tư đang không hoạt động',
+  CASA_NOT_ELIGIBLE: 'Tài khoản thanh toán không đủ điều kiện',
+  AMOUNT_BELOW_MINIMUM: 'Số tiền thấp hơn mức tối thiểu',
+  DAILY_LIMIT_EXCEEDED: 'Vượt hạn mức trong ngày',
+  INSUFFICIENT_AVAILABLE_BALANCE: 'Số dư khả dụng không đủ',
+  TXN_NOT_CONFIRMABLE: 'Lệnh này không còn xác nhận được',
+  TXN_NOT_RESOLVABLE: 'Giao dịch này không còn chờ Back-office xử lý',
+  JOB_RUNNING: 'Một tác vụ khác đang chạy. Hãy thử lại sau ít phút.',
 };
 
 /** Vietnamese message for an error; `overrides` lets a screen say something more specific for a code or status. */
