@@ -68,14 +68,14 @@ class PricingController {
 
   @Roles('BACK_OFFICE_MANAGER') @Post(':id/approve') @HttpCode(200)
   @ApiHeader({ name: 'Idempotency-Key', required: true })
-  @ApiResponse({ status: 409, description: 'PRICE_NOT_PENDING' }) @ApiResponse({ status: 403, description: 'MAKER_CHECKER_VIOLATION' })
+  @ApiResponse({ status: 409, description: 'PRICE_NOT_PENDING' }) @ApiResponse({ status: 404, description: 'PRICE_NOT_FOUND' }) @ApiResponse({ status: 403, description: 'MAKER_CHECKER_VIOLATION (also audited DENIED)' })
   approve(@Req() request: ApiRequest, @Param('id', uuidParam()) id: string, @Body() body: PriceDecisionBody) {
     return this.pricing.decide(request.actor!, id, 'APPROVED', body.reason, key(request), auditContext(request));
   }
 
   @Roles('BACK_OFFICE_MANAGER') @Post(':id/reject') @HttpCode(200)
   @ApiHeader({ name: 'Idempotency-Key', required: true })
-  @ApiResponse({ status: 409, description: 'PRICE_NOT_PENDING' }) @ApiResponse({ status: 403, description: 'MAKER_CHECKER_VIOLATION' })
+  @ApiResponse({ status: 409, description: 'PRICE_NOT_PENDING' }) @ApiResponse({ status: 404, description: 'PRICE_NOT_FOUND' }) @ApiResponse({ status: 403, description: 'MAKER_CHECKER_VIOLATION (also audited DENIED)' })
   reject(@Req() request: ApiRequest, @Param('id', uuidParam()) id: string, @Body() body: PriceDecisionBody) {
     return this.pricing.decide(request.actor!, id, 'REJECTED', body.reason, key(request), auditContext(request));
   }

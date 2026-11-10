@@ -64,6 +64,7 @@ const messages: Record<string, string> = {
   PRICE_PENDING_EXISTS: 'Sản phẩm này đang có giá chờ duyệt.',
   PRICE_NOT_LATEST: 'Đã có giá mới hơn ngày hiệu lực này.',
   PRICE_NOT_PENDING: 'Giá này không còn chờ duyệt.',
+  PRICE_NOT_FOUND: 'Không tìm thấy giá.',
   MAKER_CHECKER_VIOLATION: 'Người nhập giá không được tự duyệt giá của mình.',
   ALERT_NOT_FOUND: 'Không tìm thấy cảnh báo.',
   VALIDATION_ERROR: 'Dữ liệu chưa hợp lệ. Kiểm tra lại các trường đã nhập.',
