@@ -16,14 +16,14 @@ NestJS · React 19 · shadcn/ui · Tailwind CSS v4 · TypeScript · PostgreSQL �
 
 ## Phạm vi
 
-Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một ứng dụng React trong cùng monorepo (npm workspaces). Người dựng source phụ trách Phần 1; Phần 2–4 chỉ có các bridge tối thiểu để Phần 1 chạy và kiểm tra được.
+Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một ứng dụng React trong cùng monorepo (npm workspaces). Phần 1, 2 và 3 đã có backend, giao diện và test đầy đủ; Phần 4 chỉ có bridge tối thiểu (hủy proposal khi chuyển RM) và nhận sự kiện từ Phần 3 sau này.
 
 | Phân công | Trách nhiệm | Trạng thái trong repo |
 |---|---|---|
 | **Phần 1 — Customer & Risk** | UC01 đăng ký dịch vụ · UC02 đánh giá rủi ro · UC03 phân công RM · UC04 danh sách khách của RM | ✅ Backend + giao diện + test |
 | **Phần 2 — Accounts & Ledger** | Nạp tiền · rút tiền · lịch sử và sổ cái · đối soát · tất toán tiền gửi (UC05–08) | ✅ Backend + giao diện + test, xem [tài liệu Phần 2](docs/part2/01-overview.vi.md) |
-| **Phần 3 — Portfolio & Valuation** | Danh mục sản phẩm · giá, NAV, lãi suất có duyệt 2 lớp · định giá danh mục · cảnh báo lệch tỷ trọng (UC09–12) | ✅ Backend + giao diện + test, xem [tài liệu Phần 3](docs/part3/01-overview.vi.md) |
-| Phần 4 — Advisory & Trading | Đề xuất, duyệt/từ chối, thực thi (UC13–16) | Bridge hủy proposal nguyên tử khi chuyển RM |
+| **Phần 3 — Portfolio & Valuation** | Danh mục sản phẩm · giá, NAV, lãi suất có duyệt 2 lớp · định giá danh mục · cảnh báo lệch tỷ trọng và yêu cầu đề xuất tái cân bằng (UC09–12) | ✅ Backend + giao diện + test, xem [tài liệu Phần 3](docs/part3/01-overview.vi.md) |
+| Phần 4 — Advisory & Trading | Đề xuất, duyệt/từ chối, thực thi (UC13–16) | Bridge hủy proposal nguyên tử khi chuyển RM; chưa tiêu thụ sự kiện `RebalanceProposalRequested` của Phần 3 |
 
 ## Luồng Phần 1
 
@@ -108,23 +108,29 @@ Mock auth, Core mô phỏng và hộp thư OTP demo **chỉ bật khi `NODE_ENV`
 
 ```mermaid
 flowchart LR
-    UI[React — RM / Khách / Trưởng nhóm] --> API[NestJS API]
-    API --> AUTH[Mock IAM tin cậy + quyền theo CIF/nhóm]
+    UI[React — RM / Khách / Trưởng nhóm / Back-office] --> API[NestJS API]
+    API --> AUTH[Mock IAM tin cậy + quyền theo CIF/nhóm/vai]
     API --> P1[Customer & Risk — Phần 1]
-    P1 --> P2[Accounts & Ledger bridge]
-    P1 --> P3[Portfolio read bridge]
-    P1 --> P4[Advisory cancellation bridge]
+    API --> P2[Accounts & Ledger — Phần 2]
+    API --> P3[Portfolio & Valuation — Phần 3: sản phẩm, giá, định giá, cảnh báo]
+    API --> P4[Advisory bridge — Phần 4]
+    P1 -->|sau xác nhận hồ sơ rủi ro| SCAN[Drift scanner của Phần 3]
+    P2 -->|sau tất toán tiền gửi| SCAN
+    P3 -->|sau khi giá có hiệu lực| SCAN
+    JOB[Job 17:00 giờ Việt Nam] --> SCAN
     P1 -. ngoài transaction .-> CORE[Core adapter demo]
     P1 -. gửi sau commit .-> OTP[OTP adapter demo]
-    P1 --> DB[(PostgreSQL)]
+    P1 --> DB[(PostgreSQL schema wms)]
     P2 --> DB
     P3 --> DB
+    SCAN --> DB
     P4 --> DB
-    DB --> OUT[Outbox — sự kiện sau commit]
+    P3 -->|DriftAlertCreated, RebalanceProposalRequested| OUT[Outbox — sự kiện cùng transaction]
+    DB --- OUT
 ```
 
 ```text
-apps/api      NestJS: platform (auth, http, validation, transactions), modules/customer-risk, bridges P2–P4, migrations
+apps/api      NestJS: platform (auth, http, validation, transactions), modules/customer-risk (P1), accounts-ledger (P2), portfolio-valuation (P3), advisory-trading (bridge P4), migrations
 apps/web      React 19 + Vite + shadcn/ui (Radix, Tailwind CSS v4, lucide icons); hash routing
 scripts/      seed-demo.mjs — chạy migration và nạp dữ liệu mẫu của nhóm; team-seed/wms_seed.sql
 tests/api     Integration test trên PostgreSQL thật (Vitest)
