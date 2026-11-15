@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { FormEvent } from 'react';
-import { ArrowLeftRight, Bell, ChartPie, CircleCheck, ClipboardCheck, ClipboardList, Mail, Package, ShieldCheck, Tags, TriangleAlert, UserPlus, Users, Wallet } from 'lucide-react';
+import { ArrowLeftRight, Bell, ChartPie, CircleCheck, ClipboardCheck, ClipboardList, FileText, Mail, Package, Send, ShieldCheck, Tags, TriangleAlert, UserPlus, Users, Wallet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api, describe, setToken } from './api';
 import { Assignments } from './pages/Assignments';
@@ -10,10 +10,12 @@ import { CustomerDetail, CustomerList } from './pages/Customers';
 import { DriftAlerts } from './pages/DriftAlerts';
 import { Invitations } from './pages/Invitations';
 import { Onboarding } from './pages/Onboarding';
+import { MyProposals } from './pages/MyProposals';
 import { Portfolio, TeamCustomerPortfolio } from './pages/Portfolio';
 import { PriceApprovals } from './pages/PriceApprovals';
 import { Prices } from './pages/Prices';
 import { Products } from './pages/Products';
+import { NewProposal, RmProposals } from './pages/Proposals';
 import { RiskProfile } from './pages/RiskProfile';
 import { RiskSurvey } from './pages/RiskSurvey';
 import { ErrorAlert, useLoad } from './ui';
@@ -56,6 +58,8 @@ const icons: Record<string, LucideIcon> = {
   '#/cash': Wallet,
   '#/back-office': ClipboardList,
   '#/portfolio': ChartPie,
+  '#/proposals': Send,
+  '#/rm/proposals': FileText,
   '#/rm/drift-alerts': TriangleAlert,
   '#/products': Package,
   '#/prices': Tags,
@@ -63,9 +67,9 @@ const icons: Record<string, LucideIcon> = {
 };
 
 const navigation: Record<Role, Array<{ path: string; label: string }>> = {
-  RM: [{ path: '#/onboarding', label: 'Đăng ký khách hàng' }, { path: '#/rm/customers', label: 'Khách phụ trách' }, { path: '#/rm/drift-alerts', label: 'Cảnh báo lệch' }],
+  RM: [{ path: '#/onboarding', label: 'Đăng ký khách hàng' }, { path: '#/rm/customers', label: 'Khách phụ trách' }, { path: '#/rm/drift-alerts', label: 'Cảnh báo lệch' }, { path: '#/rm/proposals', label: 'Đề xuất' }],
   CUSTOMER: [{ path: '#/invitations', label: 'Lời mời dịch vụ' }, { path: '#/risk-survey', label: 'Khảo sát rủi ro' },
-    { path: '#/risk-profile', label: 'Hồ sơ rủi ro' }, { path: '#/cash', label: 'Tài khoản đầu tư' }, { path: '#/portfolio', label: 'Danh mục' }],
+    { path: '#/risk-profile', label: 'Hồ sơ rủi ro' }, { path: '#/cash', label: 'Tài khoản đầu tư' }, { path: '#/portfolio', label: 'Danh mục' }, { path: '#/proposals', label: 'Đề xuất đầu tư' }],
   LEADER: [{ path: '#/assignments', label: 'Phân công RM' }],
   BACK_OFFICE: [{ path: '#/back-office', label: 'Giao dịch cần xử lý' }, { path: '#/products', label: 'Sản phẩm' }, { path: '#/prices', label: 'Giá và NAV' }],
   BACK_OFFICE_MANAGER: [{ path: '#/price-approvals', label: 'Duyệt giá' }],
@@ -136,12 +140,15 @@ function Screen({ session, hash }: { session: Session; hash: string }) {
   const route = hash.replace(/^#/, '') || '/';
   const detail = /^\/rm\/customers\/([^/]+)$/.exec(route);
   const teamCustomer = /^\/team\/customers\/([^/]+)$/.exec(route);
+  const newProposal = /^\/rm\/customers\/([^/?]+)\/proposals\/new(?:\?alert=([^&]+))?$/.exec(route);
   switch (session.role) {
     case 'RM':
       if (route === '/onboarding') return <Onboarding />;
       if (route === '/rm/customers') return <CustomerList />;
       if (detail) return <CustomerDetail customerId={detail[1]!} />;
       if (route === '/rm/drift-alerts') return <DriftAlerts />;
+      if (route === '/rm/proposals') return <RmProposals />;
+      if (newProposal) return <NewProposal customerId={newProposal[1]!} {...(newProposal[2] ? { alertId: newProposal[2] } : {})} />;
       break;
     case 'CUSTOMER':
       if (route === '/invitations') return <Invitations />;
@@ -149,6 +156,7 @@ function Screen({ session, hash }: { session: Session; hash: string }) {
       if (route === '/risk-profile') return <RiskProfile />;
       if (route === '/cash') return <Cash />;
       if (route === '/portfolio') return <Portfolio />;
+      if (route === '/proposals') return <MyProposals />;
       break;
     case 'LEADER':
       if (route === '/assignments') return <Assignments />;
@@ -235,7 +243,7 @@ export function App() {
         {session ? (
           <>
             {session.role === 'CUSTOMER' ? <NotificationBanner key={session.serial} onDismissed={() => main.current?.focus({ preventScroll: true })} /> : null}
-            <Screen key={`${session.serial}:${hash.startsWith('#/rm/customers/') ? 'detail' : hash}`} session={session} hash={hash} />
+            <Screen key={`${session.serial}:${hash.startsWith('#/rm/customers/') ? `detail:${hash.includes('/proposals/new')}` : hash}`} session={session} hash={hash} />
           </>
         ) : (
             <section className="max-w-[920px]">

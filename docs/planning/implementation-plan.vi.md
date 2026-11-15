@@ -14,7 +14,7 @@ Theo các câu trả lời của bạn trong phiên này, phạm vi được ch�
 2. **NestJS backend + React demo phần 1 trong cùng repo.** React đóng vai trò cả portal RM/trưởng nhóm và màn hình khách hàng trên trình duyệt; chưa làm ứng dụng mobile native.
 3. **Một NestJS backend, chia thành bốn module nghiệp vụ.** Bạn đã cho phép phương án này thay cho bốn microservices độc lập trong tài liệu WMS.
 4. **Lộ trình 6 tuần.** Chưa có ngày bắt đầu và ngày nộp cụ thể, nên dùng Tuần 1–6, không tự gán hạn lịch.
-5. Bạn là **người dựng nền tảng source chung và người thực hiện UC-01 đến UC-04**. Phần 2 và Phần 3 đã chuyển cho bạn (xem bảng phân công); thành viên khác vẫn sở hữu nghiệp vụ của Phần 4.
+5. Bạn là **người dựng nền tảng source chung và người thực hiện UC-01 đến UC-04**. Phần 2, Phần 3 và Phần 4 đã chuyển cho bạn (xem bảng phân công).
 
 Kết quả triển khai sau khi duyệt kế hoạch sẽ gồm hai mức bàn giao:
 
@@ -189,7 +189,7 @@ Tên folder có thể điều chỉnh ở scaffold, nhưng ownership phải gi�
 | P1 UC-01–04 | Bạn | Onboarding, scoring/profile, RM assignment/access, React P1 | Account bootstrap từ P2; AUM/drift từ P3; proposal count/cancel từ P4 |
 | P2 UC-05–08 | Bạn (đã chuyển từ Người 2) | InvestmentAccount, ledger, nạp/rút/đối soát/đáo hạn, Back-office tối thiểu và UI tương ứng | Không còn phần giao cho thành viên khác |
 | P3 UC-09–12 | Bạn (đã chuyển từ Người 3) | Chỉ thống nhất contract risk/valuation và các trường UC-04 | Sản phẩm, NAV, holdings/AUM, drift, đánh giá holdings vượt risk |
-| P4 UC-13–16 | Người 4 | Chỉ thống nhất quyền hiện hành/transaction và cancellation hook | Suitability, proposal, approval, execution; UI proposal/OTP tài chính |
+| P4 UC-13–16 | Bạn (đã chuyển từ Người 4) | Chỉ thống nhất quyền hiện hành/transaction và cancellation hook | Suitability, proposal, approval, execution; UI proposal/OTP tài chính |
 | Tài liệu nhóm | Cả nhóm | Chương 1, UC tổng thể, UC01–04, risk sequence; chuẩn hóa báo cáo | P2 BPMN; P3 data dictionary; P4 kiến trúc/state machine và các phần của họ |
 
 **Ngoại lệ tối thiểu cho bootstrap:** UC-01 cần tài khoản đầu tư trước khi P2 hoàn thiện. Bạn và P2 chốt bảng/port mở tài khoản số dư 0 ở Tuần 1. Nếu bạn làm implementation tối thiểu này để mở đường, vẫn đặt trong module P2, P2 review và nhận ownership; không làm nạp/rút/ledger thay P2.

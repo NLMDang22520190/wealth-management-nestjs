@@ -23,7 +23,7 @@ Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một �
 | **Phần 1 — Customer & Risk** | UC01 đăng ký dịch vụ · UC02 đánh giá rủi ro · UC03 phân công RM · UC04 danh sách khách của RM | ✅ Backend + giao diện + test |
 | **Phần 2 — Accounts & Ledger** | Nạp tiền · rút tiền · lịch sử và sổ cái · đối soát · tất toán tiền gửi (UC05–08) | ✅ Backend + giao diện + test, xem [tài liệu Phần 2](docs/part2/01-overview.vi.md) |
 | **Phần 3 — Portfolio & Valuation** | Danh mục sản phẩm · giá, NAV, lãi suất có duyệt 2 lớp · định giá danh mục · cảnh báo lệch tỷ trọng (UC09–12) | ✅ Backend + giao diện + test, xem [tài liệu Phần 3](docs/part3/01-overview.vi.md) |
-| Phần 4 — Advisory & Trading | Đề xuất, duyệt/từ chối, thực thi (UC13–16) | Bridge hủy proposal nguyên tử khi chuyển RM |
+| **Phần 4 — Advisory & Trading** | Đề xuất · hủy · khách duyệt/từ chối bằng Smart OTP · khớp lệnh trọn gói (UC13–16) | ✅ Backend + giao diện + test, xem [tài liệu Phần 4](docs/part4/01-overview.vi.md) |
 
 ## Luồng Phần 1
 

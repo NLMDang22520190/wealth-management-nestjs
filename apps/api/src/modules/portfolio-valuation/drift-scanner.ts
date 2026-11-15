@@ -9,8 +9,8 @@ import { JOB_CONTEXT, vietnamDate } from '../accounts-ledger/cash.domain.js';
 import { valuePortfolio } from './portfolio-valuer.js';
 import type { AllocationRow, Valuation } from './portfolio-valuer.js';
 
-/** DAILY is the 17:00 run; the others follow UC-10, UC-08 and UC-02. */
-export type ScanTrigger = 'DAILY' | 'PRICE' | 'MATURITY' | 'RISK';
+/** DAILY is the 17:00 run; the others follow UC-10, UC-08, UC-02 and UC-16. */
+export type ScanTrigger = 'DAILY' | 'PRICE' | 'MATURITY' | 'RISK' | 'EXECUTION';
 export interface ScanOutcome { snapshot: boolean; skipped: boolean; alerts: number; }
 export interface ScanSummary { scanned: number; alerted: number; failed: number; }
 
@@ -41,7 +41,8 @@ export class DriftScanner {
 
       const canAlert = valuation.aum !== '0.00' && service.rm_id && valuation.riskProfileId && new Date(service.expires_at).getTime() > now.getTime();
       const plan = canAlert ? await this.alertPlan(manager, valuation) : { create: [], resolve: [] };
-      const mustSnapshot = trigger === 'DAILY' || trigger === 'PRICE' || plan.create.length > 0;
+      // A new price or an executed proposal changes the valuation itself (BR-17), so those always leave a snapshot.
+      const mustSnapshot = trigger === 'DAILY' || trigger === 'PRICE' || trigger === 'EXECUTION' || plan.create.length > 0;
       const snapshotId = mustSnapshot ? await this.writeSnapshot(manager, valuation, trigger, now) : null;
       if (mustSnapshot && !snapshotId) return { snapshot: false, skipped: false, alerts: 0 };
 

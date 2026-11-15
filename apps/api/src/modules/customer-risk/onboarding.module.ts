@@ -1,4 +1,4 @@
-import { applyDecorators, Body, Controller, Get, HttpCode, Module, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
+import { applyDecorators, Body, Controller, Get, HttpCode, Module, Param, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthModule } from '../../auth/auth.module.js';
 import { AuthService } from '../../auth/auth.service.js';
@@ -6,7 +6,7 @@ import { Public, Roles } from '../../auth/guards.js';
 import { ApiError, auditContext } from '../../platform/http.js';
 import type { ApiRequest } from '../../platform/http.js';
 import { OtpService } from '../../platform/otp.service.js';
-import { OtpChallengeBody } from '../../platform/validation.js';
+import { IdParamPipe, OtpChallengeBody } from '../../platform/validation.js';
 import { PortfolioScanModule } from '../portfolio-valuation/portfolio-scan.module.js';
 import { AccountsLedgerModule } from '../accounts-ledger/account-bootstrap.js';
 import { ConsentBody, CustomerLookupBody, OnboardingRequestBody } from './onboarding.domain.js';
@@ -82,7 +82,7 @@ class OnboardingController {
   @Roles('CUSTOMER') @Get('me/onboarding-requests/:id')
   @ApiOperation({ summary: 'Read own request and its immutable terms' })
   @ApiResponse({ status: 200, description: 'Pending request with nonempty terms text', type: PendingRequestResult }) @errors()
-  detail(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string) {
+  detail(@Req() request: ApiRequest, @Param('id', new IdParamPipe()) id: string) {
     return this.onboarding.detail(request.actor!, id);
   }
 
@@ -90,7 +90,7 @@ class OnboardingController {
   @ApiOperation({ summary: 'Consume bound OTP and atomically register service, account, consent and provisional RM' })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiResponse({ status: 200, type: RegistrationResult }) @errors()
-  confirm(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string, @Body() body: ConsentBody) {
+  confirm(@Req() request: ApiRequest, @Param('id', new IdParamPipe()) id: string, @Body() body: ConsentBody) {
     return this.onboarding.confirm(request.actor!, id, body, key(request), auditContext(request));
   }
 }
@@ -114,7 +114,7 @@ class OtpController {
   @Public() @Get('me/otp-challenges/:id/demo-code')
   @ApiOperation({ summary: 'Development/test mock delivery inbox; production and disabled mock always return 404' })
   @ApiResponse({ status: 200, description: 'challengeId, code and expiresAt, available only to the operation-owning customer' }) @errors()
-  async demoCode(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string) {
+  async demoCode(@Req() request: ApiRequest, @Param('id', new IdParamPipe()) id: string) {
     this.auth.ensureMockEnabled();
     const actor = await this.auth.authenticate(request.headers.authorization);
     if (actor.role !== 'CUSTOMER') throw new ApiError(403, 'FORBIDDEN', 'Access denied');

@@ -4,6 +4,7 @@ import { formatCompactVnd, formatDate, formatTime, formatVnd, provenanceLabel, r
 import { AlertAction, Empty, ErrorAlert, Field, Loading, PageTitle, Panel, RiskChip, useLoad } from '../ui';
 import { CustomerDriftAlerts } from './DriftAlerts';
 import { PortfolioPanels } from './Portfolio';
+import { CustomerProposals } from './Proposals';
 import { CashHistory } from './Cash';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -193,6 +194,7 @@ export function CustomerDetail({ customerId }: { customerId: string }) {
             <p>Kiểm tra danh mục chờ: {customer.driftAlerts.count}</p>
           </Panel>
           <CustomerDriftAlerts customerId={customerId} />
+          <CustomerProposals customerId={customerId} canManage />
           <PortfolioPanels path={`/customers/${customerId}/portfolio`} showSuggestions />
           <Panel title="Lịch sử giao dịch"><CashHistory basePath={`/customers/${customerId}/cash-transactions`} /></Panel>
         </>

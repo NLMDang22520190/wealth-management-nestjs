@@ -38,6 +38,7 @@ function AlertCard({ alert, onRead }: { alert: DriftAlert; onRead: () => void })
         <Fact label="Gợi ý">{alert.adjustAmount ? `${alert.direction === 'INCREASE' ? 'Tăng' : 'Giảm'} ${money(alert.adjustAmount)}` : 'Không có'}</Fact>
         <Fact label="Tạo lúc">{formatDateTime(alert.createdAt)}</Fact>
       </Facts>
+      <p className="m-0 mb-2"><a href={`#/rm/customers/${alert.customerId}/proposals/new?alert=${alert.alertId}`} className="font-semibold" aria-label={`Tạo đề xuất tái cân bằng: ${alert.fullName}, ${classLabels[alert.allocationClass]}`}>Tạo đề xuất tái cân bằng</a></p>
       {alert.status === 'NEW' ? <BusyButton type="button" variant="outline" busy={busy} aria-label={`Đánh dấu đã đọc: ${alert.fullName}, ${classLabels[alert.allocationClass]}`} onClick={() => void read()}>Đánh dấu đã đọc</BusyButton> : null}
       {failure ? <ErrorAlert>{describe(failure)}</ErrorAlert> : null}
     </li>

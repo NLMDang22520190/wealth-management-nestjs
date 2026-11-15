@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Module, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Module, Param, Post, Query, Req } from '@nestjs/common';
+import { IdParamPipe } from '../../platform/validation.js';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthModule } from '../../auth/auth.module.js';
 import { AuthService } from '../../auth/auth.service.js';
@@ -21,7 +22,7 @@ function key(request: ApiRequest): string | undefined {
   const value = request.headers['idempotency-key'];
   return typeof value === 'string' ? value : undefined;
 }
-const uuidParam = () => new ParseUUIDPipe();
+const uuidParam = () => new IdParamPipe();
 
 @ApiBearerAuth('bearer')
 @ApiTags('Cash (customer)')
