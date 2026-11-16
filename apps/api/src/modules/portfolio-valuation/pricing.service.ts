@@ -7,7 +7,7 @@ import type { Actor } from '../../auth/actor.js';
 import { ApiError } from '../../platform/http.js';
 import type { AuditContext } from '../../platform/http.js';
 import { RUNTIME_OPTIONS } from '../../platform/runtime.module.js';
-import { apiErrorCode, appendAudit, idempotent } from '../../platform/transactions.js';
+import { apiErrorCode, appendAudit, idempotent, recordOutcome } from '../../platform/transactions.js';
 import { vietnamDate } from '../accounts-ledger/cash.domain.js';
 import { DriftScanner } from './drift-scanner.js';
 import type { ScanSummary } from './drift-scanner.js';
@@ -23,6 +23,8 @@ interface PriceResult {
 }
 const AWAITING = "p.status='PENDING_APPROVAL' AND NOT EXISTS (SELECT 1 FROM wms.price_approvals x WHERE x.pricing_id=p.pricing_id)";
 const notPending = () => new ApiError(409, 'PRICE_NOT_PENDING', 'The price is not waiting for a decision');
+const notFound = () => new ApiError(404, 'PRICE_NOT_FOUND', 'Price not found');
+const DECISION = 'PRICE_DECISION';
 
 /** UC-10. `asset_pricing` and `price_approvals` are append-only: a decision is a new row, and v_asset_latest_price reads the outcome from it. */
 @Injectable()
@@ -121,10 +123,10 @@ export class PricingService {
     let fresh = false;
     const now = this.options.clock.now();
     const body = { decision, reason };
-    const result = await this.database.transaction(manager => idempotent(manager, actor.actorId, 'PRICE_DECISION', pricingId, key, body, now, async () => {
+    const result = await this.database.transaction(manager => idempotent(manager, actor.actorId, DECISION, pricingId, key, body, now, async () => {
       fresh = true;
       const [found] = await manager.query('SELECT asset_id FROM wms.asset_pricing WHERE pricing_id=$1', [pricingId]);
-      if (!found) throw notPending();
+      if (!found) throw notFound();
       // The same lock as entering a price, so a decision and a new entry cannot cross.
       await manager.query('SELECT 1 FROM wms.assets WHERE asset_id=$1 FOR UPDATE', [found.asset_id]);
       const [row]: Array<{ asset_id: string; created_by: string; price_type: PriceType; value: string; previous_value: string | null }> = await manager.query(
@@ -137,7 +139,11 @@ export class PricingService {
       await appendAudit(manager, actor, { type: 'ASSET_PRICING', id: pricingId }, decision === 'APPROVED' ? 'PRICE_APPROVED' : 'PRICE_REJECTED', body, now,
         { ...context, before: { status: 'PENDING_APPROVAL' }, after: { decision, reason: reason.trim() } });
       return { pricingId, assetId: row.asset_id, priceType: row.price_type, previousValue: row.previous_value, value: row.value, decision, scan: null as ScanSummary | null };
-    }));
+    })).catch(async (error: unknown) => {
+      // The business transaction has rolled back; the refusal is kept in its own short transaction, with the error code only (no reason text).
+      if (apiErrorCode(error) === 'MAKER_CHECKER_VIOLATION') await recordOutcome(this.database, 'DENIED', actor, { type: 'ASSET_PRICING', id: pricingId }, DECISION, 'MAKER_CHECKER_VIOLATION', now, context);
+      throw error;
+    });
     if (!fresh || decision !== 'APPROVED') return result;
     return { ...result, scan: await this.scanAfter(result) };
   }

@@ -16,7 +16,7 @@ NestJS · React 19 · shadcn/ui · Tailwind CSS v4 · TypeScript · PostgreSQL �
 
 ## Phạm vi
 
-Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một ứng dụng React trong cùng monorepo (npm workspaces). Người dựng source phụ trách Phần 1; Phần 2–4 chỉ có các bridge tối thiểu để Phần 1 chạy và kiểm tra được.
+Repo dùng **một NestJS backend chia bốn module nghiệp vụ** và một ứng dụng React trong cùng monorepo (npm workspaces). Cả bốn phần đã có backend, giao diện và test.
 
 | Phân công | Trách nhiệm | Trạng thái trong repo |
 |---|---|---|
@@ -108,23 +108,29 @@ Mock auth, Core mô phỏng và hộp thư OTP demo **chỉ bật khi `NODE_ENV`
 
 ```mermaid
 flowchart LR
-    UI[React — RM / Khách / Trưởng nhóm] --> API[NestJS API]
-    API --> AUTH[Mock IAM tin cậy + quyền theo CIF/nhóm]
+    UI[React — RM / Khách / Trưởng nhóm / Back-office] --> API[NestJS API]
+    API --> AUTH[Mock IAM tin cậy + quyền theo CIF/nhóm/vai]
     API --> P1[Customer & Risk — Phần 1]
-    P1 --> P2[Accounts & Ledger bridge]
-    P1 --> P3[Portfolio read bridge]
-    P1 --> P4[Advisory cancellation bridge]
+    API --> P2[Accounts & Ledger — Phần 2]
+    API --> P3[Portfolio & Valuation — Phần 3: sản phẩm, giá, định giá, cảnh báo]
+    API --> P4[Advisory bridge — Phần 4]
+    P1 -->|sau xác nhận hồ sơ rủi ro| SCAN[Drift scanner của Phần 3]
+    P2 -->|sau tất toán tiền gửi| SCAN
+    P3 -->|sau khi giá có hiệu lực| SCAN
+    JOB[Job 17:00 giờ Việt Nam] --> SCAN
     P1 -. ngoài transaction .-> CORE[Core adapter demo]
     P1 -. gửi sau commit .-> OTP[OTP adapter demo]
-    P1 --> DB[(PostgreSQL)]
+    P1 --> DB[(PostgreSQL schema wms)]
     P2 --> DB
     P3 --> DB
+    SCAN --> DB
     P4 --> DB
-    DB --> OUT[Outbox — sự kiện sau commit]
+    P3 -->|DriftAlertCreated| OUT[Outbox — sự kiện cùng transaction]
+    DB --- OUT
 ```
 
 ```text
-apps/api      NestJS: platform (auth, http, validation, transactions), modules/customer-risk, bridges P2–P4, migrations
+apps/api      NestJS: platform (auth, http, validation, transactions), modules/customer-risk (P1), accounts-ledger (P2), portfolio-valuation (P3), advisory-trading (bridge P4), migrations
 apps/web      React 19 + Vite + shadcn/ui (Radix, Tailwind CSS v4, lucide icons); hash routing
 scripts/      seed-demo.mjs — chạy migration và nạp dữ liệu mẫu của nhóm; team-seed/wms_seed.sql
 tests/api     Integration test trên PostgreSQL thật (Vitest)

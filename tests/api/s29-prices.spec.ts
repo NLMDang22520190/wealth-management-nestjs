@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { expectApiError, startApiFixture } from '../helpers/application.js';
 import { activeCustomer, audit, nextKey } from '../helpers/cash.js';
 import type { Api } from '../helpers/cash.js';
-import { BACK_OFFICE, createAsset, decide, holdUnits, snapshots, staffTokens, submitPrice } from '../helpers/portfolio.js';
+import { BACK_OFFICE, createAsset, decide, holdUnits, MANAGER, snapshots, staffTokens, submitPrice } from '../helpers/portfolio.js';
 
 describe('S29 UC-10 prices, NAV and interest rates', () => {
   let api: Api;
@@ -74,6 +74,32 @@ describe('S29 UC-10 prices, NAV and interest rates', () => {
     const [own] = await api.dataSource.query(`INSERT INTO wms.asset_pricing(asset_id,price_type,value,previous_value,effective_date,status,created_by)
       VALUES($1,'NAV',50000,20000,'2026-01-15','PENDING_APPROVAL',$2) RETURNING pricing_id`, [other.assetId, managerStaff]);
     expectApiError(await decide(api, manager, own.pricing_id, 'approve'), 403, 'MAKER_CHECKER_VIOLATION');
+  });
+
+  test('a manager deciding their own entry is refused with 403 and the attempt is audited DENIED, without secrets', async () => {
+    const { assetId } = await createAsset(api, backOffice, 'MUTUAL_FUND');
+    const managerStaff = (await api.dataSource.query(`SELECT staff_id FROM wms.staff_users WHERE employee_code='${MANAGER}'`))[0].staff_id;
+    const [own] = await api.dataSource.query(`INSERT INTO wms.asset_pricing(asset_id,price_type,value,previous_value,effective_date,status,created_by)
+      VALUES($1,'NAV',50000,20000,'2026-01-15','PENDING_APPROVAL',$2) RETURNING pricing_id`, [assetId, managerStaff]);
+    expectApiError(await decide(api, manager, own.pricing_id, 'approve', 'Tự duyệt giá của mình'), 403, 'MAKER_CHECKER_VIOLATION');
+    const denied = (await audit(api, 'PRICE_DECISION')).filter(row => row.outcome === 'DENIED');
+    expect(denied).toEqual([expect.objectContaining({ actor_id: MANAGER, actor_role: 'BACK_OFFICE_MANAGER', reference_type: 'ASSET_PRICING', reference_id: own.pricing_id,
+      new_value: { errorCode: 'MAKER_CHECKER_VIOLATION' } })]);
+    expect(JSON.stringify(denied)).not.toContain('Tự duyệt');
+    expect(await api.dataSource.query('SELECT 1 FROM wms.price_approvals WHERE pricing_id=$1', [own.pricing_id])).toEqual([]);
+    expect((await api.request('/back-office/prices/pending', { token: manager })).body.items.map((item: { pricingId: string }) => item.pricingId)).toContain(own.pricing_id);
+  });
+
+  test('deciding a price that does not exist is 404 PRICE_NOT_FOUND; one that exists but is already decided stays 409', async () => {
+    const unknown = '00000000-0000-4000-8000-000000000000';
+    expectApiError(await decide(api, manager, unknown, 'approve'), 404, 'PRICE_NOT_FOUND');
+    expectApiError(await decide(api, manager, unknown, 'reject'), 404, 'PRICE_NOT_FOUND');
+    const { assetId } = await createAsset(api, backOffice, 'MUTUAL_FUND');
+    const { pricingId } = (await submitPrice(api, backOffice, assetId, '30000')).body;
+    expect((await decide(api, manager, pricingId, 'reject')).status).toBe(200);
+    expectApiError(await decide(api, manager, pricingId, 'approve'), 409, 'PRICE_NOT_PENDING');
+    const applied = (await submitPrice(api, backOffice, assetId, '20100')).body.pricingId;
+    expectApiError(await decide(api, manager, applied, 'approve'), 409, 'PRICE_NOT_PENDING');
   });
 
   test('value and date rules', async () => {

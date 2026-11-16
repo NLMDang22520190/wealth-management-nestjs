@@ -15,17 +15,17 @@ const accountNotFound = () => new ApiError(404, 'ACCOUNT_NOT_FOUND', 'No investm
 const alertNotFound = () => new ApiError(404, 'ALERT_NOT_FOUND', 'Alert not found');
 
 interface AlertRow {
-  alert_id: string; customer_id: string; full_name: string; allocation_class: string; actual: string; target: string; deviation: string; status: string; created_at: Date; read_at: Date | null;
+  alert_id: string; customer_id: string; full_name: string; allocation_class: string; actual: string; target: string; deviation: string; status: string; created_at: Date; read_at: Date | null; actioned_at: Date | null;
   direction: string | null; amount: string | null; snapshot_date: string; aum: string;
 }
 const ALERT_SELECT = `SELECT a.alert_id,a.customer_id,c.full_name,a.allocation_class::text AS allocation_class,a.actual_weight::text AS actual,a.target_weight::text AS target,a.deviation::text AS deviation,
-    a.status::text AS status,a.created_at,a.read_at,s.direction::text AS direction,s.adjust_amount::text AS amount,to_char(ps.snapshot_date,'YYYY-MM-DD') AS snapshot_date,ps.aum::text AS aum
+    a.status::text AS status,a.created_at,a.read_at,a.actioned_at,s.direction::text AS direction,s.adjust_amount::text AS amount,to_char(ps.snapshot_date,'YYYY-MM-DD') AS snapshot_date,ps.aum::text AS aum
   FROM wms.drift_alerts a JOIN wms.customers c ON c.customer_id=a.customer_id JOIN wms.portfolio_snapshots ps ON ps.snapshot_id=a.snapshot_id
   LEFT JOIN wms.rebalance_suggestions s ON s.alert_id=a.alert_id`;
 const OPEN_FIRST = "ORDER BY a.created_at DESC,a.allocation_class";
 
 const alertView = (row: AlertRow) => ({ alertId: row.alert_id, customerId: row.customer_id, fullName: row.full_name, allocationClass: row.allocation_class, actualWeight: row.actual, targetWeight: row.target,
-  deviation: row.deviation, status: row.status, createdAt: new Date(row.created_at).toISOString(), readAt: row.read_at ? new Date(row.read_at).toISOString() : null,
+  deviation: row.deviation, status: row.status, createdAt: new Date(row.created_at).toISOString(), readAt: row.read_at ? new Date(row.read_at).toISOString() : null, actionedAt: row.actioned_at ? new Date(row.actioned_at).toISOString() : null,
   direction: row.direction, adjustAmount: row.amount, snapshotDate: row.snapshot_date, aum: row.aum });
 
 /** UC-11 and the RM side of UC-12. Scope comes from the token or P1's assignment check, never from the query; every staff view is audited. */
