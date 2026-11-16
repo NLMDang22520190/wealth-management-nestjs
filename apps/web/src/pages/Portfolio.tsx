@@ -3,6 +3,7 @@ import { api, describe } from '../api';
 import { AlertAction, Empty, ErrorAlert, Fact, Facts, Loading, PageTitle, Panel, useLoad } from '../ui';
 import { money } from './Cash';
 import { dayText, plainNumber } from './Prices';
+import { CustomerProposals } from './Proposals';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 
@@ -150,6 +151,7 @@ export function TeamCustomerPortfolio({ customerId }: { customerId: string }) {
       <p className="mb-3 text-[0.9rem]"><a href="#/assignments">Quay lại phân công</a></p>
       <PageTitle title="Danh mục của khách" />
       <PortfolioPanels path={`/customers/${customerId}/portfolio`} showSuggestions />
+      <CustomerProposals customerId={customerId} />
     </>
   );
 }

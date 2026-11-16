@@ -23,7 +23,8 @@ async function bootstrap(): Promise<void> {
   const otpTtlSeconds = limit('OTP_TTL_SECONDS');
   const cashJobsSetting = process.env.CASH_JOBS_ENABLED ?? 'true';
   const portfolioJobsSetting = process.env.PORTFOLIO_JOBS_ENABLED ?? 'true';
-  if (!['true', 'false'].includes(cashJobsSetting) || !['true', 'false'].includes(portfolioJobsSetting)) throw new ConfigurationError();
+  const proposalJobsSetting = process.env.PROPOSAL_JOBS_ENABLED ?? 'true';
+  if ([cashJobsSetting, portfolioJobsSetting, proposalJobsSetting].some(setting => !['true', 'false'].includes(setting))) throw new ConfigurationError();
   const { app } = await createApplication({
     databaseUrl: process.env.DATABASE_URL ?? '',
     environment: environment as ApplicationOptions['environment'],
@@ -36,6 +37,7 @@ async function bootstrap(): Promise<void> {
     ...(environment !== 'production' && mockSetting === 'true' ? { coreBanking: demoCoreBanking, coreLedger: demoCoreLedger } : {}),
     cashJobsEnabled: cashJobsSetting === 'true',
     portfolioJobsEnabled: portfolioJobsSetting === 'true',
+    proposalJobsEnabled: proposalJobsSetting === 'true',
   });
   app.enableShutdownHooks();
   try { await app.listen(port, '127.0.0.1'); }

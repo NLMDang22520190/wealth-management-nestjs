@@ -18,7 +18,7 @@ Các điểm đặc tả mâu thuẫn, không nói rõ, hoặc nhóm chọn các
 | Quy tắc 20% có áp cho lãi suất không (D-R10-3) | Có, cho cả NAV, giá trái phiếu và lãi suất | FR-10 và quy trình 3b; BR-15 chỉ nêu NAV và giá trái phiếu. Giữ nguyên để lãi suất nhập nhầm cũng cần người thứ hai |
 | Mức rủi ro "nằm trong khoảng cho phép của loại sản phẩm" (D-R10-2) | Chỉ kiểm mức từ 1 đến 5 (BR-14, `CHECK` của schema) | UC-09 bước 4 không nêu khoảng cho từng loại; không bịa ràng buộc. Nếu nhóm đưa khoảng cụ thể, thêm vào `assertClassFields` và một test |
 | "RM nhận thông báo" (D-R10-5) | Không thêm bảng; mỗi cảnh báo mới ghi một sự kiện outbox `DriftAlertCreated` cùng transaction với cảnh báo, và RM nhận qua màn `Cảnh báo lệch` | DDL của nhóm chỉ có `customer_notifications` (kiểu `RISK_SURVEY_REMINDER`), không có thông báo cho nhân viên; thêm bảng nghĩa là lệch DDL lần nữa. Dịch vụ thông báo thật (Notification Service) sẽ tiêu thụ sự kiện |
-| `HoldingsMutationPort` cho UC-16 (D-R10-7) | Chưa làm | Ghi `portfolio_holdings` chỉ thuộc UC-16 (Phần 4), cần chung transaction với sổ cái; để cho phần tích hợp Phần 4 |
+| `HoldingsMutationPort` cho UC-16 (D-R10-7) | Do Phần 4 làm: `holdings-mutation.ts` (`sell`, `buy`, `openDeposit`, `settleDeposit`) nằm trong module Phần 3 và chạy chung transaction với sổ cái | Ghi `portfolio_holdings` chỉ thuộc UC-16 và UC-08; Phần 3 vẫn chỉ đọc |
 | Tên action audit (D-R10-1) | Giữ tên của mã, có bảng ánh xạ bên dưới | Đổi tên làm đổi dữ liệu audit đã ghi và các test s28, s29 |
 | Giao tiếp I-05 (P1 → P3 bằng sự kiện) | Quét lệch gọi trực tiếp sau commit; sự kiện `RiskHoldingsCheckRequested` giữ nguyên cho việc RM kiểm tra | `published_at` rỗng đang có nghĩa "RM chưa kiểm tra", tiêu thụ sự kiện sẽ làm sai `Kiểm tra danh mục chờ` |
 | Lỗi truy cập `NOT_YOUR_CUSTOMER` | Giữ `403 FORBIDDEN` và audit `DENIED` | Thống nhất với P1, P2 |
@@ -30,7 +30,7 @@ Các điểm đặc tả mâu thuẫn, không nói rõ, hoặc nhóm chọn các
 | Giá đầu tiên của sản phẩm | `previousValue` và `changePct` là `null`, áp dụng ngay | Không có giá để so sánh nên không có biên độ (trigger của nhóm cũng để `NULL`) |
 | Trái phiếu đáo hạn đúng hôm nay | Được thêm (so với ngày Việt Nam); đã qua thì `400 BOND_MATURITY_PASSED` | Spec: "không ở quá khứ". Trigger của nhóm so với `CURRENT_DATE` của PostgreSQL nên `SET LOCAL TIME ZONE 'Asia/Ho_Chi_Minh'` |
 | Tỷ trọng mục tiêu lấy từ đâu | `risk_profiles.allocation` của hồ sơ hiện hành; ngưỡng từ `target_allocations.drift_threshold` | Đặc tả mục quan hệ 8 |
-| Đề xuất tái cân bằng thuộc ai (D-R10-4) | Phần 3 làm endpoint, đặt `ACTIONED`, ghi sự kiện `RebalanceProposalRequested`; Phần 4 (UC-13) tiêu thụ sự kiện sau | Đặc tả: RM chọn nút này thì `DriftAlert.status` thành `ACTIONED` |
+| Đề xuất tái cân bằng thuộc ai (D-R10-4, đổi ở D-R11-2) | Phần 4. Màn `Cảnh báo lệch` có liên kết `Tạo đề xuất tái cân bằng: <khách>, <nhóm>` sang `#/rm/customers/:id/proposals/new?alert=<alertId>`; tạo đề xuất đặt cảnh báo `ACTIONED` và khi đề xuất kết thúc thì cảnh báo về `RESOLVED` để lượt quét sau xét lại | Đặc tả: chọn nút này thì `DriftAlert.status` thành `ACTIONED`. Phần 4 đã có luồng đề xuất thật, nên endpoint riêng của Phần 3 (`POST /rm/drift-alerts/:id/rebalance-proposal`, sự kiện `RebalanceProposalRequested`) đã gỡ để không có hai đường song song |
 
 ### Ánh xạ tên action audit
 
@@ -45,7 +45,6 @@ Các điểm đặc tả mâu thuẫn, không nói rõ, hoặc nhóm chọn các
 | `CREATE_DRIFT_ALERT` | `DRIFT_ALERTS_CHANGED` | Một dòng cho mỗi khách mỗi lượt quét, ghi cả cảnh báo tạo mới và đã `RESOLVED`; mỗi cảnh báo mới còn có sự kiện outbox `DriftAlertCreated`. Actor là `SYSTEM_JOB` |
 | không có | `PORTFOLIO_VIEW` | RM, Trưởng nhóm xem danh mục (`SUCCESS`), hoặc bị từ chối (`DENIED`) |
 | không có | `PORTFOLIO_SNAPSHOT_COMPLETED` | Mỗi lượt chạy job (17:00 hoặc nút demo) có snapshot mới hoặc có khách lỗi |
-| không có | `DRIFT_ALERT_ACTIONED` | RM tạo đề xuất tái cân bằng (`SUCCESS`), hoặc RM không phụ trách bị từ chối (`DENIED`) |
 | không có | `DRIFT_ALERT_READ` | Chỉ ghi khi bị từ chối (`DENIED`) |
 | không có | `PRICE_DECISION` | Chỉ ghi khi Maker = Checker (`DENIED`) |
 
@@ -186,7 +185,7 @@ classDiagram
   DriftAlert "1" *-- "0..*" RebalanceSuggestion
   RiskProfile ..> DriftAlert : tỷ trọng mục tiêu (I-07)
   TargetAllocation ..> DriftAlert : ngưỡng BR-16
-  DriftAlert ..> OutboxEvent : DriftAlertCreated, RebalanceProposalRequested
+  DriftAlert ..> OutboxEvent : DriftAlertCreated
   AuditLog <.. DriftAlert : BR-01
 ```
 
@@ -235,12 +234,7 @@ Biên độ so sau khi làm tròn 4 chữ số thập phân, giống trigger c�
 
 ### Tạo đề xuất tái cân bằng (UC-12 bước 5)
 
-`POST /rm/drift-alerts/:id/rebalance-proposal`, chỉ RM đang phụ trách khách của cảnh báo. Trong một transaction: khóa dòng cảnh báo, đặt `status = ACTIONED` và `actioned_at`, ghi audit `DRIFT_ALERT_ACTIONED` và sự kiện outbox `RebalanceProposalRequested` (`aggregate_type = DRIFT_ALERT`) với `{alertId, customerId, rmId, riskProfileId, allocationClass, actualWeight, targetWeight, suggestions[]}`. Phần 3 không tạo đề xuất và không đặt lệnh: Phần 4 (UC-13) tiêu thụ sự kiện.
-
-- Cần `Idempotency-Key`; gửi lại cùng khóa trả đúng kết quả đã lưu, không thêm sự kiện hay dòng audit.
-- Cảnh báo `NEW` hoặc `READ` mới được tạo đề xuất. Cảnh báo đã `ACTIONED` hoặc `RESOLVED` trả `409 ALERT_NOT_OPEN`; id không có trả `404 ALERT_NOT_FOUND`.
-- RM không phụ trách khách đó nhận `403 FORBIDDEN` và một dòng audit `DENIED`. Trưởng nhóm, Back-office, Khách nhận `403` từ lớp phân quyền theo vai (không audit, như các endpoint khác của repo).
-- Giao diện: nút `Tạo đề xuất tái cân bằng` trên từng thẻ ở màn `Cảnh báo lệch`; sau khi tạo, thẻ rời danh sách đang mở và dòng trạng thái ghi `Đã tạo đề xuất tái cân bằng: <khách>, <nhóm tài sản>`.
+Do Phần 4 làm (xem `docs/part4/01-overview.vi.md`). Trên thẻ cảnh báo, RM bấm liên kết `Tạo đề xuất tái cân bằng: <khách>, <nhóm tài sản>` để mở form đề xuất của khách kèm `alert=<alertId>`; khi đề xuất được tạo, cảnh báo thành `ACTIONED`. Đề xuất kết thúc (duyệt, từ chối, hết hạn, hủy, lỗi) thì cảnh báo trả về `RESOLVED` để lượt quét sau xét lại. Phần 3 không còn endpoint riêng cho bước này.
 
 ## API (tiền tố `/api/v1`)
 
@@ -259,13 +253,12 @@ Mọi lệnh `POST` và `PATCH` nghiệp vụ cần `Idempotency-Key`. Tiền v�
 | Khách | `GET /me/portfolio`, `GET /me/portfolio/aum-history` | Lịch sử có `days`, mặc định 90, tối đa 365 |
 | RM, Trưởng nhóm | `GET /customers/:id/portfolio`, `.../aum-history`, `.../drift-alerts` | Theo phân công hiện hành; mỗi lượt xem ghi audit |
 | RM | `GET /rm/drift-alerts`, `POST /rm/drift-alerts/:id/read` | Cảnh báo có thêm `actionedAt` (null nếu chưa tạo đề xuất) |
-| RM | `POST /rm/drift-alerts/:id/rebalance-proposal` | Đặt `ACTIONED`, ghi sự kiện `RebalanceProposalRequested`; `404 ALERT_NOT_FOUND`, `409 ALERT_NOT_OPEN` |
 | RM | `GET /rm/product-risk-warnings` | |
 | Back-office, chỉ khi mock | `POST /demo/jobs/portfolio-snapshot` | Body có `asOf` tùy chọn |
 
 Mã lỗi riêng: `PRODUCT_CODE_EXISTS`, `BOND_MATURITY_PASSED`, `ASSET_NOT_FOUND`, `PRICE_PENDING_EXISTS`, `PRICE_NOT_LATEST`, `PRICE_NOT_PENDING`, `PRICE_NOT_FOUND`, `MAKER_CHECKER_VIOLATION`, `ALERT_NOT_FOUND`, `ALERT_NOT_OPEN`, `ACCOUNT_NOT_FOUND`, `JOB_RUNNING`.
 
-Sự kiện outbox do Phần 3 ghi (`published_at` rỗng cho đến khi có bên tiêu thụ): `DriftAlertCreated` và `RebalanceProposalRequested`, cùng `aggregate_type = DRIFT_ALERT`, `aggregate_id` là `alertId`.
+Sự kiện outbox do Phần 3 ghi (`published_at` rỗng cho đến khi có bên tiêu thụ): `DriftAlertCreated`, `aggregate_type = DRIFT_ALERT`, `aggregate_id` là `alertId`.
 
 ## Bảng test case TC-P3
 
@@ -319,19 +312,12 @@ Sự kiện outbox do Phần 3 ghi (`published_at` rỗng cho đến khi có bê
 | TC-P3-44 | UC-12 | RM xem và đánh dấu đã đọc | Chỉ khách của mình; `404 ALERT_NOT_FOUND` | s31 `RM endpoints: open alerts…` |
 | TC-P3-45 | UC-12 | Lịch 17:00 | Chỉ chạy sau 17:00 giờ Việt Nam, một `DAILY` mỗi khách | s31 `the schedule catches up after 17:00…` |
 | TC-P3-46 | Migration 009 | `DAILY` duy nhất mỗi khách mỗi ngày, `EVENT` thì không; `down` khôi phục | Đúng như mô tả | s31 `migration 009…` |
-| TC-P3-47 | UC-12 bước 5 | RM tạo đề xuất tái cân bằng | `ACTIONED`, sự kiện `RebalanceProposalRequested`, audit, trong một transaction | s33 `the RM of the customer sets ACTIONED…`, `it is one transaction…` |
-| TC-P3-48 | UC-12 bước 5 | Cảnh báo `READ` | Vẫn tạo được | s33 `a READ alert can be actioned too` |
-| TC-P3-49 | NFR idempotency | Gửi lại; thiếu khóa | Kết quả đã lưu, không thêm sự kiện; `400` | s33 `a replay with the same key…` |
-| TC-P3-50 | UC-12 bước 5 | Cảnh báo `ACTIONED` hoặc `RESOLVED`; id không có | `409 ALERT_NOT_OPEN`; `404 ALERT_NOT_FOUND` | s33 `an alert that is already ACTIONED or RESOLVED…` |
-| TC-P3-51 | UC-12, BR-01 | RM không phụ trách; Trưởng nhóm, Back-office, Khách | `403` và audit `DENIED`; `403` | s33 `scope: another RM is 403…` |
-| TC-P3-52 | BR-16 | Lượt quét sau khi `ACTIONED` | Không tạo cảnh báo mới cho nhóm đó | s33 `ACTIONED is left alone by the next scan…` |
 | TC-P3-53 | UI UC-09, UC-10, UC-11 | Giá trên 20% chờ Quản lý; sau duyệt khách, RM, Trưởng nhóm thấy giá trị và cảnh báo | Hiển thị đúng, không tràn ngang, focus đúng | e2e `a price above 20% waits for the manager…` (desktop, mobile) |
 | TC-P3-54 | UI UC-09, UC-10 | Lỗi biểu mẫu, kết quả CSV từng dòng, chụp danh mục demo | `aria-invalid`, kết quả từng dòng, snapshot `DAILY` | e2e `product form errors, CSV results per row…` (desktop, mobile) |
-| TC-P3-55 | UI UC-12 bước 5 | RM bấm `Tạo đề xuất tái cân bằng` | Thẻ rời danh sách, có dòng trạng thái, cảnh báo `ACTIONED` và một sự kiện trong CSDL | e2e `the RM asks for a rebalancing proposal…` (desktop, mobile) |
 
 ## Giới hạn hiện tại
 
-- Phần 4 chưa tiêu thụ `RebalanceProposalRequested` và `DriftAlertCreated`: chưa có đề xuất được tạo từ sự kiện, chưa có tin nhắn đẩy tới RM. RM nhận cảnh báo qua màn `Cảnh báo lệch`.
+- Phần 4 chưa tiêu thụ `DriftAlertCreated`: chưa có tin nhắn đẩy tới RM. RM thấy cảnh báo ở màn `Cảnh báo lệch`.
 - Cảnh báo `ACTIONED` không có đường quay lại; RM không tự đóng cảnh báo (`RESOLVED` chỉ do lượt quét khi hết lệch).
 - Quét lệch sau UC-10 chạy đồng bộ trong request, ổn với dữ liệu demo nhưng sẽ chậm nếu có rất nhiều khách giữ một sản phẩm. `GET /rm/drift-alerts` giới hạn 200 dòng và `GET /back-office/prices/pending` không phân trang.
 - Sửa thông tin sản phẩm ngoài trạng thái và mức rủi ro chưa được hỗ trợ.

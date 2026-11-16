@@ -22,6 +22,7 @@ import type { CoreBanking } from './modules/customer-risk/onboarding.domain.js';
 import { CashModule } from './modules/accounts-ledger/cash.module.js';
 import type { CoreLedger } from './modules/accounts-ledger/core-ledger.js';
 import { PortfolioModule } from './modules/portfolio-valuation/portfolio.module.js';
+import { ProposalsModule } from './modules/advisory-trading/proposals.module.js';
 import type { OtpDelivery } from './platform/otp.service.js';
 import { validateConfiguration } from './platform/configuration.js';
 import { ApiErrorFilter, requestContext } from './platform/http.js';
@@ -48,6 +49,8 @@ export interface ApplicationOptions {
   cashJobsEnabled?: boolean;
   /** Runs the 17:00 valuation snapshot and drift scan in this process; off unless the entry point enables it. */
   portfolioJobsEnabled?: boolean;
+  /** Expires pending proposals past their 24 hours every minute; off unless the entry point enables it. */
+  proposalJobsEnabled?: boolean;
   otpDelivery?: (delivery: OtpDelivery) => void | Promise<void>;
 }
 
@@ -74,7 +77,7 @@ export async function createApplication(options: ApplicationOptions): Promise<Ap
     await dataSource.runMigrations({ transaction: 'all' });
     app = await NestFactory.create({
       module: ApplicationModule,
-      imports: [RuntimeModule.register(options), DatabaseModule.register(dataSource), AuthModule, PlatformModule, CustomerRiskModule, BusinessRoutesModule, CashModule, PortfolioModule],
+      imports: [RuntimeModule.register(options), DatabaseModule.register(dataSource), AuthModule, PlatformModule, CustomerRiskModule, BusinessRoutesModule, CashModule, PortfolioModule, ProposalsModule],
     }, { logger: options.logger });
     app.setGlobalPrefix('api/v1');
     app.use(requestContext);

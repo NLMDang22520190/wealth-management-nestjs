@@ -3,7 +3,9 @@ import { Injectable } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 
 export interface JournalInput {
-  accountId: string; cashTxnId: string; description: string; now: Date;
+  accountId: string; description: string; now: Date;
+  /** The source document: a cash transaction (P2) or an investment transaction (P4); the schema wants exactly one. */
+  cashTxnId?: string; investmentTransactionId?: string;
   /** Credit raises and debit lowers the investment account (NFR-P2-03: balance = credits - debits). */
   customerSide: 'DEBIT' | 'CREDIT';
   amount: string;
@@ -23,11 +25,12 @@ export class LedgerService {
     const journalId = randomUUID();
     const balanceAfter = await this.moveBalance(manager, input.accountId, input.customerSide, input.amount, input.consumeHold ? input.amount : '0');
     const [customer] = await manager.query('SELECT ledger_account_id FROM wms.ledger_accounts WHERE investment_account_id=$1', [input.accountId]);
-    await this.insert(manager, { journalId, cashTxnId: input.cashTxnId, ledgerAccountId: customer.ledger_account_id, side: input.customerSide,
+    const source = { cashTxnId: input.cashTxnId ?? null, investmentTransactionId: input.investmentTransactionId ?? null };
+    await this.insert(manager, { journalId, ...source, ledgerAccountId: customer.ledger_account_id, side: input.customerSide,
       amount: input.amount, balanceAfter, reversalOf: null, description: input.description, now: input.now });
     for (const line of input.counter) {
       const [system] = await manager.query('SELECT ledger_account_id FROM wms.ledger_accounts WHERE code=$1', [line.code]);
-      await this.insert(manager, { journalId, cashTxnId: input.cashTxnId, ledgerAccountId: system.ledger_account_id, side: opposite(input.customerSide),
+      await this.insert(manager, { journalId, ...source, ledgerAccountId: system.ledger_account_id, side: opposite(input.customerSide),
         amount: line.amount, balanceAfter: null, reversalOf: null, description: input.description, now: input.now });
     }
   }
@@ -43,7 +46,7 @@ export class LedgerService {
     for (const entry of entries) {
       const side = opposite(entry.side);
       const balanceAfter = entry.investment_account_id ? await this.moveBalance(manager, accountId, side, entry.amount, '0') : null;
-      await this.insert(manager, { journalId, cashTxnId, ledgerAccountId: entry.ledger_account_id, side, amount: entry.amount, balanceAfter,
+      await this.insert(manager, { journalId, cashTxnId, investmentTransactionId: null, ledgerAccountId: entry.ledger_account_id, side, amount: entry.amount, balanceAfter,
         reversalOf: entry.entry_id, description, now });
     }
   }
@@ -61,9 +64,10 @@ export class LedgerService {
     return rows![0]!.balance;
   }
 
-  private async insert(manager: EntityManager, row: { journalId: string; cashTxnId: string; ledgerAccountId: string; side: string; amount: string;
-    balanceAfter: string | null; reversalOf: string | null; description: string; now: Date }): Promise<void> {
-    await manager.query(`INSERT INTO wms.ledger_entries(journal_id,cash_txn_id,ledger_account_id,side,amount,balance_after,reversal_of,description,created_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [row.journalId, row.cashTxnId, row.ledgerAccountId, row.side, row.amount, row.balanceAfter, row.reversalOf, row.description, row.now]);
+  private async insert(manager: EntityManager, row: { journalId: string; cashTxnId: string | null; investmentTransactionId: string | null; ledgerAccountId: string; side: string;
+    amount: string; balanceAfter: string | null; reversalOf: string | null; description: string; now: Date }): Promise<void> {
+    await manager.query(`INSERT INTO wms.ledger_entries(journal_id,cash_txn_id,investment_transaction_id,ledger_account_id,side,amount,balance_after,reversal_of,description,created_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [row.journalId, row.cashTxnId, row.investmentTransactionId, row.ledgerAccountId, row.side, row.amount, row.balanceAfter, row.reversalOf,
+      row.description, row.now]);
   }
 }

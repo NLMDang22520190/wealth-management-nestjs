@@ -30,6 +30,7 @@ Object.assign(process.env, {
   // Scenarios press the job buttons themselves; a background run would change results mid-test.
   CASH_JOBS_ENABLED: 'false',
   PORTFOLIO_JOBS_ENABLED: 'false',
+  PROPOSAL_JOBS_ENABLED: 'false',
 });
 // Public seed command: builds the API, migrates the empty database and seeds the synthetic demo actors.
 const seeded = spawnSync('npm run seed:demo', { cwd: root, shell: true, stdio: 'inherit', env: process.env });

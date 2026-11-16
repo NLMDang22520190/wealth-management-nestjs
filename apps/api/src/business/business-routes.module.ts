@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Module, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Module, Param, Post, Query, Req } from '@nestjs/common';
+import { IdParamPipe } from '../platform/validation.js';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../auth/guards.js';
 import { ApiError, auditContext } from '../platform/http.js';
@@ -32,7 +33,7 @@ class RiskController {
   @Roles('CUSTOMER') @Post('me/risk-assessments/:id/confirm') @HttpCode(200)
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiOperation({ summary: 'Confirm a stored preview with a bound OTP and expected current-profile version' })
-  confirm(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string, @Body() body: RiskConfirmBody) {
+  confirm(@Req() request: ApiRequest, @Param('id', new IdParamPipe()) id: string, @Body() body: RiskConfirmBody) {
     return this.risk.confirm(request.actor!, id, body, this.key(request), auditContext(request));
   }
   @Roles('CUSTOMER') @Get('me/risk-profile')
@@ -42,11 +43,11 @@ class RiskController {
     return this.risk.history(request.actor!, riskPaging(page, pageSize));
   }
   @Roles('RM', 'LEADER') @Get('customers/:id/risk-profile')
-  customerProfile(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string) {
+  customerProfile(@Req() request: ApiRequest, @Param('id', new IdParamPipe()) id: string) {
     return this.risk.profile(request.actor!, id);
   }
   @Roles('RM', 'LEADER') @Get('customers/:id/risk-profile/history')
-  customerHistory(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string,
+  customerHistory(@Req() request: ApiRequest, @Param('id', new IdParamPipe()) id: string,
     @Query('page') page?: string, @Query('pageSize') pageSize?: string) {
     return this.risk.history(request.actor!, riskPaging(page, pageSize), id);
   }
@@ -72,7 +73,7 @@ class RmController {
   }
   @Roles('LEADER') @Post('customers/:id/rm-assignment') @HttpCode(200)
   @ApiHeader({ name: 'Idempotency-Key', required: true })
-  assign(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string, @Body() body: RmAssignmentBody) {
+  assign(@Req() request: ApiRequest, @Param('id', new IdParamPipe()) id: string, @Body() body: RmAssignmentBody) {
     const key = request.headers['idempotency-key'];
     return this.assignments.assign(request.actor!, id, body, typeof key === 'string' ? key : undefined, auditContext(request));
   }
@@ -83,7 +84,7 @@ class RmController {
   }
   @Roles('RM', 'LEADER', 'CUSTOMER') @Get('customers/:id')
   @ApiOperation({ summary: 'Customer summary for the current RM, the current RM team leader, or the customer themself' })
-  detail(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string) {
+  detail(@Req() request: ApiRequest, @Param('id', new IdParamPipe()) id: string) {
     return this.customers.detail(request.actor!, id, auditContext(request));
   }
 }
@@ -105,7 +106,7 @@ class NotificationsController {
   list(@Req() request: ApiRequest) { return this.notifications.list(request.actor!); }
   @Roles('CUSTOMER') @Post('notifications/:id/read') @HttpCode(200)
   @ApiOperation({ summary: 'Mark an own notification as read; another customer notification is 404 NOT_FOUND' })
-  read(@Req() request: ApiRequest, @Param('id', new ParseUUIDPipe()) id: string) {
+  read(@Req() request: ApiRequest, @Param('id', new IdParamPipe()) id: string) {
     return this.notifications.markRead(request.actor!, id);
   }
 }
