@@ -1,0 +1,27 @@
+# API NestJS trên Render (gói free). Tạo bằng Blueprint: Render > New > Blueprint > chọn repo.
+# Bản này là DEMO: IAM, Core Banking và OTP đều giả lập, nên NODE_ENV phải là development
+# (code từ chối MOCK_AUTH_ENABLED=true khi NODE_ENV=production). Ai biết địa chỉ đều đổi vai được.
+services:
+  - type: web
+    name: wealthflow-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build --workspace @wms/api
+    startCommand: node apps/api/dist/main.js
+    healthCheckPath: /api/v1/health/ready
+    envVars:
+      - key: NODE_VERSION
+        value: 24.20.0
+      - key: NODE_ENV
+        value: development
+      - key: MOCK_AUTH_ENABLED
+        value: "true"
+      # Render yêu cầu nghe trên 0.0.0.0. Mặc định của code là 127.0.0.1 (chạy máy cá nhân).
+      - key: HOST
+        value: 0.0.0.0
+      # Khóa ký token: Render tự sinh chuỗi ngẫu nhiên dài.
+      - key: JWT_SECRET
+        generateValue: true
+      # Dán chuỗi kết nối Neon (có ?sslmode=require) trong bảng điều khiển Render. KHÔNG ghi vào file này.
+      - key: DATABASE_URL
+        sync: false

@@ -1,0 +1,14 @@
+# Giao diện (apps/web) chạy trên Netlify. API chạy ở Render (render.yaml), cơ sở dữ liệu ở Neon.
+# Trình duyệt luôn gọi /api/v1/... cùng nguồn gốc; Netlify chuyển tiếp (proxy) sang API nên không cần CORS.
+#
+# SỬA MỘT CHỖ: thay wealthflow-api bằng tên dịch vụ thật trên Render (xem địa chỉ https://<tên>.onrender.com).
+
+[build]
+  command = "npm ci && npm run build:web"
+  publish = "apps/web/dist"
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://wealthflow-api.onrender.com/api/:splat"
+  status = 200
+  force = true

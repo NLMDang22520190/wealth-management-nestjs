@@ -9,9 +9,12 @@ async function bootstrap(): Promise<void> {
   const environment = process.env.NODE_ENV ?? 'development';
   const mockSetting = process.env.MOCK_AUTH_ENABLED ?? 'false';
   const port = Number(process.env.PORT ?? '3000');
+  // Loopback by default (local demo). A host such as Render must set HOST=0.0.0.0 to accept outside connections.
+  const host = process.env.HOST ?? '127.0.0.1';
   if (!['development', 'test', 'production'].includes(environment)
     || !['true', 'false'].includes(mockSetting)
-    || !Number.isInteger(port) || port < 1 || port > 65535) throw new ConfigurationError();
+    || !Number.isInteger(port) || port < 1 || port > 65535
+    || !/^[A-Za-z0-9.:-]{1,253}$/.test(host)) throw new ConfigurationError();
   const limit = (name: string): number | undefined => {
     const raw = process.env[name];
     if (raw === undefined) return undefined;
@@ -40,7 +43,7 @@ async function bootstrap(): Promise<void> {
     proposalJobsEnabled: proposalJobsSetting === 'true',
   });
   app.enableShutdownHooks();
-  try { await app.listen(port, '127.0.0.1'); }
+  try { await app.listen(port, host); }
   catch { await app.close(); throw new Error('Application listener failed'); }
 }
 

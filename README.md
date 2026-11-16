@@ -90,6 +90,8 @@ API chạy ở `http://127.0.0.1:3000/api/v1` (kiểm tra: `GET /api/v1/health/r
 npm run dev:web
 ```
 
+Muốn đưa bản demo lên mạng (Netlify + Render + Neon): xem [hướng dẫn deploy](docs/deploy.vi.md).
+
 Mở `http://127.0.0.1:5173`, chọn **Vai trò demo** rồi bấm **Chuyển vai**:
 
 | Vai | Dùng để |
