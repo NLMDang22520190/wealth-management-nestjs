@@ -70,6 +70,8 @@ test.describe('UC13 P3 products, prices and portfolio', () => {
     await expect(page.getByRole('region', { name: 'Các khoản đang nắm giữ' })).toContainText('FUND-E2E');
     await expect(page.getByRole('region', { name: 'Tỷ trọng so với mục tiêu' })).toContainText('Lệch mục tiêu');
     await expect(page.getByRole('img', { name: /Biểu đồ tổng tài sản/ })).toBeVisible();
+    await expect(page.getByRole('img', { name: /Biểu đồ cơ cấu danh mục/ })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Chú giải cơ cấu danh mục' })).toContainText('Chứng chỉ quỹ');
     await expectNoHorizontalOverflow(page);
 
     await switchRole(page, actors.rmAlpha);
