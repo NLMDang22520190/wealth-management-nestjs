@@ -23,6 +23,53 @@ interface HistoryPoint { date: string; aum: string; live: boolean }
 export const classLabels: Record<string, string> = { CASH: 'Tiền mặt', TERM_DEPOSIT: 'Tiền gửi', BOND: 'Trái phiếu', MUTUAL_FUND: 'Chứng chỉ quỹ' };
 export const percent = (value: string) => `${value.replace('.', ',')}%`;
 
+const classColors: Record<string, { stroke: string; bg: string }> = {
+  CASH: { stroke: 'stroke-blue-500', bg: 'bg-blue-500' },
+  TERM_DEPOSIT: { stroke: 'stroke-amber-400', bg: 'bg-amber-400' },
+  BOND: { stroke: 'stroke-violet-500', bg: 'bg-violet-500' },
+  MUTUAL_FUND: { stroke: 'stroke-green-500', bg: 'bg-green-500' },
+};
+
+/** Display only: arc lengths come from the weights the API already computed; the legend repeats every figure as text. */
+function AllocationChart({ rows, aum }: { rows: AllocationRow[]; aum: string }) {
+  const size = 200;
+  const radius = 70;
+  const circumference = 2 * Math.PI * radius;
+  const slices = rows.filter(row => row.actualWeight !== null && Number(row.actualWeight) > 0);
+  const total = slices.reduce((sum, row) => sum + Number(row.actualWeight), 0) || 1;
+  let offset = 0;
+  const arcs = slices.map(row => {
+    const length = (Number(row.actualWeight) / total) * circumference;
+    const arc = { row, length, offset };
+    offset += length;
+    return arc;
+  });
+  return (
+    <div className="mb-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+      <svg viewBox={`0 0 ${size} ${size}`} className="h-auto w-[200px] max-w-full" role="img"
+        aria-label={`Biểu đồ cơ cấu danh mục: ${slices.map(row => `${classLabels[row.allocationClass]} ${percent(row.actualWeight!)}`).join(', ')}`}>
+        <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+          {arcs.map(({ row, length, offset: start }) => (
+            <circle key={row.allocationClass} cx={size / 2} cy={size / 2} r={radius} fill="none" strokeWidth="34"
+              className={classColors[row.allocationClass]?.stroke ?? 'stroke-muted-foreground'}
+              strokeDasharray={`${Math.max(length - (arcs.length > 1 ? 1.5 : 0), 0.1)} ${circumference}`} strokeDashoffset={-start} />
+          ))}
+        </g>
+        <text x={size / 2} y={size / 2 - 4} textAnchor="middle" className="fill-muted-foreground text-[11px]">Tổng tài sản</text>
+        <text x={size / 2} y={size / 2 + 14} textAnchor="middle" className="fill-foreground text-[13px] font-bold">{money(aum)}</text>
+      </svg>
+      <ul className="m-0 grid list-none gap-1.5 p-0 tabular-nums" aria-label="Chú giải cơ cấu danh mục">
+        {rows.map(row => (
+          <li key={row.allocationClass} className="flex items-center gap-2">
+            <span aria-hidden="true" className={`inline-block size-3 shrink-0 rounded-sm ${classColors[row.allocationClass]?.bg ?? 'bg-muted-foreground'}`} />
+            <span>{classLabels[row.allocationClass]}: <strong>{row.actualWeight ? percent(row.actualWeight) : '0%'}</strong></span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** Display only: the height of a point; amounts shown as text never go through Number. */
 function AumChart({ points }: { points: HistoryPoint[] }) {
   const width = 640;
@@ -114,6 +161,8 @@ export function PortfolioPanels({ path, showSuggestions = false }: { path: strin
         <>
           <Panel title="Tỷ trọng so với mục tiêu">
             {data.allocation.every(row => row.actualWeight === null) ? <Empty>Chưa có tài sản để tính tỷ trọng.</Empty> : (
+              <>
+              <AllocationChart rows={data.allocation} aum={data.aum} />
               <ul className="m-0 grid list-none gap-2 p-0">
                 {data.allocation.map(row => (
                   <li key={row.allocationClass} className="rounded-lg border bg-card px-3.5 py-2.5">
@@ -123,6 +172,7 @@ export function PortfolioPanels({ path, showSuggestions = false }: { path: strin
                   </li>
                 ))}
               </ul>
+              </>
             )}
           </Panel>
           <Panel title="Các khoản đang nắm giữ">
