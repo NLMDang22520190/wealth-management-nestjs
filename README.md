@@ -84,6 +84,8 @@ npm run seed:demo
 npm run start:api
 ```
 
+Muốn làm lại dữ liệu demo từ đầu (xóa hết, nạp lại dữ liệu mẫu), dừng API rồi chạy `npm run reset:demo`; thêm `-- --yes` để bỏ câu hỏi xác nhận, `-- --db=wms_demo_khac` để dùng tên khác. Lệnh chỉ chạy với database trên máy này, tên bắt đầu bằng `wms_demo`, và từ chối khi `NODE_ENV=production`.
+
 API chạy ở `http://127.0.0.1:3000/api/v1` (kiểm tra: `GET /api/v1/health/ready`). Mở terminal khác để chạy giao diện:
 
 ```bash

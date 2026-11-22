@@ -13,7 +13,8 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "start:api": "npm run build --workspace @wms/api && node --env-file-if-exists=.env apps/api/dist/main.js",
-    "seed:demo": "npm run build --workspace @wms/api && node --env-file-if-exists=.env scripts/seed-demo.mjs",
+    "reset:demo": "npm run build --workspace @wms/api && node --env-file-if-exists=.env scripts/reset-demo.mjs",
+    "seed:demo":"npm run build --workspace @wms/api && node --env-file-if-exists=.env scripts/seed-demo.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "oxlint apps/api/src apps/web/src",
     "test:api": "npm run build --workspace @wms/api && vitest run",
