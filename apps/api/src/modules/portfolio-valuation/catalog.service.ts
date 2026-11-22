@@ -66,9 +66,10 @@ export class CatalogService {
     if (query.q) add('(asset_code ILIKE ? OR asset_name ILIKE ?)', `%${query.q.replace(/[\\%_]/g, '\\$&')}%`);
     const clause = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '';
     const [count] = await this.database.query(`SELECT count(*)::int AS total FROM wms.assets${clause}`, params);
-    const rows: AssetRow[] = await this.database.query(`SELECT ${ASSET_COLUMNS} FROM wms.assets${clause} ORDER BY asset_code LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, query.pageSize, (query.page - 1) * query.pageSize]);
-    return { items: rows.map(assetView), total: count.total as number, page: query.page, pageSize: query.pageSize };
+    const rows: Array<AssetRow & { price: string | null; price_date: string | null }> = await this.database.query(`SELECT ${ASSET_COLUMNS},price,price_date FROM wms.assets a
+      LEFT JOIN LATERAL (SELECT p.value::text AS price,to_char(p.effective_date,'YYYY-MM-DD') AS price_date FROM wms.v_asset_latest_price p WHERE p.asset_id=a.asset_id LIMIT 1) latest ON true${clause} ORDER BY asset_code LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, query.pageSize, (query.page - 1) * query.pageSize]);
+    return { items: rows.map(row => ({ ...assetView(row), latestPrice: row.price, priceDate: row.price_date })), total: count.total as number, page: query.page, pageSize: query.pageSize };
   }
 
   async detail(assetId: string) {

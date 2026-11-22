@@ -3,12 +3,16 @@ import type { FormEvent } from 'react';
 import { api, describe, intentDone, intentKey } from '../api';
 import { AlertAction, BusyButton, Empty, ErrorAlert, Field, Loading, PageTitle, Panel, invalidProps, useLoad } from '../ui';
 import { money } from './Cash';
+import { dayText, plainNumber } from './Prices';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-interface Asset { assetId: string; assetCode: string; assetName: string; assetClass: string; riskLevel: number; minInvestment: string; status: string }
+interface Asset { assetId: string; assetCode: string; assetName: string; assetClass: string; riskLevel: number; minInvestment: string; status: string; latestPrice?: string | null; priceDate?: string | null }
+interface PricePoint { pricingId: string; value: string; previousValue: string | null; changePct: string | null; effectiveDate: string; status: string; decision: string | null }
 type AssetClass = 'TERM_DEPOSIT' | 'BOND' | 'MUTUAL_FUND';
 
 export const assetClassLabels: Record<string, string> = { TERM_DEPOSIT: 'Tiền gửi có kỳ hạn', BOND: 'Trái phiếu', MUTUAL_FUND: 'Chứng chỉ quỹ' };
@@ -93,35 +97,74 @@ function CreateForm({ onCreated }: { onCreated: (asset: Asset) => void }) {
   );
 }
 
-function AssetRow({ asset, onChanged }: { asset: Asset; onChanged: () => void }) {
-  const riskId = useId();
+const priceText = (asset: Asset) => (asset.latestPrice ? (asset.assetClass === 'TERM_DEPOSIT' ? `${plainNumber(asset.latestPrice)}%/năm` : `${plainNumber(asset.latestPrice)} ₫`) : 'Chưa có giá');
+const priceStatus = (price: PricePoint) => (price.status === 'APPLIED' ? 'Đã áp dụng' : price.status === 'REJECTED' || price.decision === 'REJECTED' ? 'Bị từ chối' : 'Chờ duyệt');
+
+/** The price updates of one product, newest first (the API keeps the last 20). */
+function PriceHistoryDialog({ asset, onClose }: { asset: Asset; onClose: () => void }) {
+  const detail = useLoad(signal => api<{ prices: PricePoint[] }>(`/back-office/assets/${asset.assetId}`, { signal }), [asset.assetId]);
+  const unit = asset.assetClass === 'TERM_DEPOSIT' ? '%/năm' : '₫';
+  return (
+    <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
+      <DialogContent showCloseButton={false} className="gap-3 p-6 sm:max-w-[640px]" aria-describedby={undefined}>
+        <DialogHeader><DialogTitle className="text-[1.15rem] leading-snug font-semibold">Lịch sử giá {asset.assetCode}</DialogTitle></DialogHeader>
+        {detail.loading && !detail.data ? <Loading /> : null}
+        {detail.error ? <ErrorAlert>{describe(detail.error)}</ErrorAlert> : null}
+        {detail.data && detail.data.prices.length === 0 ? <Empty>Chưa có lần cập nhật giá nào.</Empty> : null}
+        {detail.data && detail.data.prices.length > 0 ? (
+          <div className="max-h-[50vh] overflow-y-auto">
+            <Table className="tabular-nums">
+              <TableHeader><TableRow><TableHead>Ngày hiệu lực</TableHead><TableHead className="text-right">Giá ({unit})</TableHead><TableHead className="text-right">Giá trước</TableHead><TableHead className="text-right">Biến động</TableHead><TableHead>Trạng thái</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {detail.data.prices.map(price => (
+                  <TableRow key={price.pricingId}>
+                    <TableCell>{dayText(price.effectiveDate)}</TableCell>
+                    <TableCell className="text-right">{plainNumber(price.value)}</TableCell>
+                    <TableCell className="text-right">{price.previousValue ? plainNumber(price.previousValue) : '—'}</TableCell>
+                    <TableCell className="text-right">{price.changePct ? `${price.changePct.replace('.', ',')}%` : '—'}</TableCell>
+                    <TableCell>{priceStatus(price)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : null}
+        <DialogFooter className="-mx-6 -mb-6 mt-2 p-4"><Button type="button" variant="outline" onClick={onClose}>Đóng</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AssetRow({ asset, onChanged, onHistory, onFailure }: { asset: Asset; onChanged: () => void; onHistory: () => void; onFailure: (error: unknown) => void }) {
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<unknown>(null);
   const change = async (path: string, body: unknown) => {
-    setBusy(true); setFailure(null);
+    setBusy(true); onFailure(null);
     const name = `asset-${path}-${asset.assetId}`;
     try {
       await api(`/back-office/assets/${asset.assetId}/${path}`, { method: 'PATCH', key: intentKey(name, JSON.stringify(body)), body });
       intentDone(name);
       onChanged();
-    } catch (error) { setFailure(error); } finally { setBusy(false); }
+    } catch (error) { onFailure(error); } finally { setBusy(false); }
   };
   const onSale = asset.status === 'ON_SALE';
   return (
-    <li className="rounded-lg border bg-card px-3.5 py-3">
-      <p className="m-0 flex flex-wrap items-center gap-x-2 font-semibold break-words">{asset.assetName} <span className="font-normal text-muted-foreground">({asset.assetCode})</span>
-        {onSale ? <Badge variant="ok">Đang bán</Badge> : <Badge variant="outline">Ngừng bán</Badge>}</p>
-      <p className="m-0 mb-2 text-[0.92rem] text-muted-foreground">{assetClassLabels[asset.assetClass]} · tối thiểu {money(asset.minInvestment)}</p>
-      <div className="flex flex-wrap items-end gap-2">
-        <Field label={`Mức rủi ro của ${asset.assetCode}`} htmlFor={riskId} className="mb-0 flex-[0_1_200px]">
-          <NativeSelect id={riskId} className="w-full" disabled={busy} value={String(asset.riskLevel)} onChange={event => void change('risk-level', { riskLevel: Number(event.target.value) })}>
-            {LEVELS.map(level => <NativeSelectOption key={level} value={String(level)}>Mức {level}</NativeSelectOption>)}
-          </NativeSelect>
-        </Field>
+    <TableRow>
+      <TableCell className="font-medium whitespace-nowrap">{asset.assetCode}</TableCell>
+      <TableCell className="min-w-44 break-words whitespace-normal">{asset.assetName}</TableCell>
+      <TableCell className="whitespace-nowrap">{assetClassLabels[asset.assetClass]}</TableCell>
+      <TableCell className="text-right whitespace-nowrap tabular-nums">{money(asset.minInvestment)}</TableCell>
+      <TableCell>
+        <NativeSelect aria-label={`Mức rủi ro của ${asset.assetCode}`} className="w-28" disabled={busy} value={String(asset.riskLevel)} onChange={event => void change('risk-level', { riskLevel: Number(event.target.value) })}>
+          {LEVELS.map(level => <NativeSelectOption key={level} value={String(level)}>Mức {level}</NativeSelectOption>)}
+        </NativeSelect>
+      </TableCell>
+      <TableCell>{onSale ? <Badge variant="ok">Đang bán</Badge> : <Badge variant="outline">Ngừng bán</Badge>}</TableCell>
+      <TableCell className="text-right whitespace-nowrap tabular-nums">{priceText(asset)}</TableCell>
+      <TableCell>
         <Button type="button" variant="outline" disabled={busy} aria-label={`${onSale ? 'Ngừng bán' : 'Bán lại'} ${asset.assetCode}`} onClick={() => void change('status', { status: onSale ? 'DISCONTINUED' : 'ON_SALE' })}>{onSale ? 'Ngừng bán' : 'Bán lại'}</Button>
-      </div>
-      {failure ? <ErrorAlert>{describe(failure)}</ErrorAlert> : null}
-    </li>
+      </TableCell>
+      <TableCell><button type="button" className="font-semibold text-primary underline underline-offset-2" aria-label={`Xem lịch sử giá ${asset.assetCode}`} onClick={onHistory}>Xem</button></TableCell>
+    </TableRow>
   );
 }
 
@@ -132,7 +175,9 @@ export function Products() {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState('');
-  const list = useLoad(signal => api<{ items: Asset[]; total: number; pageSize: number }>(`/back-office/assets?page=${page}&q=${encodeURIComponent(query)}`, { signal }), [query, page]);
+  const [historyOf, setHistoryOf] = useState<Asset | null>(null);
+  const [rowFailure, setRowFailure] = useState<unknown>(null);
+  const list =useLoad(signal => api<{ items: Asset[]; total: number; pageSize: number }>(`/back-office/assets?page=${page}&q=${encodeURIComponent(query)}`, { signal }), [query, page]);
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / list.data.pageSize)) : 1;
   return (
     <>
@@ -149,7 +194,18 @@ export function Products() {
         {list.data && list.data.items.length === 0 ? <Empty>Không có sản phẩm phù hợp.</Empty> : null}
         {list.data && list.data.items.length > 0 ? (
           <>
-            <ul className="m-0 grid list-none gap-2 p-0">{list.data.items.map(asset => <AssetRow key={`${asset.assetId}:${asset.riskLevel}:${asset.status}`} asset={asset} onChanged={list.reload} />)}</ul>
+            {rowFailure ? <ErrorAlert>{describe(rowFailure)}</ErrorAlert> : null}
+            <Table className="min-w-[1000px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mã sản phẩm</TableHead><TableHead>Tên sản phẩm</TableHead><TableHead>Loại sản phẩm</TableHead><TableHead className="text-right">Số tiền tối thiểu</TableHead>
+                  <TableHead>Mức rủi ro</TableHead><TableHead>Trạng thái</TableHead><TableHead className="text-right">Giá hiện tại</TableHead><TableHead>Hành động</TableHead><TableHead>Lịch sử giá</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.data.items.map(asset => <AssetRow key={`${asset.assetId}:${asset.riskLevel}:${asset.status}`} asset={asset} onChanged={list.reload} onHistory={() => setHistoryOf(asset)} onFailure={setRowFailure} />)}
+              </TableBody>
+            </Table>
             <nav className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[0.9rem] text-muted-foreground" aria-label="Phân trang sản phẩm">
               <Button type="button" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>Trang trước</Button>
               <span>Trang {page}/{pages}</span>
@@ -158,6 +214,7 @@ export function Products() {
           </>
         ) : null}
       </Panel>
+      {historyOf ? <PriceHistoryDialog key={historyOf.assetId} asset={historyOf} onClose={() => setHistoryOf(null)} /> : null}
     </>
   );
 }

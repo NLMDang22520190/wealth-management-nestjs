@@ -66,6 +66,7 @@ describe('S28 UC-09 product catalog', () => {
     const asset = await createAsset(api, backOffice, 'BOND');
     const found = await api.request(`/back-office/assets?assetClass=BOND&status=ON_SALE&q=${asset.assetCode}`, { token: backOffice });
     expect(found.body.items.map((item: { assetId: string }) => item.assetId)).toEqual([asset.assetId]);
+    expect(found.body.items[0]).toMatchObject({ latestPrice: '100000.0000', priceDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
     expectApiError(await api.request('/back-office/assets?assetClass=GOLD', { token: backOffice }), 400, 'VALIDATION_ERROR');
   });
 

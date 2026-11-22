@@ -6,7 +6,7 @@ import { AlertAction, BusyButton, Empty, ErrorAlert, Fact, Facts, Field, Loading
 import { money } from './Cash';
 import { plainNumber } from './Prices';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -106,7 +106,7 @@ export function CustomerProposals({ customerId, canManage = false }: { customerI
   const [notice, setNotice] = useState('');
   return (
     <Panel title="Đề xuất đầu tư">
-      {canManage ? <p className="mb-3"><a href={`#/rm/customers/${customerId}/proposals/new`} className="font-semibold">Tạo đề xuất</a></p> : null}
+      {canManage ? <div className="mb-3 flex justify-end"><a href={`#/rm/customers/${customerId}/proposals/new`} className={buttonVariants()}>Tạo đề xuất</a></div> : null}
       <p role="status" className="m-0 min-h-6">{notice}</p>
       {list.loading && !list.data ? <Loading /> : null}
       {list.error ? <ErrorAlert>{describe(list.error)} <AlertAction onClick={list.reload}>Thử lại</AlertAction></ErrorAlert> : null}
