@@ -101,6 +101,17 @@ test.describe('UC13 P3 products, prices and portfolio', () => {
     await expect(code).toBeFocused();
     await expect(code).toHaveAttribute('aria-invalid', 'true');
     await addFund(page, 'FUND-CSV');
+    const products = page.getByRole('region', { name: 'Sản phẩm hiện có' });
+    await expect(products.getByRole('columnheader')).toHaveText(['Mã sản phẩm', 'Tên sản phẩm', 'Loại sản phẩm', 'Số tiền tối thiểu', 'Mức rủi ro', 'Trạng thái', 'Giá hiện tại', 'Hành động', 'Lịch sử giá']);
+    const row = products.getByRole('row').filter({ hasText: 'FUND-CSV' });
+    await expect(row).toContainText('20.000');
+    await row.getByRole('button', { name: 'Xem lịch sử giá FUND-CSV' }).click();
+    const history = page.getByRole('dialog', { name: 'Lịch sử giá FUND-CSV' });
+    await expect(history.getByRole('row')).toHaveCount(2);
+    await expect(history).toContainText('20.000');
+    await history.getByRole('button', { name: 'Đóng' }).click();
+    await expect(history).toBeHidden();
+    await expectNoHorizontalOverflow(page);
     await page.getByLabel('Mã sản phẩm').fill('FUND-CSV');
     await page.getByLabel('Tên sản phẩm').fill('Trùng mã');
     await page.getByLabel('Công ty quản lý quỹ').fill('Công ty mẫu');

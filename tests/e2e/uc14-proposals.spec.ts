@@ -35,12 +35,18 @@ test.describe('UC14 P4 proposals', () => {
   test.beforeEach(async () => { await resetBusinessState(); });
 
   test('RM proposes from a drift alert; the customer approves with OTP and sees the new holding', async ({ page }) => {
-    await setUp();
+    const { customerId } = await setUp();
     const run = await api('/demo/jobs/portfolio-snapshot', { token: await tokenFor('NV0004'), body: {} });
     expect(run.status).toBe(200);
 
     await openApp(page);
     await switchRole(page, actors.rmAlpha);
+    await page.evaluate(id => { window.location.hash = `#/rm/customers/${id}`; }, customerId);
+    const proposals = page.getByRole('region', { name: 'Đề xuất đầu tư' });
+    const create = proposals.getByRole('link', { name: 'Tạo đề xuất' });
+    await expect(create).toBeVisible();
+    const [panelBox, linkBox] = [await proposals.boundingBox(), await create.boundingBox()];
+    expect(linkBox!.x + linkBox!.width).toBeGreaterThan(panelBox!.x + panelBox!.width - 40);
     await goTo(page, 'Cảnh báo lệch');
     await page.getByRole('link', { name: /^Tạo đề xuất tái cân bằng: .*Chứng chỉ quỹ$/ }).click();
     await page.getByLabel('Tài sản 1').selectOption({ label: `${FUND} · mức 2` });
